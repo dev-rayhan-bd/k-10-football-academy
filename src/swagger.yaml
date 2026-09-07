@@ -2,22 +2,881 @@ openapi: 3.0.0
 info:
   title: K10 Football Academy Platform API
   version: 1.0.0
-  description: API documentation for the K10 Football Academy Platform Backend
+  description: Complete API documentation for the K10 Football Academy Platform Backend
 servers:
+  - url: /
+    description: Current server (Auto-detect Domain/Host)
   - url: http://localhost:5000
-    description: Development server
+    description: Local Development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
 paths:
   /:
     get:
+      tags:
+        - System
       summary: API Root
       description: Returns a welcome message and API base path
       responses:
         '200':
           description: Welcome message
+
   /health:
     get:
+      tags:
+        - System
       summary: Health Check
       description: Returns the health status of the API
       responses:
         '200':
           description: Health status with uptime
+
+  # -------------------------------------------------------------
+  # USER & AUTH MODULE
+  # -------------------------------------------------------------
+  /api/v1/users/register:
+    post:
+      tags:
+        - Users & Authentication
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, role]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [SUPER_ADMIN, ADMIN, AGENT, ACADEMY, CLUB, COACH, PLAYER, GUARDIAN, SCOUT]
+      responses:
+        '201':
+          description: User registered successfully
+
+  /api/v1/users/login:
+    post:
+      tags:
+        - Users & Authentication
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful with JWT tokens
+
+  /api/v1/users/profile:
+    get:
+      tags:
+        - Users & Authentication
+      summary: Get logged-in user profile
+      responses:
+        '200':
+          description: User profile payload
+
+  # -------------------------------------------------------------
+  # PLAYER MODULE
+  # -------------------------------------------------------------
+  /api/v1/players:
+    post:
+      tags:
+        - Players
+      summary: Create Player Profile
+      responses:
+        '201':
+          description: Player profile created
+    get:
+      tags:
+        - Players
+      summary: Get All Player Profiles
+      responses:
+        '200':
+          description: List of player profiles
+
+  /api/v1/players/{id}:
+    get:
+      tags:
+        - Players
+      summary: Get Player Profile by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Player profile details
+    patch:
+      tags:
+        - Players
+      summary: Update Player Profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Player profile updated
+
+  /api/v1/players/{playerId}/attributes:
+    get:
+      tags:
+        - Players
+      summary: Get Player Attributes (32 Metrics)
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Player attributes metrics
+    patch:
+      tags:
+        - Players
+      summary: Update Player Attributes
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attributes updated
+
+  /api/v1/players/{playerId}/matches:
+    post:
+      tags:
+        - Players
+      summary: Add Match Record
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Match record added
+    get:
+      tags:
+        - Players
+      summary: Get Player Match Records
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of match records
+
+  # -------------------------------------------------------------
+  # COACH MODULE
+  # -------------------------------------------------------------
+  /api/v1/coaches:
+    post:
+      tags:
+        - Coaches
+      summary: Create Coach Profile
+      responses:
+        '201':
+          description: Coach profile created
+    get:
+      tags:
+        - Coaches
+      summary: Get All Coach Profiles
+      responses:
+        '200':
+          description: List of coach profiles
+
+  /api/v1/coaches/{id}:
+    get:
+      tags:
+        - Coaches
+      summary: Get Coach Profile by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Coach profile details
+    patch:
+      tags:
+        - Coaches
+      summary: Update Coach Profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Coach profile updated
+
+  /api/v1/coaches/{coachId}/formations:
+    post:
+      tags:
+        - Coaches
+      summary: Save Tactical Formation (4-3-3, 4-2-3-1 etc.)
+      parameters:
+        - name: coachId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tactical formation saved
+    get:
+      tags:
+        - Coaches
+      summary: Get Coach Tactical Formations
+      parameters:
+        - name: coachId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of tactical formations
+
+  /api/v1/coaches/{coachId}/testimonials:
+    post:
+      tags:
+        - Coaches
+      summary: Add Coach Testimonial
+      parameters:
+        - name: coachId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Testimonial added
+    get:
+      tags:
+        - Coaches
+      summary: Get Coach Testimonials
+      parameters:
+        - name: coachId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of coach testimonials
+
+  # -------------------------------------------------------------
+  # ACADEMY MODULE
+  # -------------------------------------------------------------
+  /api/v1/academies:
+    post:
+      tags:
+        - Academies
+      summary: Create Academy Profile
+      responses:
+        '201':
+          description: Academy profile created
+    get:
+      tags:
+        - Academies
+      summary: Get All Academy Profiles
+      responses:
+        '200':
+          description: List of academy profiles
+
+  /api/v1/academies/{id}:
+    get:
+      tags:
+        - Academies
+      summary: Get Academy Profile by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Academy profile details
+
+  /api/v1/academies/{academyId}/teams:
+    post:
+      tags:
+        - Academies
+      summary: Create Academy Team (U15, U17 etc.)
+      parameters:
+        - name: academyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Team created
+    get:
+      tags:
+        - Academies
+      summary: Get Academy Teams
+      parameters:
+        - name: academyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of teams
+
+  /api/v1/academies/{academyId}/reports:
+    post:
+      tags:
+        - Academies
+      summary: Create Game Scouting Report
+      parameters:
+        - name: academyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Game report created
+    get:
+      tags:
+        - Academies
+      summary: Get Academy Game Reports
+      parameters:
+        - name: academyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of game reports
+
+  # -------------------------------------------------------------
+  # CLUB MODULE
+  # -------------------------------------------------------------
+  /api/v1/clubs:
+    post:
+      tags:
+        - Clubs
+      summary: Create Club Profile
+      responses:
+        '201':
+          description: Club profile created
+    get:
+      tags:
+        - Clubs
+      summary: Get All Club Profiles
+      responses:
+        '200':
+          description: List of club profiles
+
+  /api/v1/clubs/{id}:
+    get:
+      tags:
+        - Clubs
+      summary: Get Club Profile by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Club profile details
+
+  /api/v1/clubs/{clubId}/achievements:
+    post:
+      tags:
+        - Clubs
+      summary: Add Club Achievement
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Achievement added
+    get:
+      tags:
+        - Clubs
+      summary: Get Club Achievements
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of achievements
+
+  /api/v1/clubs/{clubId}/favourites:
+    post:
+      tags:
+        - Clubs
+      summary: Add Player/Coach to Favourite Shortlist
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Added to shortlist
+    get:
+      tags:
+        - Clubs
+      summary: Get Club Favourite Shortlist
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Shortlist items
+
+  # -------------------------------------------------------------
+  # AGENT MODULE
+  # -------------------------------------------------------------
+  /api/v1/agents:
+    post:
+      tags:
+        - Agents
+      summary: Create Agent Profile
+      responses:
+        '201':
+          description: Agent profile created
+
+  /api/v1/agents/{id}:
+    get:
+      tags:
+        - Agents
+      summary: Get Agent Profile by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent profile details
+
+  /api/v1/agents/{agentId}/documents:
+    post:
+      tags:
+        - Agents
+      summary: Upload Verification Document
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Document uploaded
+    get:
+      tags:
+        - Agents
+      summary: Get Agent Verification Documents
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of verification documents
+
+  /api/v1/agents/success-stories:
+    post:
+      tags:
+        - Agents
+      summary: Post Transfer/Signing Success Story
+      responses:
+        '201':
+          description: Success story published
+    get:
+      tags:
+        - Agents
+      summary: Get All Success Stories
+      responses:
+        '200':
+          description: List of success stories
+
+  # -------------------------------------------------------------
+  # PARENT MODULE
+  # -------------------------------------------------------------
+  /api/v1/parents:
+    post:
+      tags:
+        - Parents
+      summary: Create Parent Profile
+      responses:
+        '201':
+          description: Parent profile created
+
+  /api/v1/parents/{id}:
+    get:
+      tags:
+        - Parents
+      summary: Get Parent Profile by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Parent profile details
+
+  /api/v1/parents/{parentId}/children:
+    post:
+      tags:
+        - Parents
+      summary: Link Child Player
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Child linked
+    get:
+      tags:
+        - Parents
+      summary: Get Linked Children Players
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of linked children
+
+  /api/v1/parents/{parentId}/reports:
+    post:
+      tags:
+        - Parents
+      summary: Create Parent Match Report & Request Review
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Match report created
+    get:
+      tags:
+        - Parents
+      summary: Get Parent Submitted Match Reports
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of parent match reports
+
+  # -------------------------------------------------------------
+  # TRAINING MODULE
+  # -------------------------------------------------------------
+  /api/v1/trainings:
+    post:
+      tags:
+        - Training
+      summary: Create Training Session
+      responses:
+        '201':
+          description: Training session created
+
+  /api/v1/trainings/academy/{academyId}:
+    get:
+      tags:
+        - Training
+      summary: Get Training Sessions by Academy
+      parameters:
+        - name: academyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of training sessions
+
+  /api/v1/trainings/{sessionId}/attendance:
+    post:
+      tags:
+        - Training
+      summary: Mark RSVP & Attendance Status
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attendance updated
+    get:
+      tags:
+        - Training
+      summary: Get Session Attendance List
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session attendance data
+
+  # -------------------------------------------------------------
+  # CHAT MODULE
+  # -------------------------------------------------------------
+  /api/v1/chats/conversations:
+    post:
+      tags:
+        - Chat & Messaging
+      summary: Start or Get Conversation with User
+      responses:
+        '200':
+          description: Conversation details
+    get:
+      tags:
+        - Chat & Messaging
+      summary: Get User Active Conversations
+      responses:
+        '200':
+          description: List of user conversations
+
+  /api/v1/chats/messages:
+    post:
+      tags:
+        - Chat & Messaging
+      summary: Send Message
+      responses:
+        '201':
+          description: Message sent
+
+  /api/v1/chats/messages/{conversationId}:
+    get:
+      tags:
+        - Chat & Messaging
+      summary: Get Conversation Messages
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of messages
+
+  # -------------------------------------------------------------
+  # INVOICE MODULE
+  # -------------------------------------------------------------
+  /api/v1/invoices:
+    post:
+      tags:
+        - Invoices & Billing
+      summary: Issue Academy Invoice
+      responses:
+        '201':
+          description: Invoice created
+
+  /api/v1/invoices/{id}:
+    get:
+      tags:
+        - Invoices & Billing
+      summary: Get Invoice Details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invoice details
+
+  /api/v1/invoices/academy/{academyId}:
+    get:
+      tags:
+        - Invoices & Billing
+      summary: Get Invoices Issued by Academy
+      parameters:
+        - name: academyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of invoices
+
+  /api/v1/invoices/{id}/status:
+    patch:
+      tags:
+        - Invoices & Billing
+      summary: Update Invoice Status (UNPAID, PAID, OVERDUE)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invoice status updated
+
+  # -------------------------------------------------------------
+  # SHOP MODULE
+  # -------------------------------------------------------------
+  /api/v1/shop/products:
+    post:
+      tags:
+        - Shop & E-commerce
+      summary: Add New Product
+      responses:
+        '201':
+          description: Product added
+    get:
+      tags:
+        - Shop & E-commerce
+      summary: Get All Products
+      responses:
+        '200':
+          description: List of products
+
+  /api/v1/shop/products/{id}:
+    get:
+      tags:
+        - Shop & E-commerce
+      summary: Get Product Details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product details
+
+  /api/v1/shop/orders:
+    post:
+      tags:
+        - Shop & E-commerce
+      summary: Place Shop Order
+      responses:
+        '201':
+          description: Order placed
+    get:
+      tags:
+        - Shop & E-commerce
+      summary: Get User Orders
+      responses:
+        '200':
+          description: List of orders
+
+  # -------------------------------------------------------------
+  # SUBSCRIPTION MODULE
+  # -------------------------------------------------------------
+  /api/v1/subscriptions/plans:
+    post:
+      tags:
+        - Subscriptions & Plans
+      summary: Create Membership Plan
+      responses:
+        '201':
+          description: Membership plan created
+    get:
+      tags:
+        - Subscriptions & Plans
+      summary: Get All Active Membership Plans
+      responses:
+        '200':
+          description: List of membership plans
+
+  /api/v1/subscriptions/subscribe:
+    post:
+      tags:
+        - Subscriptions & Plans
+      summary: Subscribe to Membership Plan
+      responses:
+        '201':
+          description: Subscribed successfully
+
+  /api/v1/subscriptions/my-subscription:
+    get:
+      tags:
+        - Subscriptions & Plans
+      summary: Get Current User Active Subscription
+      responses:
+        '200':
+          description: Active subscription payload

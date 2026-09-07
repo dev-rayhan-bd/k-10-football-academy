@@ -88,13 +88,26 @@ app.get('/health', (_req: Request, res: Response) => {
  * 8. API Documentation (Swagger)
  * Helmet CSP is disabled for this route because Swagger UI requires inline scripts/styles.
  */
-const file = fs.readFileSync(path.resolve(__dirname, './swagger.yaml'), 'utf8');
-const swaggerDocument = YAML.parse(file);
+const getSwaggerDocument = () => {
+  const jsonPath = path.resolve(__dirname, './swagger.json');
+  const yamlPath = path.resolve(__dirname, './swagger.yaml');
+  if (fs.existsSync(jsonPath)) {
+    return JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  }
+  if (fs.existsSync(yamlPath)) {
+    return YAML.parse(fs.readFileSync(yamlPath, 'utf8'));
+  }
+  return {};
+};
+
 app.use(
   '/api/docs',
   helmet({ contentSecurityPolicy: false }) as any,
   swaggerUi.serve as any,
-  swaggerUi.setup(swaggerDocument) as any,
+  (req: Request, res: Response, next: any) => {
+    const swaggerDoc = getSwaggerDocument();
+    swaggerUi.setup(swaggerDoc)(req as any, res as any, next);
+  },
 );
 
 /**

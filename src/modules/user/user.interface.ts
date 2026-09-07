@@ -1,6 +1,15 @@
 import { Document } from 'mongoose';
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'PLAYER' | 'COACH' | 'GUARDIAN' | 'SCOUT';
+export type UserRole =
+  | 'SUPER_ADMIN'
+  | 'ADMIN'
+  | 'AGENT'
+  | 'ACADEMY'
+  | 'CLUB'
+  | 'COACH'
+  | 'PLAYER'
+  | 'GUARDIAN'
+  | 'SCOUT';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
 
 export interface IUser {

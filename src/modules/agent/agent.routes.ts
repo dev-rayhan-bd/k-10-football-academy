@@ -1,0 +1,39 @@
+import { Router } from 'express';
+import { validateRequest } from '@/middlewares/validateRequest';
+import { auth } from '@/middlewares/auth.middleware';
+import {
+  createAgentProfileZodSchema,
+  uploadVerificationDocZodSchema,
+  createSuccessStoryZodSchema,
+} from './agent.validation';
+import {
+  createAgentProfile,
+  getAgentProfile,
+  uploadVerificationDoc,
+  getVerificationDocs,
+  createSuccessStory,
+  getSuccessStories,
+} from './agent.controller';
+
+const router = Router();
+
+router.post('/', auth(), validateRequest(createAgentProfileZodSchema), createAgentProfile);
+router.get('/:id', getAgentProfile);
+
+router.post(
+  '/:agentId/documents',
+  auth('SUPER_ADMIN', 'AGENT'),
+  validateRequest(uploadVerificationDocZodSchema),
+  uploadVerificationDoc,
+);
+router.get('/:agentId/documents', auth('SUPER_ADMIN', 'AGENT'), getVerificationDocs);
+
+router.post(
+  '/success-stories',
+  auth('SUPER_ADMIN', 'AGENT', 'COACH'),
+  validateRequest(createSuccessStoryZodSchema),
+  createSuccessStory,
+);
+router.get('/success-stories', getSuccessStories);
+
+export const AgentRoutes = router;

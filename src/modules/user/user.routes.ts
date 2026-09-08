@@ -29,7 +29,28 @@ router.post(
   userController.verifyOtp,
 );
 
-// Protected User Profile
+router.post(
+  '/resend-otp',
+  authRateLimiter,
+  validateRequest(UserValidation.resendOtpZodSchema),
+  userController.resendOtp,
+);
+
+router.post(
+  '/refresh-token',
+  validateRequest(UserValidation.refreshTokenZodSchema),
+  userController.refreshToken,
+);
+
+// Protected Authentication Routes
+router.post('/logout', auth(), userController.logout);
+router.post(
+  '/change-password',
+  auth(),
+  validateRequest(UserValidation.changePasswordZodSchema),
+  userController.changePassword,
+);
+
 router.get('/me', auth(), userController.getProfile);
 
 // Resource-Intensive Search/Query Route (Protected with Search Rate Limiter)

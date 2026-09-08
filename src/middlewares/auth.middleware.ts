@@ -6,6 +6,7 @@ import { catchAsync } from '@/utils/catchAsync';
 import { env } from '@/config/env';
 import { UserRole } from '@/modules/user/user.interface';
 import { UserModel } from '@/modules/user/user.model';
+import { redisClient } from '@/config/redis';
 
 export interface IJwtPayload extends JwtPayload {
   userId: string;
@@ -32,20 +33,38 @@ export const auth = (...requiredRoles: UserRole[]) => {
 
     const token = authHeader.split(' ')[1];
 
+    // Check Redis Blacklist (Instant Logout verification)
+    const isBlacklisted = await redisClient.get(`BL_${token}`);
+    if (isBlacklisted) {
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        'Token has been revoked/logged out. Please log in again.',
+      );
+    }
+
     try {
       const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as IJwtPayload;
 
       const user = await UserModel.findById(decoded.userId);
       if (!user) {
-        throw new AppError(StatusCodes.UNAUTHORIZED, 'User associated with this token no longer exists');
+        throw new AppError(
+          StatusCodes.UNAUTHORIZED,
+          'User associated with this token no longer exists',
+        );
       }
 
       if (user.status === 'BLOCKED' || user.status === 'INACTIVE') {
-        throw new AppError(StatusCodes.FORBIDDEN, `User account is currently ${user.status.toLowerCase()}`);
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          `User account is currently ${user.status.toLowerCase()}`,
+        );
       }
 
       if (requiredRoles.length > 0 && !requiredRoles.includes(decoded.role)) {
-        throw new AppError(StatusCodes.FORBIDDEN, 'You do not have permission to access this resource');
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          'You do not have permission to access this resource',
+        );
       }
 
       req.user = decoded;

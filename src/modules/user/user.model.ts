@@ -25,13 +25,31 @@ const userSchema = new Schema<IUserDocument>(
     },
     role: {
       type: String,
-      enum: ['SUPER_ADMIN', 'ADMIN', 'PLAYER', 'COACH', 'GUARDIAN', 'SCOUT'],
+      enum: [
+        'SUPER_ADMIN',
+        'ADMIN',
+        'AGENT',
+        'ACADEMY',
+        'CLUB',
+        'COACH',
+        'PLAYER',
+        'GUARDIAN',
+        'SCOUT',
+      ],
       default: 'PLAYER',
     },
     status: {
       type: String,
       enum: ['ACTIVE', 'INACTIVE', 'BLOCKED'],
       default: 'ACTIVE',
+    },
+    avatar: { type: String },
+    phone: { type: String },
+    coverPhoto: { type: String },
+    accountManagedBy: {
+      type: String,
+      enum: ['ATHLETE', 'PARENT'],
+      default: 'ATHLETE',
     },
     isEmailVerified: {
       type: Boolean,
@@ -46,7 +64,7 @@ const userSchema = new Schema<IUserDocument>(
         return ret;
       },
     },
-  }
+  },
 );
 
 // Hash password before saving

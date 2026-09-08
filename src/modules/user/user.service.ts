@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { StatusCodes } from 'http-status-codes';
-import { IUser, IUserDocument, ILoginResponse } from './user.interface';
+import { IUser, IUserDocument, ILoginResponse, IRefreshTokenResponse } from './user.interface';
 import { userRepository, UserRepository } from './user.repository';
 import { AppError } from '@/utils/AppError';
 import { env } from '@/config/env';
@@ -22,10 +22,10 @@ export class UserService {
     // Generate 6-digit OTP
     const otp = otpGenerator.generate(6);
 
-    // Save OTP to Redis with a 5-minute expiration (300 seconds)
+    // Save OTP to Redis with 5-minute expiration (300s)
     await redisClient.set(`OTP_${newUser.email}`, otp, 'EX', 300);
 
-    // Queue OTP email via BullMQ
+    // Queue OTP email via BullMQ (Instant < 50ms API response!)
     await emailQueue.add('send-otp-email', {
       to: newUser.email,
       subject: 'Verify your K10 Football Academy Account',
@@ -50,14 +50,14 @@ export class UserService {
       throw new AppError(StatusCodes.FORBIDDEN, `Account is ${user.status.toLowerCase()}`);
     }
 
-    // Generate Access Token (Short-lived)
+    // Generate Access Token (Short-lived 15m)
     const accessToken = jwt.sign(
       { userId: user._id.toString(), email: user.email, role: user.role },
       env.JWT_ACCESS_SECRET,
       { expiresIn: env.JWT_ACCESS_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
     );
 
-    // Generate Refresh Token (Long-lived)
+    // Generate Refresh Token (Long-lived 30d)
     const refreshToken = jwt.sign(
       { userId: user._id.toString(), email: user.email, role: user.role },
       env.JWT_REFRESH_SECRET,
@@ -74,7 +74,6 @@ export class UserService {
   }
 
   async verifyOtp(email: string, otp: string): Promise<boolean> {
-    // 1. Find user
     const user = await this.userRepo.findByEmail(email);
     if (!user) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
@@ -84,24 +83,108 @@ export class UserService {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Email is already verified');
     }
 
-    // 2. Get OTP from Redis
     const cachedOtp = await redisClient.get(`OTP_${email}`);
     if (!cachedOtp) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'OTP has expired or does not exist');
     }
 
-    // 3. Compare OTP
     if (cachedOtp !== otp) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid OTP code');
     }
 
-    // 4. Update user status in DB
     await this.userRepo.updateById(user._id.toString(), { isEmailVerified: true });
-
-    // 5. Delete OTP from Redis
     await redisClient.del(`OTP_${email}`);
 
     return true;
+  }
+
+  async resendOtp(email: string): Promise<void> {
+    const user = await this.userRepo.findByEmail(email);
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+    }
+
+    if (user.isEmailVerified) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Email is already verified');
+    }
+
+    // Rate-limit check in Redis (Max 1 resend per 60 seconds)
+    const isRateLimited = await redisClient.get(`OTP_LIMIT_${email}`);
+    if (isRateLimited) {
+      throw new AppError(
+        StatusCodes.TOO_MANY_REQUESTS,
+        'Please wait 60 seconds before requesting a new OTP code',
+      );
+    }
+
+    const otp = otpGenerator.generate(6);
+    await redisClient.set(`OTP_${email}`, otp, 'EX', 300);
+    await redisClient.set(`OTP_LIMIT_${email}`, '1', 'EX', 60);
+
+    await emailQueue.add('send-otp-email', {
+      to: user.email,
+      subject: 'Resend Verification Code - K10 Football Academy',
+      body: `Hello ${user.name},<br><br>Your new verification code is: <b>${otp}</b>.<br>This code will expire in 5 minutes.`,
+    });
+  }
+
+  async refreshToken(refreshToken: string): Promise<IRefreshTokenResponse> {
+    try {
+      // Check if refresh token is blacklisted in Redis
+      const isBlacklisted = await redisClient.get(`BL_${refreshToken}`);
+      if (isBlacklisted) {
+        throw new AppError(
+          StatusCodes.UNAUTHORIZED,
+          'Refresh token has been revoked. Please log in again.',
+        );
+      }
+
+      const decoded = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as {
+        userId: string;
+        email: string;
+        role: any;
+      };
+
+      const user = await this.userRepo.findById(decoded.userId);
+      if (!user || user.status !== 'ACTIVE') {
+        throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid refresh token or inactive account');
+      }
+
+      const newAccessToken = jwt.sign(
+        { userId: user._id.toString(), email: user.email, role: user.role },
+        env.JWT_ACCESS_SECRET,
+        { expiresIn: env.JWT_ACCESS_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
+      );
+
+      return { accessToken: newAccessToken };
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid or expired refresh token');
+    }
+  }
+
+  async logoutUser(token: string): Promise<void> {
+    if (!token) return;
+    const cleanToken = token.startsWith('Bearer ') ? token.split(' ')[1] : token;
+
+    // Blacklist token in Redis for 24 hours (86400 seconds)
+    await redisClient.set(`BL_${cleanToken}`, '1', 'EX', 86400);
+  }
+
+  async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+    }
+
+    const fullUser = await this.userRepo.findByEmail(user.email, true);
+    const isMatch = await fullUser!.comparePassword(oldPassword);
+    if (!isMatch) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Current password does not match');
+    }
+
+    fullUser!.password = newPassword;
+    await fullUser!.save();
   }
 
   async getUserById(id: string): Promise<IUserDocument> {

@@ -1,0 +1,724 @@
+{
+  "info": {
+    "_postman_id": "k10-football-collection-v1",
+    "name": "K10 Football Academy Platform API Collection",
+    "description": "Complete Postman collection for K10 Football Platform with Automated Token Extraction & Role-based Environment Setup",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth & Users",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.player@k10football.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"PLAYER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User (Auto Token Saving)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.data && jsonData.data.accessToken) {",
+                  "    var token = jsonData.data.accessToken;",
+                  "    var role = jsonData.data.user ? jsonData.data.user.role : 'DEFAULT';",
+                  "    ",
+                  "    pm.environment.set('accessToken', token);",
+                  "    pm.environment.set('refreshToken', jsonData.data.refreshToken);",
+                  "    pm.environment.set('token_' + role, token);",
+                  "    ",
+                  "    console.log('✅ Token Auto-saved! Active Role: ' + role);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.player@k10football.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "login"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.player@k10football.com\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Players",
+      "item": [
+        {
+          "name": "Create Player Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef12\",\n  \"fullName\": \"John Doe\",\n  \"position\": \"Forward\",\n  \"secondaryPositions\": [\"Winger\"],\n  \"age\": 18,\n  \"dateOfBirth\": \"2008-05-15\",\n  \"country\": \"Spain\",\n  \"preferredFoot\": \"RIGHT\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/players",
+              "host": ["{{baseUrl}}"],
+              "path": ["players"]
+            }
+          }
+        },
+        {
+          "name": "Get All Player Profiles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/players",
+              "host": ["{{baseUrl}}"],
+              "path": ["players"]
+            }
+          }
+        },
+        {
+          "name": "Get Player Profile by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/players/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["players", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef12" }]
+            }
+          }
+        },
+        {
+          "name": "Get Player Attributes (32 Metrics)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/players/:playerId/attributes",
+              "host": ["{{baseUrl}}"],
+              "path": ["players", ":playerId", "attributes"],
+              "variable": [{ "key": "playerId", "value": "66d9ab1234567890abcdef12" }]
+            }
+          }
+        },
+        {
+          "name": "Update Player Attributes",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ballControl\": 88,\n  \"dribbling\": 92,\n  \"sprintSpeed\": 90,\n  \"finishing\": 85\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/players/:playerId/attributes",
+              "host": ["{{baseUrl}}"],
+              "path": ["players", ":playerId", "attributes"],
+              "variable": [{ "key": "playerId", "value": "66d9ab1234567890abcdef12" }]
+            }
+          }
+        },
+        {
+          "name": "Add Match Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"playerId\": \"66d9ab1234567890abcdef12\",\n  \"matchDate\": \"2026-09-01\",\n  \"leagueType\": \"Youth Cup\",\n  \"homeTeam\": \"Academy A\",\n  \"awayTeam\": \"Academy B\",\n  \"homeScore\": 3,\n  \"awayScore\": 1,\n  \"result\": \"W\",\n  \"goals\": 2,\n  \"assists\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/players/:playerId/matches",
+              "host": ["{{baseUrl}}"],
+              "path": ["players", ":playerId", "matches"],
+              "variable": [{ "key": "playerId", "value": "66d9ab1234567890abcdef12" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Coaches",
+      "item": [
+        {
+          "name": "Create Coach Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef13\",\n  \"coachType\": \"INDIVIDUAL_COACH\",\n  \"fullName\": \"Coach Alex Ferguson\",\n  \"title\": \"Head Tactical Coach\",\n  \"yearsExperience\": 15,\n  \"licenseStatus\": \"UEFA Pro License\",\n  \"speciality\": \"Attack & Counter Tactics\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/coaches",
+              "host": ["{{baseUrl}}"],
+              "path": ["coaches"]
+            }
+          }
+        },
+        {
+          "name": "Get All Coaches",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/coaches",
+              "host": ["{{baseUrl}}"],
+              "path": ["coaches"]
+            }
+          }
+        },
+        {
+          "name": "Save Tactical Formation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"formationSlot\": 1,\n  \"formationName\": \"4-3-3 Attacking\",\n  \"positionsJson\": \"{\\\"ST\\\": [50, 90], \\\"LW\\\": [20, 80], \\\"RW\\\": [80, 80]}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/coaches/:coachId/formations",
+              "host": ["{{baseUrl}}"],
+              "path": ["coaches", ":coachId", "formations"],
+              "variable": [{ "key": "coachId", "value": "66d9ab1234567890abcdef13" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Academies",
+      "item": [
+        {
+          "name": "Create Academy Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef14\",\n  \"name\": \"Barcelona Youth Academy\",\n  \"category\": \"Elite Academy\",\n  \"country\": \"Spain\",\n  \"city\": \"Barcelona\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies"]
+            }
+          }
+        },
+        {
+          "name": "Get All Academies",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/academies",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies"]
+            }
+          }
+        },
+        {
+          "name": "Create Team (U15, U17)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamName\": \"Barcelona U-17 Tigers\",\n  \"ageGroup\": \"UNDER_17\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/:academyId/teams",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", ":academyId", "teams"],
+              "variable": [{ "key": "academyId", "value": "66d9ab1234567890abcdef14" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clubs",
+      "item": [
+        {
+          "name": "Create Club Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef15\",\n  \"name\": \"Manchester City FC\",\n  \"clubType\": \"Professional League\",\n  \"establishedYear\": 1880,\n  \"country\": \"England\",\n  \"league\": \"Premier League\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clubs",
+              "host": ["{{baseUrl}}"],
+              "path": ["clubs"]
+            }
+          }
+        },
+        {
+          "name": "Add Achievement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"year\": 2023,\n  \"championship\": \"UEFA Champions League Winner\",\n  \"venue\": \"Istanbul\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clubs/:clubId/achievements",
+              "host": ["{{baseUrl}}"],
+              "path": ["clubs", ":clubId", "achievements"],
+              "variable": [{ "key": "clubId", "value": "66d9ab1234567890abcdef15" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agents",
+      "item": [
+        {
+          "name": "Create Agent Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef16\",\n  \"licenseId\": \"FIFA-AGENT-8849\",\n  \"certifications\": \"Licensed FIFA Football Agent\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/agents",
+              "host": ["{{baseUrl}}"],
+              "path": ["agents"]
+            }
+          }
+        },
+        {
+          "name": "Upload Verification Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"LICENSE_CERTIFICATE\",\n  \"fileUrl\": \"https://storage.k10football.com/docs/license.pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/agents/:agentId/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["agents", ":agentId", "documents"],
+              "variable": [{ "key": "agentId", "value": "66d9ab1234567890abcdef16" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Parents",
+      "item": [
+        {
+          "name": "Create Parent Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef17\",\n  \"contactPhone\": \"+1-555-0199\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/parents",
+              "host": ["{{baseUrl}}"],
+              "path": ["parents"]
+            }
+          }
+        },
+        {
+          "name": "Link Child Player",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"childPlayerId\": \"66d9ab1234567890abcdef12\",\n  \"relationshipType\": \"FATHER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/parents/:parentId/children",
+              "host": ["{{baseUrl}}"],
+              "path": ["parents", ":parentId", "children"],
+              "variable": [{ "key": "parentId", "value": "66d9ab1234567890abcdef17" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trainings",
+      "item": [
+        {
+          "name": "Create Training Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"academyId\": \"66d9ab1234567890abcdef14\",\n  \"sessionTitle\": \"Tactical Dribbling & Shooting Drill\",\n  \"sessionDate\": \"2026-09-10\",\n  \"startTime\": \"09:00 AM\",\n  \"endTime\": \"11:00 AM\",\n  \"locationField\": \"Field Pitch 2\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainings",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainings"]
+            }
+          }
+        },
+        {
+          "name": "Mark Attendance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"childPlayerId\": \"66d9ab1234567890abcdef12\",\n  \"rsvpStatus\": \"CONFIRMED\",\n  \"attendanceStatus\": \"PRESENT\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainings/:sessionId/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainings", ":sessionId", "attendance"],
+              "variable": [{ "key": "sessionId", "value": "66d9ab1234567890abcdef99" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chats",
+      "item": [
+        {
+          "name": "Start Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"participantId\": \"66d9ab1234567890abcdef13\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chats/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["chats", "conversations"]
+            }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"66d9ab1234567890abcdef88\",\n  \"text\": \"Hello Coach, when is the next match video review?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chats/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["chats", "messages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "Issue Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"childPlayerId\": \"66d9ab1234567890abcdef12\",\n  \"academyId\": \"66d9ab1234567890abcdef14\",\n  \"title\": \"Monthly Academy Training Fee - Sept 2026\",\n  \"amount\": 150.00,\n  \"dueDate\": \"2026-09-30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            }
+          }
+        },
+        {
+          "name": "Update Invoice Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PAID\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id", "status"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef77" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shop",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"K10 Academy Official Match Jersey\",\n  \"category\": \"JERSEYS\",\n  \"price\": 45.99,\n  \"availableSizes\": [\"S\", \"M\", \"L\", \"XL\"],\n  \"stockQuantity\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shop/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "products"]
+            }
+          }
+        },
+        {
+          "name": "Place Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"66d9ab1234567890abcdef66\",\n      \"quantity\": 2,\n      \"price\": 45.99,\n      \"size\": \"M\"\n    }\n  ],\n  \"totalAmount\": 91.98\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shop/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "orders"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Create Membership Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Gold Athlete Subscription\",\n  \"targetRole\": \"PLAYER\",\n  \"price\": 29.99,\n  \"billingCycle\": \"MONTHLY\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/plans",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "plans"]
+            }
+          }
+        },
+        {
+          "name": "Subscribe to Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"66d9ab1234567890abcdef55\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/subscribe",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "subscribe"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -12,7 +12,7 @@ export class UserController {
     sendResponse(res, {
       statusCode: StatusCodes.CREATED,
       success: true,
-      message: 'User registered successfully',
+      message: 'User registered successfully. Verification OTP sent to email.',
       data: user,
     });
   });
@@ -35,6 +35,50 @@ export class UserController {
       statusCode: StatusCodes.OK,
       success: true,
       message: 'Email verified successfully',
+    });
+  });
+
+  resendOtp = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const { email } = req.body;
+    await this.service.resendOtp(email);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'New OTP sent to your email',
+    });
+  });
+
+  refreshToken = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const { refreshToken } = req.body;
+    const result = await this.service.refreshToken(refreshToken);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Access token refreshed successfully',
+      data: result,
+    });
+  });
+
+  logout = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      await this.service.logoutUser(authHeader);
+    }
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Logged out successfully',
+    });
+  });
+
+  changePassword = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const { oldPassword, newPassword } = req.body;
+    await this.service.changePassword(userId, oldPassword, newPassword);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Password changed successfully',
     });
   });
 

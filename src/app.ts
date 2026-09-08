@@ -103,10 +103,10 @@ const getSwaggerDocument = () => {
 app.use(
   '/api/docs',
   helmet({ contentSecurityPolicy: false }) as any,
-  swaggerUi.serve as any,
-  (req: Request, res: Response, next: any) => {
+  ...(swaggerUi.serve as any[]),
+  (_req: Request, res: Response) => {
     const swaggerDoc = getSwaggerDocument();
-    swaggerUi.setup(swaggerDoc)(req as any, res as any, next);
+    res.send(swaggerUi.generateHTML(swaggerDoc));
   },
 );
 

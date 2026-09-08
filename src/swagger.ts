@@ -1,42 +1,21 @@
-import swaggerAutogen from 'swagger-autogen';
+import fs from 'fs';
 import path from 'path';
+import YAML from 'yaml';
 
-const doc = {
-  info: {
-    title: 'K10 Football Academy Platform API',
-    description: 'Auto-generated API documentation for K10 Football Academy Backend',
-    version: '1.0.0',
-  },
-  host: 'localhost:5000',
-  schemes: ['http', 'https'],
-  securityDefinitions: {
-    bearerAuth: {
-      type: 'apiKey',
-      name: 'Authorization',
-      in: 'header',
-      description: 'Enter JWT token with Bearer prefix: Bearer <token>',
-    },
-  },
-};
+const yamlPath = path.join(__dirname, 'swagger.yaml');
+const jsonPath = path.join(__dirname, 'swagger.json');
 
-const outputFile = path.join(__dirname, 'swagger.json');
-const endpointsFiles = [
-  path.join(__dirname, 'app.ts'),
-  path.join(__dirname, 'routes/index.ts'),
-  path.join(__dirname, 'modules/user/user.routes.ts'),
-  path.join(__dirname, 'modules/player/player.routes.ts'),
-  path.join(__dirname, 'modules/coach/coach.routes.ts'),
-  path.join(__dirname, 'modules/academy/academy.routes.ts'),
-  path.join(__dirname, 'modules/club/club.routes.ts'),
-  path.join(__dirname, 'modules/agent/agent.routes.ts'),
-  path.join(__dirname, 'modules/parent/parent.routes.ts'),
-  path.join(__dirname, 'modules/training/training.routes.ts'),
-  path.join(__dirname, 'modules/chat/chat.routes.ts'),
-  path.join(__dirname, 'modules/invoice/invoice.routes.ts'),
-  path.join(__dirname, 'modules/shop/shop.routes.ts'),
-  path.join(__dirname, 'modules/subscription/subscription.routes.ts'),
-];
-
-swaggerAutogen({ openapi: '3.0.0' })(outputFile, endpointsFiles, doc).then(() => {
-  console.log('✅ Swagger documentation generated successfully at src/swagger.json');
-});
+try {
+  if (fs.existsSync(yamlPath)) {
+    const yamlContent = fs.readFileSync(yamlPath, 'utf8');
+    const swaggerObj = YAML.parse(yamlContent);
+    fs.writeFileSync(jsonPath, JSON.stringify(swaggerObj, null, 2));
+    console.log(
+      '✅ Swagger documentation compiled successfully from swagger.yaml to src/swagger.json',
+    );
+  } else {
+    console.error('❌ src/swagger.yaml not found!');
+  }
+} catch (err) {
+  console.error('❌ Error generating swagger.json:', err);
+}

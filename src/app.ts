@@ -14,6 +14,7 @@ import {
 } from '@/middlewares/security.middleware';
 import { globalRateLimiter } from '@/config/rateLimit.config';
 import notFound from '@/middlewares/notFound';
+import { parseBodyData } from '@/middlewares/parseBodyData';
 import { applicationRoutes } from '@/routes';
 import { globalErrorHandler } from '@/middlewares/globalErrorHandler';
 import { logger } from '@/utils/logger';
@@ -44,6 +45,7 @@ app.use(globalRateLimiter);
  */
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(parseBodyData);
 
 /**
  * 5. Data Sanitization & Parameter Pollution Protection
@@ -102,7 +104,9 @@ const getSwaggerDocument = () => {
 
 app.use(
   '/api/docs',
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   helmet({ contentSecurityPolicy: false }) as any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ...(swaggerUi.serve as any[]),
   (_req: Request, res: Response) => {
     const swaggerDoc = getSwaggerDocument();

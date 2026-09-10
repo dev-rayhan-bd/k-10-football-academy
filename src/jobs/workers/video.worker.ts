@@ -11,7 +11,7 @@ export const videoWorker = new Worker<IVideoProcessingJobData>(
     await new Promise((resolve) => setTimeout(resolve, 1000));
     logger.info(`Video successfully processed for Video ID: ${job.data.videoId}`);
   },
-  { connection: redisConfig }
+  { connection: redisConfig },
 );
 
 videoWorker.on('completed', (job) => {

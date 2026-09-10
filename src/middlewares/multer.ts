@@ -9,7 +9,13 @@ const fileFilter = (_req: any, file: Express.Multer.File, cb: FileFilterCallback
   if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
     cb(null, true);
   } else {
-    cb(new AppError(StatusCodes.BAD_REQUEST, 'Only images and PDF files are allowed!') as unknown as null, false);
+    cb(
+      new AppError(
+        StatusCodes.BAD_REQUEST,
+        'Only images and PDF files are allowed!',
+      ) as unknown as null,
+      false,
+    );
   }
 };
 

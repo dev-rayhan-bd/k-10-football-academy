@@ -22,7 +22,18 @@ const envSchema = z.object({
   SMTP_USER: z.string().min(1, 'SMTP_USER is required'),
   SMTP_PASS: z.string().min(1, 'SMTP_PASS is required'),
   SMTP_FROM: z.string().min(1, 'SMTP_FROM is required'),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+  AWS_BUCKET_NAME: z.string().optional(),
 });
+
+if (!process.env.SMTP_PASS && process.env.APP_PASSWARD) {
+  process.env.SMTP_PASS = process.env.APP_PASSWARD;
+}
 
 const parsedEnv = envSchema.safeParse(process.env);
 

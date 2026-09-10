@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "k10-football-collection-v1",
+    "_postman_id": "k10-football-collection-v3",
     "name": "K10 Football Academy Platform API Collection",
-    "description": "Complete Postman collection for K10 Football Platform with Automated Token Extraction & Role-based Environment Setup",
+    "description": "Complete Postman collection with Auto Token Extraction, Dynamic Storage (Cloudinary/S3), FormData with JSON 'data' text field + separate file fields, and Query Filtering & Pagination on GET Endpoints.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -20,18 +20,171 @@
       "name": "Auth & Users",
       "item": [
         {
-          "name": "Register User",
+          "name": "Register as Player (FormData + Avatar)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.player@k10football.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"PLAYER\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"John Player\",\n  \"email\": \"john.player@k10football.com\",\n  \"phone\": \"+8801700000000\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"PLAYER\",\n  \"dateOfBirth\": \"2008-05-15\",\n  \"position\": \"Forward\",\n  \"height\": 178,\n  \"currentClub\": \"Abahani Youth Academy\"\n}",
+                  "type": "text",
+                  "description": "Player signup payload from UI"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Profile avatar photo file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Register as Coach (FormData + Avatar)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"Alex Ferguson\",\n  \"email\": \"alex.coach@k10football.com\",\n  \"phone\": \"+8801711111111\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"COACH\",\n  \"yearsExperience\": 8,\n  \"licenseStatus\": \"UEFA Pro License\",\n  \"preferredFormation\": \"4-3-3 (Attack-focused)\"\n}",
+                  "type": "text",
+                  "description": "Coach signup payload from UI"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Coach avatar photo file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Register as Academy (FormData + Logo)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"Kings Academy Admin\",\n  \"email\": \"kings.academy@k10football.com\",\n  \"phone\": \"+8801722222222\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"ACADEMY\",\n  \"academyName\": \"Kings Football Academy\",\n  \"location\": \"Dhaka, Bangladesh\",\n  \"registrationId\": \"REG-109283\",\n  \"estimatedAcademySize\": \"Under 50 Players\"\n}",
+                  "type": "text",
+                  "description": "Academy signup payload from UI"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Academy official logo file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Register as Club (FormData + Crest)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"Bashundhara Scout Director\",\n  \"email\": \"director.club@k10football.com\",\n  \"phone\": \"+8801733333333\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"CLUB\",\n  \"clubName\": \"Bashundhara Kings\",\n  \"title\": \"Chief Scout / Director\",\n  \"leagueTier\": \"BPL (Premier League)\",\n  \"country\": \"Bangladesh\"\n}",
+                  "type": "text",
+                  "description": "Club signup payload from UI"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Official club crest image file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Register as Agent (FormData + Avatar)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"David Agent\",\n  \"email\": \"david.agent@k10football.com\",\n  \"phone\": \"+8801744444444\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"AGENT\",\n  \"fifaLicenseNumber\": \"FIFA-LIC-902831\",\n  \"agencyName\": \"Elite Football Management\",\n  \"countryOfOperation\": \"United Kingdom\"\n}",
+                  "type": "text",
+                  "description": "Agent signup payload from UI"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Agent profile photo file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Register as Parent (FormData + Avatar)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"Robert Silva\",\n  \"email\": \"robert.parent@k10football.com\",\n  \"phone\": \"+8801755555555\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"PARENT\",\n  \"linkedChildName\": \"Marcus Silva\",\n  \"linkedChildEmail\": \"marcus@example.com\",\n  \"relationship\": \"Father\"\n}",
+                  "type": "text",
+                  "description": "Parent signup payload from UI"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Parent profile photo file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/users/register",
@@ -113,6 +266,55 @@
               "path": ["users", "me"]
             }
           }
+        },
+        {
+          "name": "Get All Users (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users?searchTerm=john&role=PLAYER&isVerified=true&page=1&limit=10&sort=-createdAt&fields=name,email,role,avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "searchTerm", "value": "john", "description": "Search by name or email" },
+                { "key": "role", "value": "PLAYER", "description": "Filter by user role (PLAYER, COACH, ACADEMY, CLUB, AGENT, PARENT, SUPER_ADMIN)" },
+                { "key": "isVerified", "value": "true", "description": "Filter by verification status" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Page limit" },
+                { "key": "sort", "value": "-createdAt", "description": "Sort fields (e.g. -createdAt, name)" },
+                { "key": "fields", "value": "name,email,role,avatar", "description": "Select specific fields" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User Profile (FormData with JSON 'data' + Avatar)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"John Updated Doe\",\n  \"phone\": \"+1-555-0199\"\n}",
+                  "type": "text",
+                  "description": "JSON string containing updated text parameters"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Updated profile picture file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
         }
       ]
     },
@@ -120,18 +322,32 @@
       "name": "Players",
       "item": [
         {
-          "name": "Create Player Profile",
+          "name": "Create Player Profile (FormData with JSON 'data' + Image/Video)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef12\",\n  \"fullName\": \"John Doe\",\n  \"position\": \"Forward\",\n  \"secondaryPositions\": [\"Winger\"],\n  \"age\": 18,\n  \"dateOfBirth\": \"2008-05-15\",\n  \"country\": \"Spain\",\n  \"preferredFoot\": \"RIGHT\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"userId\": \"66d9ab1234567890abcdef12\",\n  \"fullName\": \"John Doe\",\n  \"position\": \"Forward\",\n  \"secondaryPositions\": [\"Winger\"],\n  \"age\": 18,\n  \"dateOfBirth\": \"2008-05-15\",\n  \"country\": \"Spain\",\n  \"preferredFoot\": \"RIGHT\"\n}",
+                  "type": "text",
+                  "description": "JSON text containing player data"
+                },
+                {
+                  "key": "profileImage",
+                  "type": "file",
+                  "src": [],
+                  "description": "Player profile photo file"
+                },
+                {
+                  "key": "highlightVideo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Player intro video file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/players",
@@ -141,13 +357,24 @@
           }
         },
         {
-          "name": "Get All Player Profiles",
+          "name": "Get All Player Profiles (Filtered & Paginated)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/players",
+              "raw": "{{baseUrl}}/players?searchTerm=john&position=Forward&country=Spain&preferredFoot=RIGHT&page=1&limit=10&sort=-createdAt&fields=fullName,position,country,age,profileImage",
               "host": ["{{baseUrl}}"],
-              "path": ["players"]
+              "path": ["players"],
+              "query": [
+                { "key": "searchTerm", "value": "john", "description": "Search player name" },
+                { "key": "position", "value": "Forward", "description": "Filter by position (Forward, Midfielder, Defender, Goalkeeper, Winger)" },
+                { "key": "country", "value": "Spain", "description": "Filter by country" },
+                { "key": "preferredFoot", "value": "RIGHT", "description": "Filter by preferred foot (RIGHT, LEFT, BOTH)" },
+                { "key": "age", "value": "18", "disabled": true, "description": "Filter by age" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Limit per page" },
+                { "key": "sort", "value": "-createdAt", "description": "Sort order" },
+                { "key": "fields", "value": "fullName,position,country,age,profileImage", "description": "Select specific fields" }
+              ]
             }
           }
         },
@@ -209,12 +436,48 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"playerId\": \"66d9ab1234567890abcdef12\",\n  \"matchDate\": \"2026-09-01\",\n  \"leagueType\": \"Youth Cup\",\n  \"homeTeam\": \"Academy A\",\n  \"awayTeam\": \"Academy B\",\n  \"homeScore\": 3,\n  \"awayScore\": 1,\n  \"result\": \"W\",\n  \"goals\": 2,\n  \"assists\": 1\n}"
+              "raw": "{\n  \"matchDate\": \"2026-09-01\",\n  \"leagueType\": \"Youth Cup\",\n  \"homeTeam\": \"Academy A\",\n  \"awayTeam\": \"Academy B\",\n  \"homeScore\": 3,\n  \"awayScore\": 1,\n  \"result\": \"W\",\n  \"goals\": 2,\n  \"assists\": 1\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/players/:playerId/matches",
               "host": ["{{baseUrl}}"],
               "path": ["players", ":playerId", "matches"],
+              "variable": [{ "key": "playerId", "value": "66d9ab1234567890abcdef12" }]
+            }
+          }
+        },
+        {
+          "name": "Upload Highlight Video (FormData with JSON 'data' + Video File)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"title\": \"Best Dribbling Goals 2026\",\n  \"description\": \"Highlights against Youth League Academy Teams\"\n}",
+                  "type": "text",
+                  "description": "Video metadata in JSON string"
+                },
+                {
+                  "key": "video",
+                  "type": "file",
+                  "src": [],
+                  "description": "Match clip video file (MP4, MOV)"
+                },
+                {
+                  "key": "thumbnail",
+                  "type": "file",
+                  "src": [],
+                  "description": "Video cover thumbnail image file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/players/:playerId/videos",
+              "host": ["{{baseUrl}}"],
+              "path": ["players", ":playerId", "videos"],
               "variable": [{ "key": "playerId", "value": "66d9ab1234567890abcdef12" }]
             }
           }
@@ -225,18 +488,32 @@
       "name": "Coaches",
       "item": [
         {
-          "name": "Create Coach Profile",
+          "name": "Create Coach Profile (FormData with JSON 'data' + Photo & Document)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef13\",\n  \"coachType\": \"INDIVIDUAL_COACH\",\n  \"fullName\": \"Coach Alex Ferguson\",\n  \"title\": \"Head Tactical Coach\",\n  \"yearsExperience\": 15,\n  \"licenseStatus\": \"UEFA Pro License\",\n  \"speciality\": \"Attack & Counter Tactics\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"userId\": \"66d9ab1234567890abcdef13\",\n  \"coachType\": \"INDIVIDUAL_COACH\",\n  \"fullName\": \"Coach Alex Ferguson\",\n  \"title\": \"Head Tactical Coach\",\n  \"yearsExperience\": 15,\n  \"licenseStatus\": \"UEFA Pro License\",\n  \"speciality\": \"Attack & Counter Tactics\"\n}",
+                  "type": "text",
+                  "description": "Coach profile details in JSON format"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Coach profile photo file"
+                },
+                {
+                  "key": "licenseDocument",
+                  "type": "file",
+                  "src": [],
+                  "description": "UEFA Certification document PDF file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/coaches",
@@ -246,13 +523,35 @@
           }
         },
         {
-          "name": "Get All Coaches",
+          "name": "Get All Coaches (Filtered & Paginated)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/coaches",
+              "raw": "{{baseUrl}}/coaches?searchTerm=alex&coachType=INDIVIDUAL_COACH&licenseStatus=UEFA Pro License&speciality=Attack&page=1&limit=10&sort=-yearsExperience&fields=fullName,title,speciality,avatar",
               "host": ["{{baseUrl}}"],
-              "path": ["coaches"]
+              "path": ["coaches"],
+              "query": [
+                { "key": "searchTerm", "value": "alex", "description": "Search by coach name or title" },
+                { "key": "coachType", "value": "INDIVIDUAL_COACH", "description": "Filter by coach type (INDIVIDUAL_COACH, ACADEMY_COACH, CLUB_COACH)" },
+                { "key": "licenseStatus", "value": "UEFA Pro License", "description": "Filter by license status" },
+                { "key": "speciality", "value": "Attack", "description": "Filter by tactical speciality" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "-yearsExperience", "description": "Sorting criteria" },
+                { "key": "fields", "value": "fullName,title,speciality,avatar", "description": "Selected response fields" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Coach Profile by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/coaches/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["coaches", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef13" }]
             }
           }
         },
@@ -284,18 +583,32 @@
       "name": "Academies",
       "item": [
         {
-          "name": "Create Academy Profile",
+          "name": "Create Academy Profile (FormData with JSON 'data' + Logo & Banner)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef14\",\n  \"name\": \"Barcelona Youth Academy\",\n  \"category\": \"Elite Academy\",\n  \"country\": \"Spain\",\n  \"city\": \"Barcelona\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"userId\": \"66d9ab1234567890abcdef14\",\n  \"name\": \"Barcelona Youth Academy\",\n  \"category\": \"Elite Academy\",\n  \"country\": \"Spain\",\n  \"city\": \"Barcelona\"\n}",
+                  "type": "text",
+                  "description": "Academy info in JSON string"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Academy official logo image file"
+                },
+                {
+                  "key": "bannerImage",
+                  "type": "file",
+                  "src": [],
+                  "description": "Academy facility banner photo file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/academies",
@@ -305,13 +618,35 @@
           }
         },
         {
-          "name": "Get All Academies",
+          "name": "Get All Academies (Filtered & Paginated)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/academies",
+              "raw": "{{baseUrl}}/academies?searchTerm=barcelona&category=Elite Academy&country=Spain&city=Barcelona&page=1&limit=10&sort=-createdAt&fields=name,category,country,city,logo",
               "host": ["{{baseUrl}}"],
-              "path": ["academies"]
+              "path": ["academies"],
+              "query": [
+                { "key": "searchTerm", "value": "barcelona", "description": "Search academy by name" },
+                { "key": "category", "value": "Elite Academy", "description": "Filter by category" },
+                { "key": "country", "value": "Spain", "description": "Filter by country" },
+                { "key": "city", "value": "Barcelona", "description": "Filter by city" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Page limit" },
+                { "key": "sort", "value": "-createdAt", "description": "Sort order" },
+                { "key": "fields", "value": "name,category,country,city,logo", "description": "Select specific fields" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Academy Profile by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/academies/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef14" }]
             }
           }
         },
@@ -343,23 +678,64 @@
       "name": "Clubs",
       "item": [
         {
-          "name": "Create Club Profile",
+          "name": "Create Club Profile (FormData with JSON 'data' + Club Crest)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef15\",\n  \"name\": \"Manchester City FC\",\n  \"clubType\": \"Professional League\",\n  \"establishedYear\": 1880,\n  \"country\": \"England\",\n  \"league\": \"Premier League\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"userId\": \"66d9ab1234567890abcdef15\",\n  \"name\": \"Manchester City FC\",\n  \"clubType\": \"Professional League\",\n  \"establishedYear\": 1880,\n  \"country\": \"England\",\n  \"league\": \"Premier League\"\n}",
+                  "type": "text",
+                  "description": "Club metadata in JSON format"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Official club crest/logo image file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/clubs",
               "host": ["{{baseUrl}}"],
               "path": ["clubs"]
+            }
+          }
+        },
+        {
+          "name": "Get All Clubs (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/clubs?searchTerm=manchester&clubType=Professional League&country=England&league=Premier League&page=1&limit=10&sort=-establishedYear&fields=name,clubType,country,league,logo",
+              "host": ["{{baseUrl}}"],
+              "path": ["clubs"],
+              "query": [
+                { "key": "searchTerm", "value": "manchester", "description": "Search club name" },
+                { "key": "clubType", "value": "Professional League", "description": "Filter by club type" },
+                { "key": "country", "value": "England", "description": "Filter by country" },
+                { "key": "league", "value": "Premier League", "description": "Filter by league" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Limit per page" },
+                { "key": "sort", "value": "-establishedYear", "description": "Sorting criteria" },
+                { "key": "fields", "value": "name,clubType,country,league,logo", "description": "Response fields" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Club Profile by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/clubs/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["clubs", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef15" }]
             }
           }
         },
@@ -391,18 +767,26 @@
       "name": "Agents",
       "item": [
         {
-          "name": "Create Agent Profile",
+          "name": "Create Agent Profile (FormData with JSON 'data' + Photo)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef16\",\n  \"licenseId\": \"FIFA-AGENT-8849\",\n  \"certifications\": \"Licensed FIFA Football Agent\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"userId\": \"66d9ab1234567890abcdef16\",\n  \"licenseId\": \"FIFA-AGENT-8849\",\n  \"certifications\": \"Licensed FIFA Football Agent\",\n  \"agencyName\": \"Apex Sports Management\"\n}",
+                  "type": "text",
+                  "description": "Agent parameters in JSON string"
+                },
+                {
+                  "key": "profileImage",
+                  "type": "file",
+                  "src": [],
+                  "description": "Agent profile picture file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/agents",
@@ -412,18 +796,57 @@
           }
         },
         {
-          "name": "Upload Verification Document",
+          "name": "Get All Agents (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/agents?searchTerm=apex&certifications=Licensed FIFA Football Agent&page=1&limit=10&sort=-createdAt&fields=licenseId,certifications,agencyName,profileImage",
+              "host": ["{{baseUrl}}"],
+              "path": ["agents"],
+              "query": [
+                { "key": "searchTerm", "value": "apex", "description": "Search agent or agency name" },
+                { "key": "certifications", "value": "Licensed FIFA Football Agent", "description": "Filter by certification" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "-createdAt", "description": "Sorting criteria" },
+                { "key": "fields", "value": "licenseId,certifications,agencyName,profileImage", "description": "Response fields selection" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Agent Profile by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/agents/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["agents", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef16" }]
+            }
+          }
+        },
+        {
+          "name": "Upload Verification Document (FormData with JSON 'data' + File)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"documentType\": \"LICENSE_CERTIFICATE\",\n  \"fileUrl\": \"https://storage.k10football.com/docs/license.pdf\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"documentType\": \"LICENSE_CERTIFICATE\"\n}",
+                  "type": "text",
+                  "description": "Document type JSON text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Verification PDF or Image file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/agents/:agentId/documents",
@@ -439,23 +862,61 @@
       "name": "Parents",
       "item": [
         {
-          "name": "Create Parent Profile",
+          "name": "Create Parent Profile (FormData with JSON 'data' + Photo)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"66d9ab1234567890abcdef17\",\n  \"contactPhone\": \"+1-555-0199\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"userId\": \"66d9ab1234567890abcdef17\",\n  \"contactPhone\": \"+1-555-0199\",\n  \"address\": \"Madrid, Spain\"\n}",
+                  "type": "text",
+                  "description": "Parent information JSON"
+                },
+                {
+                  "key": "profileImage",
+                  "type": "file",
+                  "src": [],
+                  "description": "Parent profile picture file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/parents",
               "host": ["{{baseUrl}}"],
               "path": ["parents"]
+            }
+          }
+        },
+        {
+          "name": "Get All Parents (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/parents?searchTerm=555&page=1&limit=10&sort=-createdAt&fields=contactPhone,address,profileImage",
+              "host": ["{{baseUrl}}"],
+              "path": ["parents"],
+              "query": [
+                { "key": "searchTerm", "value": "555", "description": "Search contact phone or address" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "-createdAt", "description": "Sort criteria" },
+                { "key": "fields", "value": "contactPhone,address,profileImage", "description": "Fields to select" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Parent Profile by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/parents/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["parents", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef17" }]
             }
           }
         },
@@ -487,23 +948,63 @@
       "name": "Trainings",
       "item": [
         {
-          "name": "Create Training Session",
+          "name": "Create Training Session (FormData with JSON 'data' + Drill File)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"academyId\": \"66d9ab1234567890abcdef14\",\n  \"sessionTitle\": \"Tactical Dribbling & Shooting Drill\",\n  \"sessionDate\": \"2026-09-10\",\n  \"startTime\": \"09:00 AM\",\n  \"endTime\": \"11:00 AM\",\n  \"locationField\": \"Field Pitch 2\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"academyId\": \"66d9ab1234567890abcdef14\",\n  \"sessionTitle\": \"Tactical Dribbling & Shooting Drill\",\n  \"sessionDate\": \"2026-09-10\",\n  \"startTime\": \"09:00 AM\",\n  \"endTime\": \"11:00 AM\",\n  \"locationField\": \"Field Pitch 2\"\n}",
+                  "type": "text",
+                  "description": "Training session details in JSON"
+                },
+                {
+                  "key": "attachment",
+                  "type": "file",
+                  "src": [],
+                  "description": "Training plan PDF or tactic diagram image file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/trainings",
               "host": ["{{baseUrl}}"],
               "path": ["trainings"]
+            }
+          }
+        },
+        {
+          "name": "Get All Training Sessions (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/trainings?searchTerm=Tactical&academyId=66d9ab1234567890abcdef14&sessionDate=2026-09-10&page=1&limit=10&sort=sessionDate&fields=sessionTitle,sessionDate,startTime,endTime,locationField",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainings"],
+              "query": [
+                { "key": "searchTerm", "value": "Tactical", "description": "Search session title" },
+                { "key": "academyId", "value": "66d9ab1234567890abcdef14", "description": "Filter by Academy ID" },
+                { "key": "sessionDate", "value": "2026-09-10", "description": "Filter by date (YYYY-MM-DD)" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "sessionDate", "description": "Sort order" },
+                { "key": "fields", "value": "sessionTitle,sessionDate,startTime,endTime,locationField", "description": "Response fields" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Training Session by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/trainings/:sessionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainings", ":sessionId"],
+              "variable": [{ "key": "sessionId", "value": "66d9ab1234567890abcdef99" }]
             }
           }
         },
@@ -556,23 +1057,64 @@
           }
         },
         {
-          "name": "Send Message",
+          "name": "Get All Conversations (Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/chats/conversations?page=1&limit=10&sort=-updatedAt",
+              "host": ["{{baseUrl}}"],
+              "path": ["chats", "conversations"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "-updatedAt", "description": "Sort order" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Message (FormData with JSON 'data' + Attachment)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"conversationId\": \"66d9ab1234567890abcdef88\",\n  \"text\": \"Hello Coach, when is the next match video review?\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"conversationId\": \"66d9ab1234567890abcdef88\",\n  \"text\": \"Hello Coach, when is the next match video review?\"\n}",
+                  "type": "text",
+                  "description": "Message payload JSON string"
+                },
+                {
+                  "key": "attachment",
+                  "type": "file",
+                  "src": [],
+                  "description": "Image/Video/File attachment in chat"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/chats/messages",
               "host": ["{{baseUrl}}"],
               "path": ["chats", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Get Messages by Conversation (Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/chats/messages/:conversationId?page=1&limit=20&sort=-createdAt",
+              "host": ["{{baseUrl}}"],
+              "path": ["chats", "messages", ":conversationId"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "20", "description": "Messages per page" },
+                { "key": "sort", "value": "-createdAt", "description": "Sort order" }
+              ],
+              "variable": [{ "key": "conversationId", "value": "66d9ab1234567890abcdef88" }]
             }
           }
         }
@@ -599,6 +1141,39 @@
               "raw": "{{baseUrl}}/invoices",
               "host": ["{{baseUrl}}"],
               "path": ["invoices"]
+            }
+          }
+        },
+        {
+          "name": "Get All Invoices (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/invoices?searchTerm=Monthly&status=UNPAID&academyId=66d9ab1234567890abcdef14&page=1&limit=10&sort=-dueDate&fields=title,amount,dueDate,status",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"],
+              "query": [
+                { "key": "searchTerm", "value": "Monthly", "description": "Search invoice title" },
+                { "key": "status", "value": "UNPAID", "description": "Filter by status (UNPAID, PAID, OVERDUE, CANCELLED)" },
+                { "key": "academyId", "value": "66d9ab1234567890abcdef14", "description": "Filter by Academy ID" },
+                { "key": "childPlayerId", "value": "66d9ab1234567890abcdef12", "disabled": true, "description": "Filter by Player ID" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "-dueDate", "description": "Sorting criteria" },
+                { "key": "fields", "value": "title,amount,dueDate,status", "description": "Response fields" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Invoice by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef77" }]
             }
           }
         },
@@ -630,23 +1205,64 @@
       "name": "Shop",
       "item": [
         {
-          "name": "Create Product",
+          "name": "Create Product (FormData with JSON 'data' + Product Image)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"K10 Academy Official Match Jersey\",\n  \"category\": \"JERSEYS\",\n  \"price\": 45.99,\n  \"availableSizes\": [\"S\", \"M\", \"L\", \"XL\"],\n  \"stockQuantity\": 100\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"title\": \"K10 Academy Official Match Jersey\",\n  \"category\": \"JERSEYS\",\n  \"price\": 45.99,\n  \"availableSizes\": [\"S\", \"M\", \"L\", \"XL\"],\n  \"stockQuantity\": 100\n}",
+                  "type": "text",
+                  "description": "Product fields in JSON format"
+                },
+                {
+                  "key": "productImage",
+                  "type": "file",
+                  "src": [],
+                  "description": "Product display photo file"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/shop/products",
               "host": ["{{baseUrl}}"],
               "path": ["shop", "products"]
+            }
+          }
+        },
+        {
+          "name": "Get All Products (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/shop/products?searchTerm=Jersey&category=JERSEYS&minPrice=10&maxPrice=100&page=1&limit=10&sort=-price&fields=title,category,price,stockQuantity,productImage",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "products"],
+              "query": [
+                { "key": "searchTerm", "value": "Jersey", "description": "Search product title" },
+                { "key": "category", "value": "JERSEYS", "description": "Filter by category (JERSEYS, BOOTS, ACCESSORIES, EQUIPMENT)" },
+                { "key": "minPrice", "value": "10", "description": "Minimum price filter" },
+                { "key": "maxPrice", "value": "100", "description": "Maximum price filter" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "-price", "description": "Sort order" },
+                { "key": "fields", "value": "title,category,price,stockQuantity,productImage", "description": "Selected response fields" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/shop/products/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "products", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef66" }]
             }
           }
         },
@@ -668,6 +1284,23 @@
               "raw": "{{baseUrl}}/shop/orders",
               "host": ["{{baseUrl}}"],
               "path": ["shop", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get All Orders (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/shop/orders?status=PENDING&page=1&limit=10&sort=-createdAt",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "orders"],
+              "query": [
+                { "key": "status", "value": "PENDING", "description": "Filter by order status (PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED)" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "-createdAt", "description": "Sort order" }
+              ]
             }
           }
         }
@@ -698,6 +1331,24 @@
           }
         },
         {
+          "name": "Get All Membership Plans (Filtered)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/plans?targetRole=PLAYER&billingCycle=MONTHLY&page=1&limit=10&sort=price",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "plans"],
+              "query": [
+                { "key": "targetRole", "value": "PLAYER", "description": "Filter by target role (PLAYER, COACH, ACADEMY, CLUB, AGENT)" },
+                { "key": "billingCycle", "value": "MONTHLY", "description": "Filter by billing cycle (MONTHLY, YEARLY)" },
+                { "key": "page", "value": "1", "description": "Page number" },
+                { "key": "limit", "value": "10", "description": "Results per page" },
+                { "key": "sort", "value": "price", "description": "Sort by price" }
+              ]
+            }
+          }
+        },
+        {
           "name": "Subscribe to Plan",
           "request": {
             "method": "POST",
@@ -715,6 +1366,17 @@
               "raw": "{{baseUrl}}/subscriptions/subscribe",
               "host": ["{{baseUrl}}"],
               "path": ["subscriptions", "subscribe"]
+            }
+          }
+        },
+        {
+          "name": "Get My Subscription",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/my-subscription",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "my-subscription"]
             }
           }
         }

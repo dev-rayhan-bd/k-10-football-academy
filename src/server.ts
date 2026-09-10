@@ -17,7 +17,9 @@ async function bootstrap() {
 
     // 3. Start HTTP Server
     server = app.listen(env.PORT, () => {
-      logger.info(`⚽ K10 Football Academy Server running in ${env.NODE_ENV} mode on port ${env.PORT}`);
+      logger.info(
+        `⚽ K10 Football Academy Server running in ${env.NODE_ENV} mode on port ${env.PORT}`,
+      );
     });
 
     /**

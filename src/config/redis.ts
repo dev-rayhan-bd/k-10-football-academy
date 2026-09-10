@@ -25,7 +25,9 @@ redisClient.on('connect', () => {
 
 redisClient.on('error', (err) => {
   if (!isRedisLoggedError) {
-    logger.error(`Redis Connection Error: ${err.message}. Ensure Redis server is running at ${env.REDIS_HOST}:${env.REDIS_PORT}`);
+    logger.error(
+      `Redis Connection Error: ${err.message}. Ensure Redis server is running at ${env.REDIS_HOST}:${env.REDIS_PORT}`,
+    );
     isRedisLoggedError = true;
   }
 });

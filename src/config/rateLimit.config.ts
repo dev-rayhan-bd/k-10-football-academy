@@ -28,7 +28,12 @@ export const globalRateLimiter = rateLimit({
   legacyHeaders: false,
   store: createRedisStore('global'),
   handler: (_req, _res, next) => {
-    next(new AppError(StatusCodes.TOO_MANY_REQUESTS, 'Too many requests from this IP. Please try again after 15 minutes.'));
+    next(
+      new AppError(
+        StatusCodes.TOO_MANY_REQUESTS,
+        'Too many requests from this IP. Please try again after 15 minutes.',
+      ),
+    );
   },
 });
 
@@ -42,7 +47,12 @@ export const authRateLimiter = rateLimit({
   legacyHeaders: false,
   store: createRedisStore('auth'),
   handler: (_req, _res, next) => {
-    next(new AppError(StatusCodes.TOO_MANY_REQUESTS, 'Too many authentication attempts. Please try again after an hour.'));
+    next(
+      new AppError(
+        StatusCodes.TOO_MANY_REQUESTS,
+        'Too many authentication attempts. Please try again after an hour.',
+      ),
+    );
   },
 });
 
@@ -56,6 +66,11 @@ export const searchRateLimiter = rateLimit({
   legacyHeaders: false,
   store: createRedisStore('search'),
   handler: (_req, _res, next) => {
-    next(new AppError(StatusCodes.TOO_MANY_REQUESTS, 'Search rate limit exceeded. Please slow down your queries.'));
+    next(
+      new AppError(
+        StatusCodes.TOO_MANY_REQUESTS,
+        'Search rate limit exceeded. Please slow down your queries.',
+      ),
+    );
   },
 });

@@ -7,6 +7,12 @@ import { env } from '@/config/env';
 import { emailQueue } from '@/jobs/queues/email.queue';
 import { redisClient } from '@/config/redis';
 import { otpGenerator } from '@/utils/otpGenerator';
+import {
+  getOtpVerificationEmailTemplate,
+  getResendOtpEmailTemplate,
+  getPasswordResetEmailTemplate,
+  getWelcomeEmailTemplate,
+} from '@/utils/emailTemplates';
 
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
@@ -25,11 +31,11 @@ export class UserService {
     // Save OTP to Redis with 5-minute expiration (300s)
     await redisClient.set(`OTP_${newUser.email}`, otp, 'EX', 300);
 
-    // Queue OTP email via BullMQ (Instant < 50ms API response!)
+    // Queue OTP email via BullMQ with Professional HTML Template
     await emailQueue.add('send-otp-email', {
       to: newUser.email,
       subject: 'Verify your K10 Football Academy Account',
-      body: `Hello ${newUser.name},<br><br>Your verification code is: <b>${otp}</b>.<br>This code will expire in 5 minutes.`,
+      body: getOtpVerificationEmailTemplate(newUser.name, otp),
     });
 
     return newUser;
@@ -95,6 +101,13 @@ export class UserService {
     await this.userRepo.updateById(user._id.toString(), { isEmailVerified: true });
     await redisClient.del(`OTP_${email}`);
 
+    // Send Welcome Email asynchronously
+    await emailQueue.add('send-welcome-email', {
+      to: user.email,
+      subject: 'Welcome to K10 Football Academy!',
+      body: getWelcomeEmailTemplate(user.name, user.role),
+    });
+
     return true;
   }
 
@@ -124,8 +137,50 @@ export class UserService {
     await emailQueue.add('send-otp-email', {
       to: user.email,
       subject: 'Resend Verification Code - K10 Football Academy',
-      body: `Hello ${user.name},<br><br>Your new verification code is: <b>${otp}</b>.<br>This code will expire in 5 minutes.`,
+      body: getResendOtpEmailTemplate(user.name, otp),
     });
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.userRepo.findByEmail(email);
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User with this email does not exist');
+    }
+
+    const isRateLimited = await redisClient.get(`RESET_LIMIT_${email}`);
+    if (isRateLimited) {
+      throw new AppError(
+        StatusCodes.TOO_MANY_REQUESTS,
+        'Please wait 60 seconds before requesting another password reset',
+      );
+    }
+
+    const resetOtp = otpGenerator.generate(6);
+    await redisClient.set(`RESET_OTP_${email}`, resetOtp, 'EX', 600); // 10 mins
+    await redisClient.set(`RESET_LIMIT_${email}`, '1', 'EX', 60);
+
+    await emailQueue.add('send-reset-password-email', {
+      to: user.email,
+      subject: 'Password Reset Request - K10 Football Academy',
+      body: getPasswordResetEmailTemplate(user.name, resetOtp),
+    });
+  }
+
+  async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
+    const user = await this.userRepo.findByEmail(email, true);
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+    }
+
+    const cachedOtp = await redisClient.get(`RESET_OTP_${email}`);
+    if (!cachedOtp || cachedOtp !== otp) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid or expired password reset OTP code');
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    await redisClient.del(`RESET_OTP_${email}`);
   }
 
   async refreshToken(refreshToken: string): Promise<IRefreshTokenResponse> {

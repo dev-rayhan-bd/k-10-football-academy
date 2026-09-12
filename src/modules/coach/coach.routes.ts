@@ -18,12 +18,26 @@ import {
   getTestimonials,
 } from './coach.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
-router.post('/', auth(), validateRequest(createCoachProfileZodSchema), createCoachProfile);
+router.post(
+  '/',
+  auth(),
+  upload.any() as any,
+  validateRequest(createCoachProfileZodSchema),
+  createCoachProfile,
+);
 router.get('/', getAllCoachProfiles);
 router.get('/:id', getCoachProfile);
-router.patch('/:id', auth(), validateRequest(updateCoachProfileZodSchema), updateCoachProfile);
+router.patch(
+  '/:id',
+  auth(),
+  upload.any() as any,
+  validateRequest(updateCoachProfileZodSchema),
+  updateCoachProfile,
+);
 
 router.post(
   '/:coachId/formations',

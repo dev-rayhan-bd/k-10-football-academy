@@ -3,6 +3,7 @@ import { userController } from './user.controller';
 import { UserValidation } from './user.validation';
 import { validateRequest } from '@/middlewares/validateRequest';
 import { auth } from '@/middlewares/auth.middleware';
+import { upload } from '@/middlewares/multer';
 import { authRateLimiter, searchRateLimiter } from '@/config/rateLimit.config';
 
 const router = Router();
@@ -11,6 +12,7 @@ const router = Router();
 router.post(
   '/register',
   authRateLimiter,
+  upload.single('avatar') as any,
   validateRequest(UserValidation.createUserZodSchema),
   userController.register,
 );
@@ -34,6 +36,20 @@ router.post(
   authRateLimiter,
   validateRequest(UserValidation.resendOtpZodSchema),
   userController.resendOtp,
+);
+
+router.post(
+  '/forgot-password',
+  authRateLimiter,
+  validateRequest(UserValidation.forgotPasswordZodSchema),
+  userController.forgotPassword,
+);
+
+router.post(
+  '/reset-password',
+  authRateLimiter,
+  validateRequest(UserValidation.resetPasswordZodSchema),
+  userController.resetPassword,
 );
 
 router.post(

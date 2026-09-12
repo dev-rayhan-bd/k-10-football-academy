@@ -18,12 +18,26 @@ import {
   getMatchRecords,
 } from './player.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
-router.post('/', auth(), validateRequest(createPlayerProfileZodSchema), createPlayerProfile);
+router.post(
+  '/',
+  auth(),
+  upload.any() as any,
+  validateRequest(createPlayerProfileZodSchema),
+  createPlayerProfile,
+);
 router.get('/', getAllPlayerProfiles);
 router.get('/:id', getPlayerProfile);
-router.patch('/:id', auth(), validateRequest(updatePlayerProfileZodSchema), updatePlayerProfile);
+router.patch(
+  '/:id',
+  auth(),
+  upload.any() as any,
+  validateRequest(updatePlayerProfileZodSchema),
+  updatePlayerProfile,
+);
 
 router.get('/:playerId/attributes', getPlayerAttributes);
 router.patch(

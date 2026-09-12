@@ -16,9 +16,17 @@ import {
   getFavourites,
 } from './club.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
-router.post('/', auth(), validateRequest(createClubProfileZodSchema), createClubProfile);
+router.post(
+  '/',
+  auth(),
+  upload.any() as any,
+  validateRequest(createClubProfileZodSchema),
+  createClubProfile,
+);
 router.get('/', getAllClubProfiles);
 router.get('/:id', getClubProfile);
 

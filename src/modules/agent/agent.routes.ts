@@ -15,14 +15,23 @@ import {
   getSuccessStories,
 } from './agent.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
-router.post('/', auth(), validateRequest(createAgentProfileZodSchema), createAgentProfile);
+router.post(
+  '/',
+  auth(),
+  upload.any() as any,
+  validateRequest(createAgentProfileZodSchema),
+  createAgentProfile,
+);
 router.get('/:id', getAgentProfile);
 
 router.post(
   '/:agentId/documents',
   auth('SUPER_ADMIN', 'AGENT'),
+  upload.any() as any,
   validateRequest(uploadVerificationDocZodSchema),
   uploadVerificationDoc,
 );

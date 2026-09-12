@@ -3,11 +3,17 @@ import { StatusCodes } from 'http-status-codes';
 import { userService, UserService } from './user.service';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
+import { uploadToStorage } from '@/utils/fileUpload.utils';
 
 export class UserController {
   constructor(private readonly service: UserService) {}
 
   register = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    if (req.file) {
+      const avatarUrl = await uploadToStorage(req.file, 'avatars');
+      req.body.avatar = avatarUrl;
+    }
+
     const user = await this.service.registerUser(req.body);
     sendResponse(res, {
       statusCode: StatusCodes.CREATED,
@@ -45,6 +51,26 @@ export class UserController {
       statusCode: StatusCodes.OK,
       success: true,
       message: 'New OTP sent to your email',
+    });
+  });
+
+  forgotPassword = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const { email } = req.body;
+    await this.service.forgotPassword(email);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Password reset OTP code sent to your email',
+    });
+  });
+
+  resetPassword = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const { email, otp, newPassword } = req.body;
+    await this.service.resetPassword(email, otp, newPassword);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Password reset successfully. You can now log in with your new password.',
     });
   });
 
@@ -114,6 +140,11 @@ export class UserController {
   });
 
   update = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    if (req.file) {
+      const avatarUrl = await uploadToStorage(req.file, 'avatars');
+      req.body.avatar = avatarUrl;
+    }
+
     const user = await this.service.updateUser(req.params.id, req.body);
     sendResponse(res, {
       statusCode: StatusCodes.OK,

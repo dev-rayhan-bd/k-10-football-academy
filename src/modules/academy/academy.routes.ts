@@ -16,9 +16,17 @@ import {
   getGameReports,
 } from './academy.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
-router.post('/', auth(), validateRequest(createAcademyProfileZodSchema), createAcademyProfile);
+router.post(
+  '/',
+  auth(),
+  upload.any() as any,
+  validateRequest(createAcademyProfileZodSchema),
+  createAcademyProfile,
+);
 router.get('/', getAllAcademyProfiles);
 router.get('/:id', getAcademyProfile);
 

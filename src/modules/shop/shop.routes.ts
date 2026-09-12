@@ -10,11 +10,14 @@ import {
   getUserOrders,
 } from './shop.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
 router.post(
   '/products',
   auth('SUPER_ADMIN', 'ACADEMY'),
+  upload.any() as any,
   validateRequest(createProductZodSchema),
   createProduct,
 );

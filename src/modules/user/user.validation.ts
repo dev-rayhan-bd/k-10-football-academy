@@ -268,6 +268,20 @@ export const changePasswordZodSchema = z.object({
   }),
 });
 
+export const forgotPasswordZodSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email address'),
+  }),
+});
+
+export const resetPasswordZodSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email address'),
+    otp: z.string().length(6, 'OTP must be exactly 6 digits'),
+    newPassword: z.string().min(6, 'New password must be at least 6 characters'),
+  }),
+});
+
 export const UserValidation = {
   createUserZodSchema,
   loginUserZodSchema,
@@ -276,4 +290,6 @@ export const UserValidation = {
   resendOtpZodSchema,
   refreshTokenZodSchema,
   changePasswordZodSchema,
+  forgotPasswordZodSchema,
+  resetPasswordZodSchema,
 };

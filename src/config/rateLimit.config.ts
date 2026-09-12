@@ -1,8 +1,11 @@
 import rateLimit from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
 import { redisClient } from './redis';
+import { env } from './env';
 import { AppError } from '@/utils/AppError';
 import { StatusCodes } from 'http-status-codes';
+
+const isDev = env.NODE_ENV === 'development';
 
 const createRedisStore = (prefix: string) => {
   try {
@@ -19,11 +22,11 @@ const createRedisStore = (prefix: string) => {
 };
 
 /**
- * 1. Global Limiter: 100 requests per 15 minutes across all general API routes
+ * 1. Global Limiter: 100 requests per 15 minutes across all general API routes (Relaxed in DEV)
  */
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: isDev ? 5000 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   store: createRedisStore('global'),
@@ -38,11 +41,11 @@ export const globalRateLimiter = rateLimit({
 });
 
 /**
- * 2. Auth Limiter: 10 attempts per 1 hour for login & registration (Brute-force protection)
+ * 2. Auth Limiter: Brute-force protection (Relaxed to 1000 in DEV mode for Postman testing)
  */
 export const authRateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10,
+  windowMs: isDev ? 1 * 60 * 1000 : 60 * 60 * 1000, // 1 min in dev, 1 hour in prod
+  max: isDev ? 1000 : 30, // 1000 in dev, 30 in prod
   standardHeaders: true,
   legacyHeaders: false,
   store: createRedisStore('auth'),

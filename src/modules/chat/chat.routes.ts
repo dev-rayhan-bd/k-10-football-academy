@@ -4,6 +4,8 @@ import { auth } from '@/middlewares/auth.middleware';
 import { createConversationZodSchema, sendMessageZodSchema } from './chat.validation';
 import { startConversation, getConversations, sendMessage, getMessages } from './chat.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
 router.post(
@@ -14,7 +16,13 @@ router.post(
 );
 router.get('/conversations', auth(), getConversations);
 
-router.post('/messages', auth(), validateRequest(sendMessageZodSchema), sendMessage);
+router.post(
+  '/messages',
+  auth(),
+  upload.any() as any,
+  validateRequest(sendMessageZodSchema),
+  sendMessage,
+);
 router.get('/messages/:conversationId', auth(), getMessages);
 
 export const ChatRoutes = router;

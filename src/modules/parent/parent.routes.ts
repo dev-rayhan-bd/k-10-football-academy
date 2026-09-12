@@ -15,9 +15,17 @@ import {
   getMatchReports,
 } from './parent.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
-router.post('/', auth(), validateRequest(createParentProfileZodSchema), createParentProfile);
+router.post(
+  '/',
+  auth(),
+  upload.any() as any,
+  validateRequest(createParentProfileZodSchema),
+  createParentProfile,
+);
 router.get('/:id', getParentProfile);
 
 router.post(

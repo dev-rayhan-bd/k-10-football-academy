@@ -9,11 +9,14 @@ import {
   getSessionAttendance,
 } from './training.controller';
 
+import { upload } from '@/middlewares/multer';
+
 const router = Router();
 
 router.post(
   '/',
   auth('SUPER_ADMIN', 'ACADEMY', 'COACH'),
+  upload.any() as any,
   validateRequest(createTrainingSessionZodSchema),
   createTrainingSession,
 );

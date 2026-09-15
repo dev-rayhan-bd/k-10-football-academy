@@ -1,4 +1,5 @@
 import { AppError } from '@/utils/AppError';
+import { calculatePositionRating, calculateMatchPerformance } from '@/utils/ratingCalculator';
 import { IPlayerProfile, IPlayerAttributes, IMatchRecord } from './player.interface';
 import {
   PlayerProfile,
@@ -70,6 +71,24 @@ export class PlayerService {
       upsert: true,
       runValidators: true,
     });
+
+    const profile = await PlayerProfile.findById(playerId);
+    if (profile && attributes) {
+      const position = profile.position || 'CM';
+      const rawAttributes =
+        typeof attributes.toObject === 'function' ? attributes.toObject() : attributes;
+      const attrObj = rawAttributes as unknown as Record<string, number>;
+      const calculatedRating = calculatePositionRating(position, attrObj);
+      profile.overallRating = calculatedRating;
+      await profile.save();
+
+      await FifaCardStats.findOneAndUpdate(
+        { playerId },
+        { overallRating: calculatedRating },
+        { upsert: true },
+      );
+    }
+
     return attributes;
   }
 
@@ -82,6 +101,20 @@ export class PlayerService {
   }
 
   async addMatchRecord(payload: Partial<IMatchRecord>) {
+    if (payload.playerId && payload.minutesPlayed && payload.events && payload.events.length > 0) {
+      const profile = await PlayerProfile.findById(payload.playerId);
+      const position = profile ? profile.position : 'CM';
+
+      const perfResult = calculateMatchPerformance(position, payload.minutesPlayed, payload.events);
+
+      payload.playerRating = perfResult.overallRating;
+      payload.positivePoints = perfResult.positivePoints;
+      payload.negativePoints = perfResult.negativePoints;
+      payload.netContribution = perfResult.netContribution;
+      payload.interpretation = perfResult.interpretation;
+      payload.categoryScores = perfResult.categoryAdjustedScores;
+    }
+
     return MatchRecord.create(payload);
   }
 

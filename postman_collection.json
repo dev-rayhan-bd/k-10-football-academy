@@ -403,7 +403,7 @@
           }
         },
         {
-          "name": "Update Player Attributes",
+          "name": "🆕 🌟 Update Player Attributes (Auto-Calculate Position Rating)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -414,7 +414,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ballControl\": 88,\n  \"dribbling\": 92,\n  \"sprintSpeed\": 90,\n  \"finishing\": 85\n}"
+              "raw": "{\n  \"finishing\": 85,\n  \"attPosition\": 80,\n  \"offTheBall\": 75,\n  \"firstTouch\": 88,\n  \"shotAccuracy\": 82,\n  \"oneOnOneFinishing\": 80,\n  \"aerialAbility\": 72,\n  \"strength\": 70,\n  \"acceleration\": 88,\n  \"anticipation\": 78,\n  \"decisions\": 82,\n  \"composure\": 80\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/players/:playerId/attributes",
@@ -425,7 +425,7 @@
           }
         },
         {
-          "name": "Add Match Record",
+          "name": "🆕 ⚽ Add Match Record (With 90-Min Rating Engine & Event Breakdown)",
           "request": {
             "method": "POST",
             "header": [
@@ -436,7 +436,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"matchDate\": \"2026-09-01\",\n  \"leagueType\": \"Youth Cup\",\n  \"homeTeam\": \"Academy A\",\n  \"awayTeam\": \"Academy B\",\n  \"homeScore\": 3,\n  \"awayScore\": 1,\n  \"result\": \"W\",\n  \"goals\": 2,\n  \"assists\": 1\n}"
+              "raw": "{\n  \"playerId\": \"66d9ab1234567890abcdef12\",\n  \"matchDate\": \"2026-09-15\",\n  \"leagueType\": \"Youth Premier League\",\n  \"homeTeam\": \"K10 Academy\",\n  \"awayTeam\": \"Dhaka City FC\",\n  \"homeScore\": 2,\n  \"awayScore\": 1,\n  \"result\": \"W\",\n  \"minutesPlayed\": 76,\n  \"events\": [\n    { \"eventId\": \"goal\", \"count\": 1 },\n    { \"eventId\": \"assist\", \"count\": 1 },\n    { \"eventId\": \"shot_on_target\", \"count\": 3 },\n    { \"eventId\": \"shot_off_target\", \"count\": 2 },\n    { \"eventId\": \"big_chance_created\", \"count\": 2 },\n    { \"eventId\": \"big_chance_missed\", \"count\": 2 },\n    { \"eventId\": \"successful_dribble\", \"count\": 7 },\n    { \"eventId\": \"failed_dribble\", \"count\": 2 },\n    { \"eventId\": \"completed_pass\", \"count\": 65 },\n    { \"eventId\": \"incomplete_pass\", \"count\": 12 },\n    { \"eventId\": \"key_pass\", \"count\": 3 },\n    { \"eventId\": \"through_ball_completed\", \"count\": 1 },\n    { \"eventId\": \"long_pass_completed\", \"count\": 6 },\n    { \"eventId\": \"cross_completed\", \"count\": 2 },\n    { \"eventId\": \"cross_failed\", \"count\": 2 },\n    { \"eventId\": \"ball_retention\", \"count\": 2 },\n    { \"eventId\": \"turnover\", \"count\": 1 },\n    { \"eventId\": \"free_kick_won\", \"count\": 2 },\n    { \"eventId\": \"tackle_won\", \"count\": 2 },\n    { \"eventId\": \"tackle_lost\", \"count\": 2 },\n    { \"eventId\": \"interception\", \"count\": 2 },\n    { \"eventId\": \"clearance\", \"count\": 2 },\n    { \"eventId\": \"block\", \"count\": 1 },\n    { \"eventId\": \"ground_duel_won\", \"count\": 2 },\n    { \"eventId\": \"recovery\", \"count\": 2 },\n    { \"eventId\": \"defensive_error\", \"count\": 2 },\n    { \"eventId\": \"foul_committed\", \"count\": 2 },\n    { \"eventId\": \"yellow_card\", \"count\": 1 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/players/:playerId/matches",

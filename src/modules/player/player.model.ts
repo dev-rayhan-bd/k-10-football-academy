@@ -128,6 +128,17 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
     passes: { type: Number, default: 0 },
     passAccuracy: { type: Number, default: 0 },
     minutesPlayed: { type: Number, default: 0 },
+    events: [
+      {
+        eventId: { type: String, required: true },
+        count: { type: Number, required: true },
+      },
+    ],
+    positivePoints: { type: Number },
+    negativePoints: { type: Number },
+    netContribution: { type: Number },
+    interpretation: { type: String },
+    categoryScores: { type: Map, of: Number },
     reportPdfUrl: { type: String },
   },
   { timestamps: true },

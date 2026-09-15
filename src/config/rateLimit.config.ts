@@ -8,6 +8,9 @@ import { StatusCodes } from 'http-status-codes';
 const isDev = env.NODE_ENV === 'development';
 
 const createRedisStore = (prefix: string) => {
+  if (process.env.NODE_ENV === 'test') {
+    return undefined;
+  }
   try {
     return new RedisStore({
       // Send command wrapper for ioredis compatibility

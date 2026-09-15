@@ -63,10 +63,18 @@ export const createMatchRecordZodSchema = z.object({
     awayScore: z.number().min(0),
     result: z.enum(['W', 'D', 'L']),
     location: z.string().optional(),
-    playerRating: z.number().min(1).max(10).optional(),
+    playerRating: z.number().min(0).max(100).optional(),
     goals: z.number().optional(),
     assists: z.number().optional(),
     passes: z.number().optional(),
     minutesPlayed: z.number().optional(),
+    events: z
+      .array(
+        z.object({
+          eventId: z.string(),
+          count: z.number().min(0),
+        }),
+      )
+      .optional(),
   }),
 });

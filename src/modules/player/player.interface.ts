@@ -132,6 +132,12 @@ export interface IMatchRecord {
   passes: number;
   passAccuracy: number;
   minutesPlayed: number;
+  events?: Array<{ eventId: string; count: number }>;
+  positivePoints?: number;
+  negativePoints?: number;
+  netContribution?: number;
+  interpretation?: string;
+  categoryScores?: Record<string, number>;
   reportPdfUrl?: string;
 }
 

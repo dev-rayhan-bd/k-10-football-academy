@@ -455,6 +455,52 @@ export interface IMatchPerformanceResult {
   categoryAdjustedScores: Record<CategoryKey, number>;
 }
 
+export const normalizePositionKey = (pos: string): PositionKey => {
+  if (!pos) return 'CM';
+  const clean = pos.trim().toUpperCase();
+  if (clean in POSITION_ATTRIBUTE_COEFFICIENTS) {
+    return clean as PositionKey;
+  }
+  if (
+    clean.includes('ST') ||
+    clean.includes('FORWARD') ||
+    clean.includes('STRIKER') ||
+    clean.includes('ATTACK')
+  ) {
+    return 'ST';
+  }
+  if (clean.includes('WING') || clean.includes('RW') || clean.includes('LW')) {
+    return 'RW-LW';
+  }
+  if (clean.includes('CAM') || clean.includes('ATTACKING MID')) {
+    return 'CAM';
+  }
+  if (clean.includes('CDM') || clean.includes('DEFENSIVE MID')) {
+    return 'CDM';
+  }
+  if (clean.includes('CM') || clean.includes('MID')) {
+    return 'CM';
+  }
+  if (
+    clean.includes('CB') ||
+    clean.includes('CENTER BACK') ||
+    clean.includes('CENTRE BACK') ||
+    clean.includes('DEFEND')
+  ) {
+    return 'CB';
+  }
+  if (clean.includes('RWB') || clean.includes('LWB')) {
+    return 'RWB-LWB';
+  }
+  if (clean.includes('RB') || clean.includes('LB') || clean.includes('FULLBACK')) {
+    return 'RB-LB';
+  }
+  if (clean.includes('GK') || clean.includes('GOAL') || clean.includes('KEEP')) {
+    return 'GK';
+  }
+  return 'CM';
+};
+
 /**
  * Calculates Position Overall Rating (0-100) based on position weighted coefficients
  */
@@ -462,9 +508,7 @@ export const calculatePositionRating = (
   position: string,
   attributes: Record<string, number>,
 ): number => {
-  const normPos = (
-    position.toUpperCase() in POSITION_ATTRIBUTE_COEFFICIENTS ? position.toUpperCase() : 'CM'
-  ) as PositionKey;
+  const normPos = normalizePositionKey(position);
 
   const coefficients = POSITION_ATTRIBUTE_COEFFICIENTS[normPos];
   let totalScore = 0;
@@ -500,9 +544,7 @@ export const calculateMatchPerformance = (
   minutesPlayed: number,
   events: IMatchEventInput[],
 ): IMatchPerformanceResult => {
-  const normPos = (
-    position.toUpperCase() in POSITION_CATEGORY_MULTIPLIERS ? position.toUpperCase() : 'CM'
-  ) as PositionKey;
+  const normPos = normalizePositionKey(position);
 
   const validMinutes = Math.max(1, minutesPlayed);
   const timeFactor = 90 / validMinutes;

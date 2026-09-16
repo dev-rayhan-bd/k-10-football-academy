@@ -16,6 +16,7 @@ import {
   getPlayerAttributes,
   addMatchRecord,
   getMatchRecords,
+  uploadHighlightVideo,
 } from './player.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -37,6 +38,13 @@ router.patch(
   upload.any() as any,
   validateRequest(updatePlayerProfileZodSchema),
   updatePlayerProfile,
+);
+
+router.post(
+  '/:playerId/videos',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  upload.any() as any,
+  uploadHighlightVideo,
 );
 
 router.get('/:playerId/attributes', getPlayerAttributes);

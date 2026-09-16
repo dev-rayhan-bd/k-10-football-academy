@@ -20,6 +20,8 @@ export interface IPlayerProfile {
   overallRating: number;
   cvTier: CvTier;
   profileCompletion: number;
+  profileImage?: string;
+  highlightVideo?: string;
   height?: number;
   weight?: number;
   preferredFoot: PreferredFoot;

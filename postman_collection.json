@@ -331,7 +331,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"userId\": \"66d9ab1234567890abcdef12\",\n  \"fullName\": \"John Doe\",\n  \"position\": \"Forward\",\n  \"secondaryPositions\": [\"Winger\"],\n  \"age\": 18,\n  \"dateOfBirth\": \"2008-05-15\",\n  \"country\": \"Spain\",\n  \"preferredFoot\": \"RIGHT\"\n}",
+                  "value": "{\n  \"fullName\": \"John Doe\",\n  \"position\": \"Forward\",\n  \"secondaryPositions\": [\"Winger\"],\n  \"age\": 18,\n  \"dateOfBirth\": \"2008-05-15\",\n  \"country\": \"Spain\",\n  \"preferredFoot\": \"RIGHT\"\n}",
                   "type": "text",
                   "description": "JSON text containing player data"
                 },
@@ -382,6 +382,42 @@
           "name": "Get Player Profile by ID",
           "request": {
             "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/players/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["players", ":id"],
+              "variable": [{ "key": "id", "value": "66d9ab1234567890abcdef12" }]
+            }
+          }
+        },
+        {
+          "name": "🆕 ✏️ Update Player Profile (FormData with JSON 'data' + Optional Avatar/Video)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"fullName\": \"Rayhan Shorker\",\n  \"position\": \"ST\",\n  \"secondaryPositions\": [\"Winger\", \"CF\"],\n  \"age\": 18,\n  \"height\": 180,\n  \"weight\": 75,\n  \"currentClub\": \"K10 Football Academy\",\n  \"contractUntil\": \"2028-06-30\",\n  \"preferredFoot\": \"RIGHT\",\n  \"dualNationality\": \"Spain\"\n}",
+                  "type": "text",
+                  "description": "JSON text containing any profile fields to update"
+                },
+                {
+                  "key": "profileImage",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional updated player profile photo file"
+                },
+                {
+                  "key": "highlightVideo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional updated player highlight video file"
+                }
+              ]
+            },
             "url": {
               "raw": "{{baseUrl}}/players/:id",
               "host": ["{{baseUrl}}"],

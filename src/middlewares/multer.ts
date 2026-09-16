@@ -6,13 +6,17 @@ const storage = multer.memoryStorage();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fileFilter = (_req: any, file: Express.Multer.File, cb: FileFilterCallback): void => {
-  if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+  if (
+    file.mimetype.startsWith('image/') ||
+    file.mimetype.startsWith('video/') ||
+    file.mimetype === 'application/pdf'
+  ) {
     cb(null, true);
   } else {
     cb(
       new AppError(
         StatusCodes.BAD_REQUEST,
-        'Only images and PDF files are allowed!',
+        'Only images, videos, and PDF files are allowed!',
       ) as unknown as null,
       false,
     );
@@ -22,5 +26,5 @@ const fileFilter = (_req: any, file: Express.Multer.File, cb: FileFilterCallback
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
 });

@@ -118,13 +118,31 @@ export const uploadHighlightVideo = catchAsync(async (req: Request, res: Respons
   const playerId = req.params.playerId || req.user?.userId;
   let videoUrl = '';
   let thumbnailUrl = '';
+  let imageUrl = '';
 
   if (req.files && Array.isArray(req.files)) {
     for (const file of req.files as Express.Multer.File[]) {
-      if (file.fieldname === 'video' || file.fieldname === 'highlightVideo') {
-        videoUrl = await uploadToStorage(file, 'player_videos');
-      } else if (file.fieldname === 'thumbnail') {
+      if (file.fieldname === 'thumbnail') {
         thumbnailUrl = await uploadToStorage(file, 'player_thumbnails');
+      } else if (
+        file.mimetype.startsWith('video/') ||
+        file.fieldname === 'video' ||
+        file.fieldname === 'highlightVideo'
+      ) {
+        videoUrl = await uploadToStorage(file, 'player_videos');
+      } else if (
+        file.mimetype.startsWith('image/') ||
+        file.fieldname === 'image' ||
+        file.fieldname === 'photo'
+      ) {
+        imageUrl = await uploadToStorage(file, 'player_images');
+      } else if (file.fieldname === 'file') {
+        // generic file field
+        if (file.mimetype.startsWith('video/')) {
+          videoUrl = await uploadToStorage(file, 'player_videos');
+        } else {
+          imageUrl = await uploadToStorage(file, 'player_images');
+        }
       }
     }
   }
@@ -139,9 +157,11 @@ export const uploadHighlightVideo = catchAsync(async (req: Request, res: Respons
     }
   }
 
+  const mediaUrl = videoUrl || imageUrl;
+
   const result = await playerService.uploadHighlightVideo(
     playerId as string,
-    videoUrl,
+    mediaUrl,
     thumbnailUrl,
     title,
   );
@@ -149,7 +169,7 @@ export const uploadHighlightVideo = catchAsync(async (req: Request, res: Respons
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Highlight video uploaded successfully',
+    message: 'Media uploaded successfully',
     data: result,
   });
 });

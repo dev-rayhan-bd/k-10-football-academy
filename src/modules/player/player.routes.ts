@@ -47,6 +47,13 @@ router.post(
   uploadHighlightVideo,
 );
 
+router.post(
+  '/:playerId/media',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  upload.any() as any,
+  uploadHighlightVideo,
+);
+
 router.get('/:playerId/attributes', getPlayerAttributes);
 router.patch(
   '/:playerId/attributes',

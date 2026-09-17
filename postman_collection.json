@@ -483,7 +483,7 @@
           }
         },
         {
-          "name": "Upload Highlight Video (FormData with JSON 'data' + Video File)",
+          "name": "Upload Media Gallery (FormData: Image or Video + Thumbnail)",
           "request": {
             "method": "POST",
             "header": [],
@@ -492,28 +492,40 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"title\": \"Best Dribbling Goals 2026\",\n  \"description\": \"Highlights against Youth League Academy Teams\"\n}",
+                  "value": "{\n  \"title\": \"Highlight Clip / Gallery Media\"\n}",
                   "type": "text",
-                  "description": "Video metadata in JSON string"
+                  "description": "Media metadata in JSON string"
                 },
                 {
                   "key": "video",
                   "type": "file",
                   "src": [],
-                  "description": "Match clip video file (MP4, MOV)"
+                  "description": "[For Video Upload] Select MP4 / MOV video file"
                 },
                 {
                   "key": "thumbnail",
                   "type": "file",
                   "src": [],
-                  "description": "Video cover thumbnail image file"
+                  "description": "[For Video Upload] Video cover thumbnail image file"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "[For Image Upload] Select JPG / PNG / WEBP image file (Thumbnail not required)"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "[Generic Upload] Select any file (Backend auto-detects video or image mimetype)"
                 }
               ]
             },
             "url": {
-              "raw": "{{baseUrl}}/players/:playerId/videos",
+              "raw": "{{baseUrl}}/players/:playerId/media",
               "host": ["{{baseUrl}}"],
-              "path": ["players", ":playerId", "videos"],
+              "path": ["players", ":playerId", "media"],
               "variable": [{ "key": "playerId", "value": "66d9ab1234567890abcdef12" }]
             }
           }

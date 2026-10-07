@@ -3,6 +3,7 @@ import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { playerService } from './player.service';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
+import { AppError } from '@/utils/AppError';
 
 export const createPlayerProfile = catchAsync(async (req: Request, res: Response) => {
   const payload = {
@@ -169,7 +170,78 @@ export const uploadHighlightVideo = catchAsync(async (req: Request, res: Respons
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Media uploaded successfully',
+    message: 'Highlight video uploaded successfully',
+    data: result,
+  });
+});
+
+export const uploadMediaGallery = catchAsync(async (req: Request, res: Response) => {
+  const playerId = req.params.playerId || req.user?.userId;
+  let videoUrl = '';
+  let thumbnailUrl = '';
+  let imageUrl = '';
+
+  if (req.files && Array.isArray(req.files)) {
+    for (const file of req.files as Express.Multer.File[]) {
+      if (file.fieldname === 'thumbnail') {
+        thumbnailUrl = await uploadToStorage(file, 'player_thumbnails');
+      } else if (file.mimetype.startsWith('video/') || file.fieldname === 'video') {
+        videoUrl = await uploadToStorage(file, 'player_videos');
+      } else if (
+        file.mimetype.startsWith('image/') ||
+        file.fieldname === 'image' ||
+        file.fieldname === 'photo'
+      ) {
+        imageUrl = await uploadToStorage(file, 'player_images');
+      } else if (file.fieldname === 'file') {
+        if (file.mimetype.startsWith('video/')) {
+          videoUrl = await uploadToStorage(file, 'player_videos');
+        } else {
+          imageUrl = await uploadToStorage(file, 'player_images');
+        }
+      }
+    }
+  }
+
+  let title = req.body.title || '';
+  if (!title && req.body.data) {
+    try {
+      const parsed = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
+      title = parsed.title || '';
+    } catch {
+      // Ignore JSON parse errors
+    }
+  }
+
+  const mediaUrl = videoUrl || imageUrl;
+  if (!mediaUrl) {
+    throw new AppError(400, 'No media file provided');
+  }
+
+  const result = await playerService.uploadMediaGallery(
+    playerId as string,
+    mediaUrl,
+    thumbnailUrl,
+    title,
+  );
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Media uploaded to gallery successfully',
+    data: result,
+  });
+});
+
+export const getMediaGallery = catchAsync(async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+
+  const result = await playerService.getMediaGallery(req.params.playerId, page, limit);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Media gallery fetched successfully',
     data: result,
   });
 });

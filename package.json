@@ -4,9 +4,9 @@
   "description": "Backend API for K10 Football Academy Platform",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/server.ts",
-    "build": "yarn swagger && tsc && tsc-alias",
-    "start": "node dist/server.js",
+    "dev": "node api.js && ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/server.ts",
+    "build": "node api.js && yarn swagger && tsc && tsc-alias",
+    "start": "node api.js && node dist/server.js",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",

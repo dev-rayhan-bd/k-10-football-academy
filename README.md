@@ -24,7 +24,7 @@ A high-performance, enterprise-ready, modular RESTful API boilerplate built usin
   - **Jest** pre-configured for TDD and unit testing.
   - **GitHub Actions** ready for CI/CD pipelines.
 - **API Documentation**:
-  - Auto-generated interactive **Swagger UI** for API exploration.
+  - Interactive **Redocly API Documentation** for API exploration.
 - **Logging & Monitoring**:
   - **Pino & Pino-HTTP** for fast JSON logging with request tracking.
 - **Containerization**:
@@ -179,7 +179,7 @@ yarn dev
 ```
 
 The server will be available at `http://localhost:5000`.
-You can view the interactive **Swagger UI Documentation** at `http://localhost:5000/api/docs`.
+You can view the interactive **Redocly API Documentation** at `http://localhost:5005/api/docs`.
 
 ---
 

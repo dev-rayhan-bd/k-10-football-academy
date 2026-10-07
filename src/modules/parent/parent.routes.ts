@@ -5,6 +5,7 @@ import {
   createParentProfileZodSchema,
   linkChildZodSchema,
   createParentMatchReportZodSchema,
+  switchProfileZodSchema,
 } from './parent.validation';
 import {
   createParentProfile,
@@ -13,11 +14,19 @@ import {
   getChildren,
   createMatchReport,
   getMatchReports,
+  switchProfile,
 } from './parent.controller';
 
 import { upload } from '@/middlewares/multer';
 
 const router = Router();
+
+router.post(
+  '/switch-profile',
+  auth('GUARDIAN', 'SUPER_ADMIN'),
+  validateRequest(switchProfileZodSchema),
+  switchProfile,
+);
 
 router.post(
   '/',

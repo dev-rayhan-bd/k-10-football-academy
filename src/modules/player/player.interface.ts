@@ -30,6 +30,13 @@ export interface IPlayerProfile {
   isVerifiedByCoach: boolean;
   verifyingCoachId?: Types.ObjectId;
   verifyingCoachLicense?: string;
+  profileViews?: number;
+  totalLikes?: number;
+  clubsInterested?: {
+    clubName: string;
+    logoUrl?: string;
+    viewedAt: Date;
+  }[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -140,6 +147,7 @@ export interface IMatchRecord {
   netContribution?: number;
   interpretation?: string;
   categoryScores?: Record<string, number>;
+  plottedEventsJson?: string;
   reportPdfUrl?: string;
 }
 
@@ -153,3 +161,15 @@ export interface IPlayerCvValidation {
 }
 
 export interface IPlayerCvValidationDocument extends IPlayerCvValidation, Document {}
+
+export interface IPlayerMediaDocument extends Document {
+  playerId: Types.ObjectId;
+  url: string;
+  title: string;
+  mediaType: 'IMAGE' | 'VIDEO';
+  thumbnailUrl?: string;
+  views: number;
+  likes: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}

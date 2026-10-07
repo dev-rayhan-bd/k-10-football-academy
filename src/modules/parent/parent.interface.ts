@@ -24,6 +24,7 @@ export interface IParentChildDocument extends IParentChild, Document {}
 export interface IParentMatchReport {
   parentId: Types.ObjectId;
   childPlayerId: Types.ObjectId;
+  coachId?: Types.ObjectId;
   opponentTeam: string;
   matchDate: Date;
   plottedEventsJson?: string;

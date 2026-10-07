@@ -17,6 +17,8 @@ import {
   addMatchRecord,
   getMatchRecords,
   uploadHighlightVideo,
+  uploadMediaGallery,
+  getMediaGallery,
 } from './player.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -51,8 +53,10 @@ router.post(
   '/:playerId/media',
   auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
   upload.any() as any,
-  uploadHighlightVideo,
+  uploadMediaGallery,
 );
+
+router.get('/:playerId/media', getMediaGallery);
 
 router.get('/:playerId/attributes', getPlayerAttributes);
 router.patch(

@@ -7,6 +7,7 @@ import {
   IFifaCardStatsDocument,
   IMatchRecordDocument,
   IPlayerCvValidationDocument,
+  IPlayerMediaDocument,
 } from './player.interface';
 
 const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
@@ -35,6 +36,15 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     isVerifiedByCoach: { type: Boolean, default: false },
     verifyingCoachId: { type: Schema.Types.ObjectId, ref: 'User' },
     verifyingCoachLicense: { type: String },
+    profileViews: { type: Number, default: 0 },
+    totalLikes: { type: Number, default: 0 },
+    clubsInterested: [
+      {
+        clubName: { type: String, required: true },
+        logoUrl: { type: String },
+        viewedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true },
 );
@@ -144,6 +154,7 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
     netContribution: { type: Number },
     interpretation: { type: String },
     categoryScores: { type: Map, of: Number },
+    plottedEventsJson: { type: String },
     reportPdfUrl: { type: String },
   },
   { timestamps: true },
@@ -182,3 +193,18 @@ export const PlayerCvValidation = model<IPlayerCvValidationDocument>(
   'PlayerCvValidation',
   PlayerCvValidationSchema,
 );
+
+const PlayerMediaSchema = new Schema<IPlayerMediaDocument>(
+  {
+    playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true },
+    url: { type: String, required: true },
+    title: { type: String, required: true },
+    mediaType: { type: String, enum: ['IMAGE', 'VIDEO'], required: true },
+    thumbnailUrl: { type: String },
+    views: { type: Number, default: 0 },
+    likes: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+);
+
+export const PlayerMedia = model<IPlayerMediaDocument>('PlayerMedia', PlayerMediaSchema);

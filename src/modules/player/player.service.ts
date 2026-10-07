@@ -9,7 +9,9 @@ import {
   PlayerFullPotential,
   FifaCardStats,
   MatchRecord,
+  PlayerMedia,
 } from './player.model';
+import { ParentMatchReport } from '../parent/parent.model';
 
 const computeProfileCompletion = (
   profile: Partial<IPlayerProfile>,
@@ -137,7 +139,59 @@ export class PlayerService {
     if (!profile) {
       throw new AppError(404, 'Player profile not found');
     }
-    return profile;
+
+    const playerId = profile._id;
+
+    // Fetch Attributes for Radar Chart
+    const attributes = await PlayerAttributes.findOne({ playerId });
+
+    // Fetch Match Records for Game Reports & Stats
+    const matchRecords = await MatchRecord.find({ playerId }).sort({ matchDate: -1 });
+
+    const totalMatches = matchRecords.length;
+    const totalGoals = matchRecords.reduce((sum, match) => sum + (match.goals || 0), 0);
+    const totalAssists = matchRecords.reduce((sum, match) => sum + (match.assists || 0), 0);
+
+    // Get the latest 3 game reports for the UI list
+    const recentMatches = matchRecords.slice(0, 3).map((match) => ({
+      _id: match._id,
+      title: match.awayTeam ? `vs ${match.awayTeam}` : 'Match Report',
+      rating: match.playerRating || 0,
+      date: match.matchDate,
+      file: match.reportPdfUrl || null,
+    }));
+
+    // Fetch Professional Coach Reports (ParentMatchReport)
+    const professionalReports = await ParentMatchReport.find({ childPlayerId: playerId })
+      .sort({ matchDate: -1 })
+      .limit(10);
+    const mappedProfessionalReports = professionalReports.map((report) => ({
+      _id: report._id,
+      title: `Requested from Coach`,
+      rating: report.coachRating || 'N/A',
+      amount: report.coachReviewPrice ? `$${report.coachReviewPrice}` : 'FREE',
+      date: report.matchDate,
+      status:
+        report.coachReviewStatus === 'PENDING'
+          ? 'Pending'
+          : report.coachReviewStatus === 'EVALUATED'
+            ? 'Completed'
+            : 'N/A',
+      action: report.coachReviewStatus === 'PENDING' ? 'Waiting...' : 'View',
+    }));
+
+    return {
+      ...profile.toObject(),
+      attributes,
+      performanceStats: {
+        matches: totalMatches,
+        goals: totalGoals,
+        assists: totalAssists,
+        reports: mappedProfessionalReports.length, // Professional reports count
+      },
+      recentMatches,
+      professionalReports: mappedProfessionalReports,
+    };
   }
 
   async getProfileByUserId(userId: string) {
@@ -260,7 +314,7 @@ export class PlayerService {
 
   async uploadHighlightVideo(
     playerId: string,
-    videoUrl?: string,
+    mediaUrl?: string,
     _thumbnailUrl?: string,
     _title?: string,
   ) {
@@ -272,14 +326,69 @@ export class PlayerService {
       throw new AppError(404, 'Player profile not found');
     }
 
-    if (videoUrl) {
-      profile.highlightVideo = videoUrl;
+    if (mediaUrl) {
+      profile.highlightVideo = mediaUrl;
       await profile.save();
       const updated = await this.recalculatePlayerStats(profile._id);
       return updated || profile;
     }
 
     return profile;
+  }
+
+  async uploadMediaGallery(
+    playerId: string,
+    mediaUrl: string,
+    thumbnailUrl?: string,
+    title?: string,
+  ) {
+    const profile = await PlayerProfile.findOne({
+      $or: [{ _id: playerId }, { userId: playerId }],
+    });
+
+    if (!profile) {
+      throw new AppError(404, 'Player profile not found');
+    }
+
+    const isImage =
+      mediaUrl.includes('/image/upload/') || mediaUrl.match(/\.(jpeg|jpg|gif|png)$/i) != null;
+    const mediaType = isImage ? 'IMAGE' : 'VIDEO';
+
+    const newMedia = await PlayerMedia.create({
+      playerId: profile._id,
+      url: mediaUrl,
+      title: title || 'Untitled Media',
+      mediaType,
+      thumbnailUrl,
+    });
+
+    return newMedia;
+  }
+
+  async getMediaGallery(playerId: string, page = 1, limit = 10) {
+    const profile = await PlayerProfile.findOne({
+      $or: [{ _id: playerId }, { userId: playerId }],
+    });
+    const targetId = profile ? profile._id : playerId;
+
+    const skip = (page - 1) * limit;
+
+    const media = await PlayerMedia.find({ playerId: targetId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await PlayerMedia.countDocuments({ playerId: targetId });
+
+    return {
+      media,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 }
 

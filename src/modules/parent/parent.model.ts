@@ -30,6 +30,7 @@ const ParentMatchReportSchema = new Schema<IParentMatchReportDocument>(
   {
     parentId: { type: Schema.Types.ObjectId, ref: 'ParentProfile', required: true },
     childPlayerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true },
+    coachId: { type: Schema.Types.ObjectId, ref: 'User' },
     opponentTeam: { type: String, required: true },
     matchDate: { type: Date, required: true },
     plottedEventsJson: { type: String },

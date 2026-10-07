@@ -116,5 +116,6 @@ export const createMatchRecordZodSchema = z.object({
         }),
       )
       .optional(),
+    plottedEventsJson: z.string().optional(),
   }),
 });

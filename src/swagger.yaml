@@ -194,6 +194,26 @@ paths:
       responses:
         '200':
           description: User profile payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      email:
+                        type: string
+                      name:
+                        type: string
+                      role:
+                        type: string
+                      isEmailVerified:
+                        type: boolean
 
   # -------------------------------------------------------------
   # PLAYER MODULE
@@ -203,9 +223,52 @@ paths:
       tags:
         - Players
       summary: Create Player Profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fullName, position, dateOfBirth, gender]
+              properties:
+                fullName:
+                  type: string
+                position:
+                  type: string
+                dateOfBirth:
+                  type: string
+                  format: date
+                gender:
+                  type: string
+                  enum: [MALE, FEMALE, OTHER]
+                country:
+                  type: string
+                city:
+                  type: string
+                currentClub:
+                  type: string
+                height:
+                  type: number
+                weight:
+                  type: number
       responses:
         '201':
           description: Player profile created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      fullName:
+                        type: string
+                      position:
+                        type: string
     get:
       tags:
         - Players
@@ -281,6 +344,53 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [matchDate, leagueType, homeTeam, awayTeam, result]
+              properties:
+                matchDate:
+                  type: string
+                  format: date-time
+                leagueType:
+                  type: string
+                homeTeam:
+                  type: string
+                awayTeam:
+                  type: string
+                homeScore:
+                  type: number
+                awayScore:
+                  type: number
+                result:
+                  type: string
+                  enum: [W, D, L]
+                location:
+                  type: string
+                playerRating:
+                  type: number
+                goals:
+                  type: number
+                assists:
+                  type: number
+                passes:
+                  type: number
+                minutesPlayed:
+                  type: number
+                events:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      eventId:
+                        type: string
+                      count:
+                        type: number
+                plottedEventsJson:
+                  type: string
+                  description: Stringified JSON of X,Y coordinates for match stats plotting
       responses:
         '201':
           description: Match record added
@@ -297,6 +407,63 @@ paths:
       responses:
         '200':
           description: List of match records
+
+  /api/v1/players/{playerId}/media:
+    post:
+      tags:
+        - Players
+      summary: Upload Media Gallery File (Video or Image)
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: Title of the media
+                file:
+                  type: string
+                  format: binary
+                  description: Image (.jpg, .png) or Video (.mp4, .mov)
+                thumbnail:
+                  type: string
+                  format: binary
+                  description: Optional cover thumbnail for video
+      responses:
+        '201':
+          description: Media uploaded to gallery successfully
+    get:
+      tags:
+        - Players
+      summary: Get Media Gallery (Paginated)
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 10
+      responses:
+        '200':
+          description: Paginated media gallery items
 
   # -------------------------------------------------------------
   # COACH MODULE
@@ -664,6 +831,25 @@ paths:
         '201':
           description: Parent profile created
 
+  /api/v1/parents/switch-profile:
+    post:
+      tags:
+        - Parents
+      summary: Switch profile to child (Guardian mode)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [childUserId]
+              properties:
+                childUserId:
+                  type: string
+      responses:
+        '200':
+          description: Successfully switched profile returning new tokens
+
   /api/v1/parents/{id}:
     get:
       tags:
@@ -718,6 +904,30 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [childPlayerId, opponentTeam, matchDate]
+              properties:
+                childPlayerId:
+                  type: string
+                coachId:
+                  type: string
+                  description: ID of the coach to request review from
+                opponentTeam:
+                  type: string
+                matchDate:
+                  type: string
+                  format: date-time
+                plottedEventsJson:
+                  type: string
+                  description: Stringified JSON of events
+                requestCoachReview:
+                  type: boolean
+                coachReviewPrice:
+                  type: number
       responses:
         '201':
           description: Match report created

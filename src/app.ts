@@ -1,6 +1,5 @@
 import express, { Application, Request, Response } from 'express';
 import helmet from 'helmet';
-import swaggerUi from 'swagger-ui-express';
 import fs from 'fs';
 import path from 'path';
 import YAML from 'yaml';
@@ -32,7 +31,12 @@ app.set('trust proxy', 1);
 /**
  * 2. HTTP Header & CORS Security
  */
-app.use(helmetSecurity);
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/docs')) {
+    return next();
+  }
+  helmetSecurity(req, res, next);
+});
 app.use(corsSecurity);
 
 /**
@@ -70,6 +74,7 @@ app.get('/', (_req: Request, res: Response) => {
       version: '1.0.0',
       health: '/health',
       apiBase: '/api/v1',
+      docs: '/api/docs',
     },
   });
 });
@@ -87,8 +92,8 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 /**
- * 8. API Documentation (Swagger)
- * Helmet CSP is disabled for this route because Swagger UI requires inline scripts/styles.
+ * 8. API Documentation (Redocly UI)
+ * Helmet CSP is disabled for this route to allow Redocly CDN scripts & styles.
  */
 const getSwaggerDocument = () => {
   const jsonPath = path.resolve(__dirname, './swagger.json');
@@ -102,15 +107,60 @@ const getSwaggerDocument = () => {
   return {};
 };
 
-app.use(
+app.get('/api/docs/openapi.json', (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(getSwaggerDocument());
+});
+
+app.get(
   '/api/docs',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   helmet({ contentSecurityPolicy: false }) as any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ...(swaggerUi.serve as any[]),
   (_req: Request, res: Response) => {
     const swaggerDoc = getSwaggerDocument();
-    res.send(swaggerUi.generateHTML(swaggerDoc));
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>K10 Football Academy API Documentation</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="https://redocly.com/favicon.ico"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', sans-serif;
+        background-color: #fafafa;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="redoc-container"></div>
+    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+    <script>
+      const spec = ${JSON.stringify(swaggerDoc)};
+      Redoc.init(spec, {
+        scrollYOffset: 0,
+        hideDownloadButton: false,
+        expandResponses: "200,201",
+        theme: {
+          colors: {
+            primary: {
+              main: "#1e40af"
+            }
+          },
+          typography: {
+            fontFamily: "Inter, sans-serif"
+          }
+        }
+      }, document.getElementById('redoc-container'));
+    </script>
+  </body>
+</html>
+    `);
   },
 );
 
@@ -120,12 +170,12 @@ app.use(
 app.use('/api/v1', applicationRoutes);
 
 /**
- * 9. 404 Not Found Middleware
+ * 10. 404 Not Found Middleware
  */
 app.use(notFound);
 
 /**
- * 10. Centralized Global Error Handler Middleware
+ * 11. Centralized Global Error Handler Middleware
  */
 app.use(globalErrorHandler);
 

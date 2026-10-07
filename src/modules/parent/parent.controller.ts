@@ -3,6 +3,16 @@ import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { parentService } from './parent.service';
 
+export const switchProfile = catchAsync(async (req: Request, res: Response) => {
+  const result = await parentService.switchProfile(req.user!.userId, req.body.childUserId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Profile switched to child successfully',
+    data: result,
+  });
+});
+
 export const createParentProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await parentService.createProfile(req.body);
   sendResponse(res, {

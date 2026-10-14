@@ -12,6 +12,7 @@ import {
   getParentProfile,
   linkChild,
   getChildren,
+  getMyChildren,
   createMatchReport,
   getMatchReports,
   switchProfile,
@@ -26,6 +27,15 @@ router.post(
   auth('GUARDIAN', 'SUPER_ADMIN'),
   validateRequest(switchProfileZodSchema),
   switchProfile,
+);
+
+router.get('/my-children', auth('GUARDIAN', 'SUPER_ADMIN'), getMyChildren);
+
+router.post(
+  '/link-child',
+  auth('SUPER_ADMIN', 'GUARDIAN'),
+  validateRequest(linkChildZodSchema),
+  linkChild,
 );
 
 router.post(

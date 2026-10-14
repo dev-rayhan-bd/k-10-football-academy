@@ -15,19 +15,32 @@ export class UserController {
     }
 
     const { user, isResent } = await this.service.registerUser(req.body);
+    const sanitizedUser =
+      typeof (user as any)?.toObject === 'function' ? (user as any).toObject() : { ...user };
+    delete (sanitizedUser as any).password;
+    if (sanitizedUser.role !== 'PLAYER') {
+      delete (sanitizedUser as any).accountManagedBy;
+    }
+
     sendResponse(res, {
       statusCode: isResent ? StatusCodes.OK : StatusCodes.CREATED,
       success: true,
       message: isResent
         ? 'A new verification OTP has been sent to your email. Please verify your email to activate your account.'
         : 'Registration initiated. Verification OTP sent to your email. Please verify your email to activate your account.',
-      data: user,
+      data: sanitizedUser,
     });
   });
 
   login = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const { email, password } = req.body;
     const result = await this.service.loginUser(email, password);
+    if (result.user) {
+      delete (result.user as any).password;
+      if (result.user.role !== 'PLAYER') {
+        delete (result.user as any).accountManagedBy;
+      }
+    }
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,

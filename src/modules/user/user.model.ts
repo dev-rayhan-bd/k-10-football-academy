@@ -33,6 +33,7 @@ const userSchema = new Schema<IUserDocument>(
         'CLUB',
         'COACH',
         'PLAYER',
+        'PARENT',
         'GUARDIAN',
         'SCOUT',
       ],
@@ -49,18 +50,34 @@ const userSchema = new Schema<IUserDocument>(
     accountManagedBy: {
       type: String,
       enum: ['ATHLETE', 'PARENT'],
-      default: 'ATHLETE',
     },
     isEmailVerified: {
       type: Boolean,
       default: false,
     },
+    dateOfBirth: { type: Date },
+    position: { type: String },
+    height: { type: Number },
+    weight: { type: Number },
+    currentClub: { type: String },
   },
   {
     timestamps: true,
     toJSON: {
       transform: (_doc, ret) => {
         delete ret.password;
+        if (ret.role !== 'PLAYER') {
+          delete ret.accountManagedBy;
+        }
+        return ret;
+      },
+    },
+    toObject: {
+      transform: (_doc, ret) => {
+        delete ret.password;
+        if (ret.role !== 'PLAYER') {
+          delete ret.accountManagedBy;
+        }
         return ret;
       },
     },

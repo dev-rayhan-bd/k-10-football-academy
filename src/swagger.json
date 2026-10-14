@@ -99,6 +99,26 @@
                       "GUARDIAN",
                       "SCOUT"
                     ]
+                  },
+                  "dateOfBirth": {
+                    "type": "string",
+                    "example": "2008-05-15"
+                  },
+                  "position": {
+                    "type": "string",
+                    "example": "Forward"
+                  },
+                  "height": {
+                    "type": "number",
+                    "example": 178
+                  },
+                  "weight": {
+                    "type": "number",
+                    "example": 72
+                  },
+                  "currentClub": {
+                    "type": "string",
+                    "example": "Abahani Youth Academy"
                   }
                 }
               }
@@ -1046,6 +1066,19 @@
         }
       }
     },
+    "/api/v1/academies/my-profile": {
+      "get": {
+        "tags": [
+          "Academies"
+        ],
+        "summary": "Get My Academy Profile (Logged In Academy Admin)",
+        "responses": {
+          "200": {
+            "description": "My academy profile details"
+          }
+        }
+      }
+    },
     "/api/v1/academies/{id}": {
       "get": {
         "tags": [
@@ -1436,6 +1469,61 @@
         "responses": {
           "200": {
             "description": "Successfully switched profile returning new tokens"
+          }
+        }
+      }
+    },
+    "/api/v1/parents/my-children": {
+      "get": {
+        "tags": [
+          "Parents"
+        ],
+        "summary": "Get linked children for dropdown (Logged in Guardian)",
+        "responses": {
+          "200": {
+            "description": "List of linked children formatted for UI dropdown"
+          }
+        }
+      }
+    },
+    "/api/v1/parents/link-child": {
+      "post": {
+        "tags": [
+          "Parents"
+        ],
+        "summary": "Link Child Player (Authenticated Guardian)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "relationshipType"
+                ],
+                "properties": {
+                  "childUserId": {
+                    "type": "string"
+                  },
+                  "childPlayerId": {
+                    "type": "string"
+                  },
+                  "relationshipType": {
+                    "type": "string",
+                    "enum": [
+                      "FATHER",
+                      "MOTHER",
+                      "GUARDIAN"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Child linked successfully"
           }
         }
       }

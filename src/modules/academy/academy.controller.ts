@@ -23,12 +23,24 @@ export const getAcademyProfile = catchAsync(async (req: Request, res: Response) 
   });
 });
 
+export const getMyAcademyProfile = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await academyService.getMyProfile(userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'My academy profile fetched successfully',
+    data: result,
+  });
+});
+
 export const getAllAcademyProfiles = catchAsync(async (req: Request, res: Response) => {
-  const result = await academyService.getAllProfiles(req.query);
+  const { meta, result } = await academyService.getAllProfiles(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Academy profiles fetched successfully',
+    meta,
     data: result,
   });
 });

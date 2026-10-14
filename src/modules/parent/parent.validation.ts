@@ -8,10 +8,16 @@ export const createParentProfileZodSchema = z.object({
 });
 
 export const linkChildZodSchema = z.object({
-  body: z.object({
-    childPlayerId: z.string().min(1),
-    relationshipType: z.enum(['FATHER', 'MOTHER', 'GUARDIAN']),
-  }),
+  body: z
+    .object({
+      childPlayerId: z.string().optional(),
+      childUserId: z.string().optional(),
+      relationshipType: z.enum(['FATHER', 'MOTHER', 'GUARDIAN']),
+    })
+    .refine((data) => data.childPlayerId || data.childUserId, {
+      message: 'Either childPlayerId or childUserId is required',
+      path: ['childPlayerId'],
+    }),
 });
 
 export const createParentMatchReportZodSchema = z.object({

@@ -37,6 +37,7 @@ export const createUserZodSchema = z.object({
       dateOfBirth: z.string().optional(),
       position: z.string().optional(),
       height: z.union([z.number(), z.string()]).optional(),
+      weight: z.union([z.number(), z.string()]).optional(),
       currentClub: z.string().optional(),
 
       // Academy details from Signup Form
@@ -201,24 +202,7 @@ export const createUserZodSchema = z.object({
         }
       }
 
-      // Role: PARENT / GUARDIAN
-      if (data.role === 'PARENT' || (data.role as string) === 'GUARDIAN') {
-        if (!data.linkedChildName) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Linked child name is required for Parent registration',
-            path: ['linkedChildName'],
-          });
-        }
-        if (!data.relationship) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message:
-              'Relationship (Father, Mother, Legal Guardian) is required for Parent registration',
-            path: ['relationship'],
-          });
-        }
-      }
+      // Role: PARENT / GUARDIAN (Linked child fields are optional during initial registration)
     }),
 });
 
@@ -238,6 +222,7 @@ export const updateUserZodSchema = z.object({
     avatar: z.string().optional(),
     phone: z.string().optional(),
     coverPhoto: z.string().optional(),
+    accountManagedBy: z.enum(['ATHLETE', 'PARENT']).optional(),
   }),
 });
 

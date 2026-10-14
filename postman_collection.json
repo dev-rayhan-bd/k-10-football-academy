@@ -29,7 +29,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"John Player\",\n  \"email\": \"john.player@k10football.com\",\n  \"phone\": \"+8801700000000\",\n  \"password\": \"Password123!\",\n  \"role\": \"PLAYER\",\n  \"dateOfBirth\": \"2008-05-15\",\n  \"position\": \"Forward\",\n  \"height\": 178,\n  \"currentClub\": \"Abahani Youth Academy\"\n}",
+                  "value": "{\n  \"name\": \"John Player\",\n  \"email\": \"john.player@k10football.com\",\n  \"phone\": \"+8801700000000\",\n  \"password\": \"Password123!\",\n  \"role\": \"PLAYER\",\n  \"dateOfBirth\": \"2008-05-15\",\n  \"position\": \"Forward\",\n  \"height\": 178,\n  \"weight\": 72,\n  \"currentClub\": \"Abahani Youth Academy\"\n}",
                   "type": "text",
                   "description": "Player signup payload from UI"
                 },
@@ -750,6 +750,18 @@
           }
         },
         {
+          "name": "Get My Academy Profile (Logged In Academy)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/academies/my-profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "my-profile"]
+            }
+          }
+        },
+        {
           "name": "Get Academy Profile by ID",
           "request": {
             "method": "GET",
@@ -1043,13 +1055,77 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"childPlayerId\": \"66d9ab1234567890abcdef12\",\n  \"relationshipType\": \"FATHER\"\n}"
+              "raw": "{\n  \"childUserId\": \"{{childUserId}}\",\n  \"relationshipType\": \"FATHER\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/parents/:parentId/children",
+              "raw": "{{baseUrl}}/parents/link-child",
               "host": ["{{baseUrl}}"],
-              "path": ["parents", ":parentId", "children"],
-              "variable": [{ "key": "parentId", "value": "66d9ab1234567890abcdef17" }]
+              "path": ["parents", "link-child"]
+            }
+          }
+        },
+        {
+          "name": "Get Linked Children for Dropdown (My Children)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.length > 0) {",
+                  "    pm.environment.set('childUserId', res.data[0].childUserId);",
+                  "    pm.environment.set('childPlayerId', res.data[0].childPlayerId);",
+                  "    console.log('✅ First linked child set for dropdown/switch: ' + res.data[0].fullName);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/parents/my-children",
+              "host": ["{{baseUrl}}"],
+              "path": ["parents", "my-children"]
+            }
+          }
+        },
+        {
+          "name": "Switch Profile to Child (Toggle to Athlete)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.accessToken) {",
+                  "    pm.environment.set('childAccessToken', res.data.accessToken);",
+                  "    pm.environment.set('accessToken', res.data.accessToken);",
+                  "    console.log('✅ Switched to Child Profile! Token saved: ' + res.data.user.role);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"childUserId\": \"{{childUserId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/parents/switch-profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["parents", "switch-profile"]
             }
           }
         }

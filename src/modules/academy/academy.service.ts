@@ -1,6 +1,8 @@
+import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { IAcademyProfile, ITeam, IGameReport, IPlayerEvaluation } from './academy.interface';
 import { AcademyProfile, Team, GameReport, PlayerEvaluation } from './academy.model';
+import QueryBuilder from '@/builder/QueryBuilder';
 
 export class AcademyService {
   async createProfile(payload: Partial<IAcademyProfile>) {
@@ -12,15 +14,51 @@ export class AcademyService {
   }
 
   async getProfileById(id: string) {
-    const profile = await AcademyProfile.findById(id).populate('userId', 'name email avatar phone');
+    let profile = null;
+    if (Types.ObjectId.isValid(id)) {
+      profile = await AcademyProfile.findOne({
+        $or: [{ _id: id }, { userId: id }],
+      }).populate('userId', 'name email avatar phone');
+    }
     if (!profile) {
       throw new AppError(404, 'Academy profile not found');
     }
     return profile;
   }
 
-  async getAllProfiles(filter: Record<string, unknown> = {}) {
-    return AcademyProfile.find(filter).populate('userId', 'name email avatar');
+  async getMyProfile(userId: string) {
+    const profile = await AcademyProfile.findOne({ userId }).populate(
+      'userId',
+      'name email avatar phone',
+    );
+    if (!profile) {
+      throw new AppError(404, 'Academy profile not found for this user');
+    }
+    return profile;
+  }
+
+  async getAllProfiles(query: Record<string, unknown> = {}) {
+    const academyQuery = new QueryBuilder(
+      AcademyProfile.find().populate('userId', 'name email avatar phone'),
+      query,
+    )
+      .search([
+        'name',
+        'category',
+        'country',
+        'city',
+        'location',
+        'registrationId',
+        'estimatedAcademySize',
+      ])
+      .filter()
+      .sort()
+      .paginate()
+      .fields();
+
+    const result = await academyQuery.modelQuery;
+    const meta = await academyQuery.countTotal();
+    return { meta, result };
   }
 
   async createTeam(academyId: string, payload: Partial<ITeam>) {

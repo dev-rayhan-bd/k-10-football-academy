@@ -25,6 +25,11 @@ export interface IUser {
   coverPhoto?: string;
   accountManagedBy?: AccountManagedBy;
   isEmailVerified: boolean;
+  dateOfBirth?: Date;
+  position?: string;
+  height?: number;
+  weight?: number;
+  currentClub?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

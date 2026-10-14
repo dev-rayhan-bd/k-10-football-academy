@@ -34,11 +34,22 @@ export const getParentProfile = catchAsync(async (req: Request, res: Response) =
 });
 
 export const linkChild = catchAsync(async (req: Request, res: Response) => {
-  const result = await parentService.linkChild(req.params.parentId, req.body);
+  const parentId = (req as any).user?.userId || req.params.parentId;
+  const result = await parentService.linkChild(parentId, req.body);
   sendResponse(res, {
     statusCode: 201,
     success: true,
     message: 'Child linked successfully',
+    data: result,
+  });
+});
+
+export const getMyChildren = catchAsync(async (req: Request, res: Response) => {
+  const result = await parentService.getChildren((req as any).user.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Linked children fetched successfully for dropdown',
     data: result,
   });
 });

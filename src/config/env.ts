@@ -29,6 +29,7 @@ const envSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   AWS_REGION: z.string().optional(),
   AWS_BUCKET_NAME: z.string().optional(),
+  ALLOWED_ORIGINS: z.string().optional(),
 });
 
 if (!process.env.SMTP_PASS && process.env.APP_PASSWARD) {

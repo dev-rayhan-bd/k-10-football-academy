@@ -13,6 +13,7 @@ import {
   getPasswordResetEmailTemplate,
   getWelcomeEmailTemplate,
 } from '@/utils/emailTemplates';
+import { AcademyProfile } from '@/modules/academy/academy.model';
 
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
@@ -22,6 +23,15 @@ export class UserService {
   ): Promise<{ user: IUserDocument; isResent: boolean }> {
     const normalizedEmail = userData.email!.toLowerCase().trim();
     userData.email = normalizedEmail;
+
+    if ((userData.role as string) === 'PARENT' || userData.role === 'GUARDIAN') {
+      userData.role = 'GUARDIAN';
+      delete (userData as any).accountManagedBy;
+    } else if (userData.role === 'PLAYER') {
+      userData.accountManagedBy = userData.accountManagedBy || 'ATHLETE';
+    } else {
+      delete (userData as any).accountManagedBy;
+    }
 
     const existingUser = await this.userRepo.findByEmail(normalizedEmail, true);
     if (existingUser) {
@@ -40,14 +50,32 @@ export class UserService {
       if (userData.role) {
         existingUser.role = userData.role;
       }
+      if (existingUser.role === 'PLAYER') {
+        existingUser.accountManagedBy =
+          userData.accountManagedBy || existingUser.accountManagedBy || 'ATHLETE';
+      } else {
+        (existingUser as any).accountManagedBy = undefined;
+      }
       if (userData.avatar) {
         existingUser.avatar = userData.avatar;
       }
       if (userData.phone) {
         existingUser.phone = userData.phone;
       }
-      if (userData.accountManagedBy) {
-        existingUser.accountManagedBy = userData.accountManagedBy;
+      if (userData.height !== undefined) {
+        existingUser.height = Number(userData.height);
+      }
+      if (userData.weight !== undefined) {
+        existingUser.weight = Number(userData.weight);
+      }
+      if (userData.position !== undefined) {
+        existingUser.position = userData.position;
+      }
+      if (userData.currentClub !== undefined) {
+        existingUser.currentClub = userData.currentClub;
+      }
+      if (userData.dateOfBirth !== undefined) {
+        existingUser.dateOfBirth = new Date(userData.dateOfBirth);
       }
       await existingUser.save();
 
@@ -64,10 +92,69 @@ export class UserService {
         body: getOtpVerificationEmailTemplate(existingUser.name, otp),
       });
 
-      return { user: existingUser, isResent: true };
+      if (existingUser.role === 'ACADEMY') {
+        const location = (userData as any).location || '';
+        const parts = location ? location.split(',') : [];
+        const city = parts.length > 0 ? parts[0].trim() : 'Dhaka';
+        const country = parts.length > 1 ? parts[1].trim() : 'Bangladesh';
+
+        await AcademyProfile.findOneAndUpdate(
+          { userId: existingUser._id },
+          {
+            userId: existingUser._id,
+            name: (userData as any).academyName || userData.name || existingUser.name,
+            category:
+              (userData as any).estimatedAcademySize ||
+              (userData as any).academySize ||
+              'General Academy',
+            location: location || 'Dhaka, Bangladesh',
+            registrationId: (userData as any).registrationId || '',
+            estimatedAcademySize:
+              (userData as any).estimatedAcademySize || (userData as any).academySize || '',
+            city,
+            country,
+            logo: userData.avatar || existingUser.avatar || '',
+          },
+          { upsert: true, new: true },
+        );
+      }
+
+      const userObj = existingUser.toObject() as unknown as IUser;
+      delete (userObj as any).password;
+      if (userObj.role !== 'PLAYER') {
+        delete (userObj as any).accountManagedBy;
+      }
+      return { user: userObj as unknown as IUserDocument, isResent: true };
     }
 
     const newUser = await this.userRepo.create(userData);
+
+    if (newUser.role === 'ACADEMY') {
+      const location = (userData as any).location || '';
+      const parts = location ? location.split(',') : [];
+      const city = parts.length > 0 ? parts[0].trim() : 'Dhaka';
+      const country = parts.length > 1 ? parts[1].trim() : 'Bangladesh';
+
+      await AcademyProfile.findOneAndUpdate(
+        { userId: newUser._id },
+        {
+          userId: newUser._id,
+          name: (userData as any).academyName || userData.name || newUser.name,
+          category:
+            (userData as any).estimatedAcademySize ||
+            (userData as any).academySize ||
+            'General Academy',
+          location: location || 'Dhaka, Bangladesh',
+          registrationId: (userData as any).registrationId || '',
+          estimatedAcademySize:
+            (userData as any).estimatedAcademySize || (userData as any).academySize || '',
+          city,
+          country,
+          logo: userData.avatar || newUser.avatar || '',
+        },
+        { upsert: true, new: true },
+      );
+    }
 
     // Generate 6-digit OTP
     const otp = otpGenerator.generate(6);
@@ -82,7 +169,12 @@ export class UserService {
       body: getOtpVerificationEmailTemplate(newUser.name, otp),
     });
 
-    return { user: newUser, isResent: false };
+    const userObj = newUser.toObject() as unknown as IUser;
+    delete (userObj as any).password;
+    if (userObj.role !== 'PLAYER') {
+      delete (userObj as any).accountManagedBy;
+    }
+    return { user: userObj as unknown as IUserDocument, isResent: false };
   }
 
   async loginUser(email: string, candidatePassword: string): Promise<ILoginResponse> {
@@ -122,6 +214,10 @@ export class UserService {
     );
 
     const userObj = user.toObject() as unknown as IUser;
+    delete (userObj as any).password;
+    if (userObj.role !== 'PLAYER') {
+      delete (userObj as any).accountManagedBy;
+    }
 
     return {
       user: userObj,

@@ -44,11 +44,38 @@ export const mongoSanitizer = mongoSanitize({
   },
 }) as unknown as RequestHandler;
 
+const defaultAllowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+];
+
+const envAllowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : [];
+
+const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
+
 /**
  * 4. Strict CORS Security Configuration
  */
 export const corsSecurity = cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. Postman, mobile apps, server-to-server)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, origin);
+    }
+
+    // In development mode, allow any localhost origin
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+      return callback(null, origin);
+    }
+
+    callback(null, false);
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,

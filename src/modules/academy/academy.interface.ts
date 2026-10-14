@@ -11,6 +11,9 @@ export interface IAcademyProfile {
   establishedDate?: Date;
   country: string;
   city: string;
+  location?: string;
+  registrationId?: string;
+  estimatedAcademySize?: string;
   logo?: string;
   coverPhoto?: string;
   description?: string;

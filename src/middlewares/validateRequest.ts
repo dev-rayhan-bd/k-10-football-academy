@@ -1,17 +1,34 @@
 import { Request, Response, NextFunction } from 'express';
 import { AnyZodObject } from 'zod';
 import { catchAsync } from '@/utils/catchAsync';
+import { AppError } from '@/utils/AppError';
+import { StatusCodes } from 'http-status-codes';
 
 export const validateRequest = (schema: AnyZodObject) => {
   return catchAsync(async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (req.body && req.body.data) {
-      try {
-        const parsedData =
-          typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
-        req.body = { ...parsedData, ...req.body };
+      if (typeof req.body.data === 'string') {
+        try {
+          const parsedData = JSON.parse(req.body.data);
+          req.body = { ...parsedData, ...req.body };
+          delete req.body.data;
+        } catch {
+          try {
+            // Auto-heal trailing commas in JSON text (e.g. `{"role": "PARENT",}`)
+            const cleaned = req.body.data.replace(/,\s*([}\]])/g, '$1');
+            const parsedData = JSON.parse(cleaned);
+            req.body = { ...parsedData, ...req.body };
+            delete req.body.data;
+          } catch {
+            throw new AppError(
+              StatusCodes.BAD_REQUEST,
+              "Invalid JSON syntax in 'data' field. Please verify quotation marks and remove extra commas.",
+            );
+          }
+        }
+      } else if (typeof req.body.data === 'object') {
+        req.body = { ...req.body.data, ...req.body };
         delete req.body.data;
-      } catch {
-        // Let Zod handle validation errors if parsing fails
       }
     }
 

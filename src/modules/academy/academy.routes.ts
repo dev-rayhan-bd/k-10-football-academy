@@ -9,6 +9,7 @@ import {
 import {
   createAcademyProfile,
   getAcademyProfile,
+  getMyAcademyProfile,
   getAllAcademyProfiles,
   createTeam,
   getTeams,
@@ -28,6 +29,7 @@ router.post(
   createAcademyProfile,
 );
 router.get('/', getAllAcademyProfiles);
+router.get('/my-profile', auth('ACADEMY', 'SUPER_ADMIN'), getMyAcademyProfile);
 router.get('/:id', getAcademyProfile);
 
 router.post(

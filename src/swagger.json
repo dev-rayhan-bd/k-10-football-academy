@@ -214,6 +214,119 @@
         }
       }
     },
+    "/api/v1/users/forgot-password": {
+      "post": {
+        "tags": [
+          "Users & Authentication"
+        ],
+        "summary": "Send password reset OTP to email",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset OTP sent to email"
+          }
+        }
+      }
+    },
+    "/api/v1/users/verify-reset-otp": {
+      "post": {
+        "tags": [
+          "Users & Authentication"
+        ],
+        "summary": "Verify password reset OTP code",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "otp"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                  },
+                  "otp": {
+                    "type": "string",
+                    "example": "123456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset OTP verified successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/users/reset-password": {
+      "post": {
+        "tags": [
+          "Users & Authentication"
+        ],
+        "summary": "Reset password (after OTP verification)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "newPassword"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "example": "NewPassword123!"
+                  },
+                  "resetToken": {
+                    "type": "string",
+                    "description": "Optional reset token from verify-reset-otp"
+                  },
+                  "otp": {
+                    "type": "string",
+                    "description": "Optional direct OTP code"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successfully"
+          }
+        }
+      }
+    },
     "/api/v1/users/refresh-token": {
       "post": {
         "tags": [

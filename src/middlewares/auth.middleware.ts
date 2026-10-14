@@ -53,6 +53,13 @@ export const auth = (...requiredRoles: UserRole[]) => {
         );
       }
 
+      if (!user.isEmailVerified) {
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          'User email is not verified. Please verify your email first.',
+        );
+      }
+
       if (user.status === 'BLOCKED' || user.status === 'INACTIVE') {
         throw new AppError(
           StatusCodes.FORBIDDEN,

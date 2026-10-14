@@ -19,7 +19,6 @@ export const createUserZodSchema = z.object({
     .object({
       email: z.string().email('Invalid email address'),
       password: z.string().min(6, 'Password must be at least 6 characters'),
-      confirmPassword: z.string().optional(),
       name: z.string().min(2, 'Name must be at least 2 characters'),
       role: userRoleEnum.optional().default('PLAYER'),
       status: userStatusEnum.optional().default('ACTIVE'),
@@ -276,8 +275,9 @@ export const forgotPasswordZodSchema = z.object({
 
 export const resetPasswordZodSchema = z.object({
   body: z.object({
-    email: z.string().email('Invalid email address'),
-    otp: z.string().length(6, 'OTP must be exactly 6 digits'),
+    email: z.string().email('Invalid email address').optional(),
+    resetToken: z.string().optional(),
+    otp: z.string().length(6, 'OTP must be exactly 6 digits').optional(),
     newPassword: z.string().min(6, 'New password must be at least 6 characters'),
   }),
 });

@@ -7,7 +7,8 @@ export class UserRepository {
   }
 
   async findByEmail(email: string, includePassword = false): Promise<IUserDocument | null> {
-    const query = UserModel.findOne({ email });
+    const normalizedEmail = email ? email.toLowerCase().trim() : '';
+    const query = UserModel.findOne({ email: normalizedEmail });
     if (includePassword) {
       query.select('+password');
     }

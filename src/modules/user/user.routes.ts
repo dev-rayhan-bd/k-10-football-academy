@@ -46,6 +46,13 @@ router.post(
 );
 
 router.post(
+  '/verify-reset-otp',
+  authRateLimiter,
+  validateRequest(UserValidation.verifyOtpZodSchema),
+  userController.verifyResetOtp,
+);
+
+router.post(
   '/reset-password',
   authRateLimiter,
   validateRequest(UserValidation.resetPasswordZodSchema),

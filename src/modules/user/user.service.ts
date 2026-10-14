@@ -17,10 +17,54 @@ import {
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
 
-  async registerUser(userData: Partial<IUser>): Promise<IUserDocument> {
-    const existingUser = await this.userRepo.findByEmail(userData.email!);
+  async registerUser(
+    userData: Partial<IUser>,
+  ): Promise<{ user: IUserDocument; isResent: boolean }> {
+    const normalizedEmail = userData.email!.toLowerCase().trim();
+    userData.email = normalizedEmail;
+
+    const existingUser = await this.userRepo.findByEmail(normalizedEmail, true);
     if (existingUser) {
-      throw new AppError(StatusCodes.CONFLICT, 'Email address is already registered');
+      if (existingUser.isEmailVerified) {
+        throw new AppError(
+          StatusCodes.CONFLICT,
+          'Email address is already registered. Please log in.',
+        );
+      }
+
+      // If user previously registered but has not verified email, update info and resend fresh OTP
+      existingUser.name = userData.name || existingUser.name;
+      if (userData.password) {
+        existingUser.password = userData.password;
+      }
+      if (userData.role) {
+        existingUser.role = userData.role;
+      }
+      if (userData.avatar) {
+        existingUser.avatar = userData.avatar;
+      }
+      if (userData.phone) {
+        existingUser.phone = userData.phone;
+      }
+      if (userData.accountManagedBy) {
+        existingUser.accountManagedBy = userData.accountManagedBy;
+      }
+      await existingUser.save();
+
+      // Generate 6-digit OTP
+      const otp = otpGenerator.generate(6);
+
+      // Save OTP to Redis with 5-minute expiration (300s)
+      await redisClient.set(`OTP_${normalizedEmail}`, otp, 'EX', 300);
+
+      // Queue OTP email via BullMQ
+      await emailQueue.add('send-otp-email', {
+        to: normalizedEmail,
+        subject: 'Verify your K10 Football Academy Account',
+        body: getOtpVerificationEmailTemplate(existingUser.name, otp),
+      });
+
+      return { user: existingUser, isResent: true };
     }
 
     const newUser = await this.userRepo.create(userData);
@@ -29,16 +73,16 @@ export class UserService {
     const otp = otpGenerator.generate(6);
 
     // Save OTP to Redis with 5-minute expiration (300s)
-    await redisClient.set(`OTP_${newUser.email}`, otp, 'EX', 300);
+    await redisClient.set(`OTP_${normalizedEmail}`, otp, 'EX', 300);
 
     // Queue OTP email via BullMQ with Professional HTML Template
     await emailQueue.add('send-otp-email', {
-      to: newUser.email,
+      to: normalizedEmail,
       subject: 'Verify your K10 Football Academy Account',
       body: getOtpVerificationEmailTemplate(newUser.name, otp),
     });
 
-    return newUser;
+    return { user: newUser, isResent: false };
   }
 
   async loginUser(email: string, candidatePassword: string): Promise<ILoginResponse> {
@@ -50,6 +94,13 @@ export class UserService {
     const isMatch = await user.comparePassword(candidatePassword);
     if (!isMatch) {
       throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid credentials');
+    }
+
+    if (!user.isEmailVerified) {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Email is not verified. Please verify your email before logging in.',
+      );
     }
 
     if (user.status === 'BLOCKED' || user.status === 'INACTIVE') {
@@ -80,7 +131,8 @@ export class UserService {
   }
 
   async verifyOtp(email: string, otp: string): Promise<boolean> {
-    const user = await this.userRepo.findByEmail(email);
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.userRepo.findByEmail(normalizedEmail);
     if (!user) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
     }
@@ -89,7 +141,7 @@ export class UserService {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Email is already verified');
     }
 
-    const cachedOtp = await redisClient.get(`OTP_${email}`);
+    const cachedOtp = await redisClient.get(`OTP_${normalizedEmail}`);
     if (!cachedOtp) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'OTP has expired or does not exist');
     }
@@ -99,7 +151,7 @@ export class UserService {
     }
 
     await this.userRepo.updateById(user._id.toString(), { isEmailVerified: true });
-    await redisClient.del(`OTP_${email}`);
+    await redisClient.del(`OTP_${normalizedEmail}`);
 
     // Send Welcome Email asynchronously
     await emailQueue.add('send-welcome-email', {
@@ -112,7 +164,8 @@ export class UserService {
   }
 
   async resendOtp(email: string): Promise<void> {
-    const user = await this.userRepo.findByEmail(email);
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.userRepo.findByEmail(normalizedEmail);
     if (!user) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
     }
@@ -122,7 +175,7 @@ export class UserService {
     }
 
     // Rate-limit check in Redis (Max 1 resend per 60 seconds)
-    const isRateLimited = await redisClient.get(`OTP_LIMIT_${email}`);
+    const isRateLimited = await redisClient.get(`OTP_LIMIT_${normalizedEmail}`);
     if (isRateLimited) {
       throw new AppError(
         StatusCodes.TOO_MANY_REQUESTS,
@@ -131,8 +184,8 @@ export class UserService {
     }
 
     const otp = otpGenerator.generate(6);
-    await redisClient.set(`OTP_${email}`, otp, 'EX', 300);
-    await redisClient.set(`OTP_LIMIT_${email}`, '1', 'EX', 60);
+    await redisClient.set(`OTP_${normalizedEmail}`, otp, 'EX', 300);
+    await redisClient.set(`OTP_LIMIT_${normalizedEmail}`, '1', 'EX', 60);
 
     await emailQueue.add('send-otp-email', {
       to: user.email,
@@ -142,12 +195,13 @@ export class UserService {
   }
 
   async forgotPassword(email: string): Promise<void> {
-    const user = await this.userRepo.findByEmail(email);
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.userRepo.findByEmail(normalizedEmail);
     if (!user) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User with this email does not exist');
     }
 
-    const isRateLimited = await redisClient.get(`RESET_LIMIT_${email}`);
+    const isRateLimited = await redisClient.get(`RESET_LIMIT_${normalizedEmail}`);
     if (isRateLimited) {
       throw new AppError(
         StatusCodes.TOO_MANY_REQUESTS,
@@ -156,8 +210,8 @@ export class UserService {
     }
 
     const resetOtp = otpGenerator.generate(6);
-    await redisClient.set(`RESET_OTP_${email}`, resetOtp, 'EX', 600); // 10 mins
-    await redisClient.set(`RESET_LIMIT_${email}`, '1', 'EX', 60);
+    await redisClient.set(`RESET_OTP_${normalizedEmail}`, resetOtp, 'EX', 600); // 10 mins
+    await redisClient.set(`RESET_LIMIT_${normalizedEmail}`, '1', 'EX', 60);
 
     await emailQueue.add('send-reset-password-email', {
       to: user.email,
@@ -166,21 +220,91 @@ export class UserService {
     });
   }
 
-  async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
-    const user = await this.userRepo.findByEmail(email, true);
+  async verifyResetOtp(email: string, otp: string): Promise<{ resetToken: string }> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.userRepo.findByEmail(normalizedEmail);
     if (!user) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+      throw new AppError(StatusCodes.NOT_FOUND, 'User with this email does not exist');
     }
 
-    const cachedOtp = await redisClient.get(`RESET_OTP_${email}`);
+    const cachedOtp = await redisClient.get(`RESET_OTP_${normalizedEmail}`);
     if (!cachedOtp || cachedOtp !== otp) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid or expired password reset OTP code');
     }
 
-    user.password = newPassword;
+    // OTP is valid! Delete OTP from Redis so it cannot be reused
+    await redisClient.del(`RESET_OTP_${normalizedEmail}`);
+
+    // Mark as verified in Redis for 15 minutes
+    await redisClient.set(`RESET_VERIFIED_${normalizedEmail}`, 'true', 'EX', 900);
+
+    // Generate short-lived reset token (valid for 15m)
+    const resetToken = jwt.sign(
+      { userId: user._id.toString(), email: user.email, type: 'PASSWORD_RESET' },
+      env.JWT_ACCESS_SECRET,
+      { expiresIn: '15m' },
+    );
+
+    return { resetToken };
+  }
+
+  async resetPassword(params: {
+    email?: string;
+    newPassword: string;
+    resetToken?: string;
+    otp?: string;
+  }): Promise<void> {
+    let targetEmail = params.email ? params.email.toLowerCase().trim() : '';
+
+    // If resetToken is provided, decode and verify it
+    if (params.resetToken) {
+      try {
+        const decoded = jwt.verify(params.resetToken, env.JWT_ACCESS_SECRET) as {
+          email: string;
+        };
+        if (decoded.email) {
+          targetEmail = decoded.email.toLowerCase().trim();
+        }
+      } catch {
+        throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid or expired password reset token');
+      }
+    }
+
+    if (!targetEmail) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Email address or resetToken is required');
+    }
+
+    const user = await this.userRepo.findByEmail(targetEmail, true);
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User with this email does not exist');
+    }
+
+    // If resetToken was not used, check if the email was verified via verify-reset-otp
+    if (!params.resetToken) {
+      const isVerified = await redisClient.get(`RESET_VERIFIED_${targetEmail}`);
+
+      if (!isVerified) {
+        // If not verified in Redis, check if OTP was passed directly
+        if (!params.otp) {
+          throw new AppError(
+            StatusCodes.BAD_REQUEST,
+            'Please verify your OTP code first before resetting your password',
+          );
+        }
+
+        const cachedOtp = await redisClient.get(`RESET_OTP_${targetEmail}`);
+        if (!cachedOtp || cachedOtp !== params.otp) {
+          throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid or expired password reset OTP code');
+        }
+      }
+    }
+
+    user.password = params.newPassword;
     await user.save();
 
-    await redisClient.del(`RESET_OTP_${email}`);
+    await redisClient.del(`RESET_OTP_${targetEmail}`);
+    await redisClient.del(`RESET_VERIFIED_${targetEmail}`);
+    await redisClient.del(`RESET_LIMIT_${targetEmail}`);
   }
 
   async refreshToken(refreshToken: string): Promise<IRefreshTokenResponse> {

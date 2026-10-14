@@ -29,7 +29,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"John Player\",\n  \"email\": \"john.player@k10football.com\",\n  \"phone\": \"+8801700000000\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"PLAYER\",\n  \"dateOfBirth\": \"2008-05-15\",\n  \"position\": \"Forward\",\n  \"height\": 178,\n  \"currentClub\": \"Abahani Youth Academy\"\n}",
+                  "value": "{\n  \"name\": \"John Player\",\n  \"email\": \"john.player@k10football.com\",\n  \"phone\": \"+8801700000000\",\n  \"password\": \"Password123!\",\n  \"role\": \"PLAYER\",\n  \"dateOfBirth\": \"2008-05-15\",\n  \"position\": \"Forward\",\n  \"height\": 178,\n  \"currentClub\": \"Abahani Youth Academy\"\n}",
                   "type": "text",
                   "description": "Player signup payload from UI"
                 },
@@ -58,7 +58,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"Alex Ferguson\",\n  \"email\": \"alex.coach@k10football.com\",\n  \"phone\": \"+8801711111111\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"COACH\",\n  \"yearsExperience\": 8,\n  \"licenseStatus\": \"UEFA Pro License\",\n  \"preferredFormation\": \"4-3-3 (Attack-focused)\"\n}",
+                  "value": "{\n  \"name\": \"Alex Ferguson\",\n  \"email\": \"alex.coach@k10football.com\",\n  \"phone\": \"+8801711111111\",\n  \"password\": \"Password123!\",\n  \"role\": \"COACH\",\n  \"yearsExperience\": 8,\n  \"licenseStatus\": \"UEFA Pro License\",\n  \"preferredFormation\": \"4-3-3 (Attack-focused)\"\n}",
                   "type": "text",
                   "description": "Coach signup payload from UI"
                 },
@@ -87,7 +87,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"Kings Academy Admin\",\n  \"email\": \"kings.academy@k10football.com\",\n  \"phone\": \"+8801722222222\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"ACADEMY\",\n  \"academyName\": \"Kings Football Academy\",\n  \"location\": \"Dhaka, Bangladesh\",\n  \"registrationId\": \"REG-109283\",\n  \"estimatedAcademySize\": \"Under 50 Players\"\n}",
+                  "value": "{\n  \"name\": \"Kings Academy Admin\",\n  \"email\": \"kings.academy@k10football.com\",\n  \"phone\": \"+8801722222222\",\n  \"password\": \"Password123!\",\n  \"role\": \"ACADEMY\",\n  \"academyName\": \"Kings Football Academy\",\n  \"location\": \"Dhaka, Bangladesh\",\n  \"registrationId\": \"REG-109283\",\n  \"estimatedAcademySize\": \"Under 50 Players\"\n}",
                   "type": "text",
                   "description": "Academy signup payload from UI"
                 },
@@ -116,7 +116,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"Bashundhara Scout Director\",\n  \"email\": \"director.club@k10football.com\",\n  \"phone\": \"+8801733333333\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"CLUB\",\n  \"clubName\": \"Bashundhara Kings\",\n  \"title\": \"Chief Scout / Director\",\n  \"leagueTier\": \"BPL (Premier League)\",\n  \"country\": \"Bangladesh\"\n}",
+                  "value": "{\n  \"name\": \"Bashundhara Scout Director\",\n  \"email\": \"director.club@k10football.com\",\n  \"phone\": \"+8801733333333\",\n  \"password\": \"Password123!\",\n  \"role\": \"CLUB\",\n  \"clubName\": \"Bashundhara Kings\",\n  \"title\": \"Chief Scout / Director\",\n  \"leagueTier\": \"BPL (Premier League)\",\n  \"country\": \"Bangladesh\"\n}",
                   "type": "text",
                   "description": "Club signup payload from UI"
                 },
@@ -145,7 +145,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"David Agent\",\n  \"email\": \"david.agent@k10football.com\",\n  \"phone\": \"+8801744444444\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"AGENT\",\n  \"fifaLicenseNumber\": \"FIFA-LIC-902831\",\n  \"agencyName\": \"Elite Football Management\",\n  \"countryOfOperation\": \"United Kingdom\"\n}",
+                  "value": "{\n  \"name\": \"David Agent\",\n  \"email\": \"david.agent@k10football.com\",\n  \"phone\": \"+8801744444444\",\n  \"password\": \"Password123!\",\n  \"role\": \"AGENT\",\n  \"fifaLicenseNumber\": \"FIFA-LIC-902831\",\n  \"agencyName\": \"Elite Football Management\",\n  \"countryOfOperation\": \"United Kingdom\"\n}",
                   "type": "text",
                   "description": "Agent signup payload from UI"
                 },
@@ -174,7 +174,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"Robert Silva\",\n  \"email\": \"robert.parent@k10football.com\",\n  \"phone\": \"+8801755555555\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"role\": \"PARENT\",\n  \"linkedChildName\": \"Marcus Silva\",\n  \"linkedChildEmail\": \"marcus@example.com\",\n  \"relationship\": \"Father\"\n}",
+                  "value": "{\n  \"name\": \"Robert Silva\",\n  \"email\": \"robert.parent@k10football.com\",\n  \"phone\": \"+8801755555555\",\n  \"password\": \"Password123!\",\n  \"role\": \"PARENT\",\n  \"linkedChildName\": \"Marcus Silva\",\n  \"linkedChildEmail\": \"marcus@example.com\",\n  \"relationship\": \"Father\"\n}",
                   "type": "text",
                   "description": "Parent signup payload from UI"
                 },
@@ -253,6 +253,69 @@
               "raw": "{{baseUrl}}/users/verify-otp",
               "host": ["{{baseUrl}}"],
               "path": ["users", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Forgot Password (Send OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.player@k10football.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "Verify Reset OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.player@k10football.com\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/verify-reset-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "verify-reset-otp"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.player@k10football.com\",\n  \"newPassword\": \"NewPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "reset-password"]
             }
           }
         },

@@ -14,11 +14,13 @@ export class UserController {
       req.body.avatar = avatarUrl;
     }
 
-    const user = await this.service.registerUser(req.body);
+    const { user, isResent } = await this.service.registerUser(req.body);
     sendResponse(res, {
-      statusCode: StatusCodes.CREATED,
+      statusCode: isResent ? StatusCodes.OK : StatusCodes.CREATED,
       success: true,
-      message: 'User registered successfully. Verification OTP sent to email.',
+      message: isResent
+        ? 'A new verification OTP has been sent to your email. Please verify your email to activate your account.'
+        : 'Registration initiated. Verification OTP sent to your email. Please verify your email to activate your account.',
       data: user,
     });
   });
@@ -40,7 +42,7 @@ export class UserController {
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,
-      message: 'Email verified successfully',
+      message: 'Email verified successfully. You can now log in to your account.',
     });
   });
 
@@ -64,9 +66,29 @@ export class UserController {
     });
   });
 
+  verifyResetOtp = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const { email, otp } = req.body;
+    const result = await this.service.verifyResetOtp(email, otp);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Password reset OTP verified successfully. You can now reset your password.',
+      data: result,
+    });
+  });
+
   resetPassword = catchAsync(async (req: Request, res: Response): Promise<void> => {
-    const { email, otp, newPassword } = req.body;
-    await this.service.resetPassword(email, otp, newPassword);
+    const authHeader = req.headers.authorization;
+    const tokenFromHeader =
+      authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
+
+    const { email, otp, newPassword, resetToken } = req.body;
+    await this.service.resetPassword({
+      email,
+      newPassword,
+      resetToken: resetToken || tokenFromHeader,
+      otp,
+    });
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,

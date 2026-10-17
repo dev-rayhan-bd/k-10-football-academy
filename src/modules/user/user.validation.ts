@@ -301,6 +301,10 @@ export const updateProfileZodSchema = z.object({
     height: z.union([z.number(), z.string()]).optional(),
     weight: z.union([z.number(), z.string()]).optional(),
     currentClub: z.string().optional(),
+    contractUntil: z.string().or(z.date()).optional(),
+    reports: z.union([z.number(), z.string()]).optional(),
+    profileViews: z.union([z.number(), z.string()]).optional(),
+    totalLikes: z.union([z.number(), z.string()]).optional(),
 
     // Coach specific
     yearsExperience: z.union([z.number(), z.string()]).optional(),

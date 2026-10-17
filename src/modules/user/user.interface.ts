@@ -8,6 +8,7 @@ export type UserRole =
   | 'CLUB'
   | 'COACH'
   | 'PLAYER'
+  | 'PARENT'
   | 'GUARDIAN'
   | 'SCOUT';
 

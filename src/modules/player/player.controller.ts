@@ -31,11 +31,24 @@ export const createPlayerProfile = catchAsync(async (req: Request, res: Response
 });
 
 export const getPlayerProfile = catchAsync(async (req: Request, res: Response) => {
-  const result = await playerService.getProfileById(req.params.id);
+  const targetId =
+    req.params.id === 'me' || !req.params.id ? req.user?.userId || req.params.id : req.params.id;
+  const result = await playerService.getProfileById(targetId, req.user);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Player profile fetched successfully',
+    data: result,
+  });
+});
+
+export const addClubInterest = catchAsync(async (req: Request, res: Response) => {
+  const playerId = req.params.playerId || req.params.id;
+  const result = await playerService.addClubInterest(playerId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Club interest recorded successfully',
     data: result,
   });
 });
@@ -46,7 +59,8 @@ export const getAllPlayerProfiles = catchAsync(async (req: Request, res: Respons
     statusCode: 200,
     success: true,
     message: 'Player profiles fetched successfully',
-    data: result,
+    meta: result.meta,
+    data: result.result,
   });
 });
 
@@ -54,7 +68,7 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
   const payload = { ...req.body };
   if (req.files && Array.isArray(req.files)) {
     for (const file of req.files as Express.Multer.File[]) {
-      if (file.fieldname === 'profileImage') {
+      if (file.fieldname === 'profileImage' || file.fieldname === 'avatar') {
         payload.profileImage = await uploadToStorage(file, 'player_profiles');
       } else if (file.fieldname === 'highlightVideo') {
         payload.highlightVideo = await uploadToStorage(file, 'player_videos');
@@ -62,7 +76,21 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
     }
   }
 
-  const result = await playerService.updateProfile(req.params.id, payload);
+  if (typeof payload.secondaryPositions === 'string') {
+    try {
+      payload.secondaryPositions = JSON.parse(payload.secondaryPositions);
+    } catch {
+      payload.secondaryPositions = payload.secondaryPositions
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+    }
+  }
+
+  const targetId =
+    req.params.id === 'me' || !req.params.id ? req.user?.userId || req.params.id : req.params.id;
+
+  const result = await playerService.updateProfile(targetId, payload);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -71,8 +99,20 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
   });
 });
 
+const resolvePlayerId = (req: Request): string => {
+  const param = req.params.playerId || req.params.id;
+  if (param && param !== 'me') {
+    return param;
+  }
+  return (req.user as any)?.userId || '';
+};
+
 export const updatePlayerAttributes = catchAsync(async (req: Request, res: Response) => {
-  const result = await playerService.updateAttributes(req.params.playerId, req.body);
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+  const result = await playerService.updateAttributes(playerId, req.body);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -82,7 +122,11 @@ export const updatePlayerAttributes = catchAsync(async (req: Request, res: Respo
 });
 
 export const getPlayerAttributes = catchAsync(async (req: Request, res: Response) => {
-  const result = await playerService.getAttributes(req.params.playerId);
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+  const result = await playerService.getAttributes(playerId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -92,9 +136,10 @@ export const getPlayerAttributes = catchAsync(async (req: Request, res: Response
 });
 
 export const addMatchRecord = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req) || req.body.playerId;
   const payload = {
     ...req.body,
-    playerId: req.params.playerId || req.body.playerId,
+    playerId,
   };
   const result = await playerService.addMatchRecord(payload);
   sendResponse(res, {
@@ -106,7 +151,11 @@ export const addMatchRecord = catchAsync(async (req: Request, res: Response) => 
 });
 
 export const getMatchRecords = catchAsync(async (req: Request, res: Response) => {
-  const result = await playerService.getMatchRecordsByPlayerId(req.params.playerId);
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
+  const result = await playerService.getMatchRecordsByPlayerId(playerId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -116,7 +165,10 @@ export const getMatchRecords = catchAsync(async (req: Request, res: Response) =>
 });
 
 export const uploadHighlightVideo = catchAsync(async (req: Request, res: Response) => {
-  const playerId = req.params.playerId || req.user?.userId;
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
   let videoUrl = '';
   let thumbnailUrl = '';
   let imageUrl = '';
@@ -176,7 +228,10 @@ export const uploadHighlightVideo = catchAsync(async (req: Request, res: Respons
 });
 
 export const uploadMediaGallery = catchAsync(async (req: Request, res: Response) => {
-  const playerId = req.params.playerId || req.user?.userId;
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
   let videoUrl = '';
   let thumbnailUrl = '';
   let imageUrl = '';
@@ -236,8 +291,14 @@ export const uploadMediaGallery = catchAsync(async (req: Request, res: Response)
 export const getMediaGallery = catchAsync(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
+  const mediaType = (req.query.mediaType as string) || (req.query.type as string);
 
-  const result = await playerService.getMediaGallery(req.params.playerId, page, limit);
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
+
+  const result = await playerService.getMediaGallery(playerId, page, limit, mediaType);
   sendResponse(res, {
     statusCode: 200,
     success: true,

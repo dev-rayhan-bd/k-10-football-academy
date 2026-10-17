@@ -45,6 +45,7 @@ export interface IPlayerProfileDocument extends IPlayerProfile, Document {}
 
 export interface IPlayerAttributes {
   playerId: Types.ObjectId;
+  // Technical (8)
   ballControl: number;
   dribbling: number;
   shortPassing: number;
@@ -53,15 +54,19 @@ export interface IPlayerAttributes {
   shooting: number;
   finishing: number;
   longShots: number;
-  firstTouch: number;
+
+  // Tactical (8)
   positioning: number;
   vision: number;
   anticipation: number;
+  composition?: number;
   composure: number;
   teamwork: number;
   workRate: number;
   decisions: number;
   attPosition: number;
+
+  // Physical (8)
   acceleration: number;
   sprintSpeed: number;
   stamina: number;
@@ -70,15 +75,37 @@ export interface IPlayerAttributes {
   agility: number;
   reactions: number;
   jumping: number;
+
+  // Mental (8)
   aggression: number;
-  interceptions: number;
-  marking: number;
+  concentration?: number;
+  consistency?: number;
   leadership: number;
   bravery: number;
   determination: number;
   heading: number;
   influence: number;
-  tackling: number;
+
+  // Attacking (8)
+  firstTouch?: number;
+  shotPower?: number;
+  curve?: number;
+  freeKick?: number;
+  penalties?: number;
+  volleys?: number;
+  headingAccuracy?: number;
+  weakFoot?: number;
+
+  // Defending (8)
+  standingTackle?: number;
+  slidingTackle?: number;
+  tackling?: number;
+  aerialDuels?: number;
+  clearance?: number;
+  pressing?: number;
+  defensiveAwareness?: number;
+
+  [key: string]: any;
 }
 
 export interface IPlayerAttributesDocument extends IPlayerAttributes, Document {}

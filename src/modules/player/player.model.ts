@@ -49,6 +49,12 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
   { timestamps: true },
 );
 
+PlayerProfileSchema.index({ userId: 1 });
+PlayerProfileSchema.index({ overallRating: -1 });
+PlayerProfileSchema.index({ cvTier: 1 });
+PlayerProfileSchema.index({ position: 1 });
+PlayerProfileSchema.index({ createdAt: -1 });
+
 const PlayerAttributesSchema = new Schema<IPlayerAttributesDocument>(
   {
     playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true, unique: true },
@@ -60,7 +66,6 @@ const PlayerAttributesSchema = new Schema<IPlayerAttributesDocument>(
     shooting: { type: Number, default: 50 },
     finishing: { type: Number, default: 50 },
     longShots: { type: Number, default: 50 },
-    firstTouch: { type: Number, default: 50 },
     positioning: { type: Number, default: 50 },
     vision: { type: Number, default: 50 },
     anticipation: { type: Number, default: 50 },
@@ -78,6 +83,8 @@ const PlayerAttributesSchema = new Schema<IPlayerAttributesDocument>(
     reactions: { type: Number, default: 50 },
     jumping: { type: Number, default: 50 },
     aggression: { type: Number, default: 50 },
+    concentration: { type: Number, default: 50 },
+    consistency: { type: Number, default: 50 },
     interceptions: { type: Number, default: 50 },
     marking: { type: Number, default: 50 },
     leadership: { type: Number, default: 50 },
@@ -85,7 +92,26 @@ const PlayerAttributesSchema = new Schema<IPlayerAttributesDocument>(
     determination: { type: Number, default: 50 },
     heading: { type: Number, default: 50 },
     influence: { type: Number, default: 50 },
+    composition: { type: Number, default: 50 },
+
+    // Attacking (8)
+    firstTouch: { type: Number, default: 50 },
+    shotPower: { type: Number, default: 50 },
+    curve: { type: Number, default: 50 },
+    freeKick: { type: Number, default: 50 },
+    penalties: { type: Number, default: 50 },
+    volleys: { type: Number, default: 50 },
+    headingAccuracy: { type: Number, default: 50 },
+    weakFoot: { type: Number, default: 50 },
+
+    // Defending (8)
+    standingTackle: { type: Number, default: 50 },
+    slidingTackle: { type: Number, default: 50 },
     tackling: { type: Number, default: 50 },
+    aerialDuels: { type: Number, default: 50 },
+    clearance: { type: Number, default: 50 },
+    pressing: { type: Number, default: 50 },
+    defensiveAwareness: { type: Number, default: 50 },
   },
   { strict: false, timestamps: true },
 );
@@ -159,6 +185,8 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
   },
   { timestamps: true },
 );
+
+MatchRecordSchema.index({ playerId: 1, matchDate: -1 });
 
 const PlayerCvValidationSchema = new Schema<IPlayerCvValidationDocument>(
   {

@@ -17,7 +17,14 @@ import { AcademyProfile } from '@/modules/academy/academy.model';
 import { CoachProfile, TacticalFormation } from '@/modules/coach/coach.model';
 import { ClubProfile } from '@/modules/club/club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
-import { PlayerProfile } from '@/modules/player/player.model';
+import {
+  PlayerProfile,
+  MatchRecord,
+  PlayerAttributes,
+  PlayerMentalAnalysis,
+  PlayerFullPotential,
+  FifaCardStats,
+} from '@/modules/player/player.model';
 import { ParentProfile } from '@/modules/parent/parent.model';
 
 export class UserService {
@@ -29,8 +36,8 @@ export class UserService {
     const normalizedEmail = userData.email!.toLowerCase().trim();
     userData.email = normalizedEmail;
 
-    if ((userData.role as string) === 'PARENT' || userData.role === 'GUARDIAN') {
-      userData.role = 'GUARDIAN';
+    if ((userData.role as string) === 'PARENT' || (userData.role as string) === 'GUARDIAN') {
+      userData.role = 'PARENT';
       delete (userData as any).accountManagedBy;
     } else if (userData.role === 'PLAYER') {
       userData.accountManagedBy = userData.accountManagedBy || 'ATHLETE';
@@ -257,7 +264,7 @@ export class UserService {
         const age = !isNaN(birthDate.getTime())
           ? new Date().getFullYear() - birthDate.getFullYear()
           : 18;
-        await PlayerProfile.findOneAndUpdate(
+        const playerProf = await PlayerProfile.findOneAndUpdate(
           { userId: existingUser._id },
           {
             userId: existingUser._id,
@@ -273,11 +280,41 @@ export class UserService {
           },
           { upsert: true, new: true },
         );
+
+        if (playerProf) {
+          await PlayerAttributes.findOneAndUpdate(
+            { playerId: playerProf._id },
+            { playerId: playerProf._id },
+            { upsert: true, new: true },
+          );
+          await PlayerMentalAnalysis.findOneAndUpdate(
+            { playerId: playerProf._id },
+            { playerId: playerProf._id },
+            { upsert: true, new: true },
+          );
+          await PlayerFullPotential.findOneAndUpdate(
+            { playerId: playerProf._id },
+            { playerId: playerProf._id },
+            { upsert: true, new: true },
+          );
+          await FifaCardStats.findOneAndUpdate(
+            { playerId: playerProf._id },
+            { playerId: playerProf._id, overallRating: 50, position: playerProf.position },
+            { upsert: true, new: true },
+          );
+
+          await this.userRepo.updateById(existingUser._id.toString(), {
+            playerId: playerProf._id.toString(),
+          });
+          (existingUser as any).playerId = playerProf._id.toString();
+        }
       }
 
       const userObj = existingUser.toObject() as unknown as IUser;
       delete (userObj as any).password;
-      if (userObj.role !== 'PLAYER') {
+      if (userObj.role === 'PLAYER' && (existingUser as any).playerId) {
+        (userObj as any).playerId = (existingUser as any).playerId;
+      } else if (userObj.role !== 'PLAYER') {
         delete (userObj as any).accountManagedBy;
       }
       return { user: userObj as unknown as IUserDocument, isResent: true };
@@ -390,7 +427,7 @@ export class UserService {
       const age = !isNaN(birthDate.getTime())
         ? new Date().getFullYear() - birthDate.getFullYear()
         : 18;
-      await PlayerProfile.findOneAndUpdate(
+      const playerProf = await PlayerProfile.findOneAndUpdate(
         { userId: newUser._id },
         {
           userId: newUser._id,
@@ -406,6 +443,34 @@ export class UserService {
         },
         { upsert: true, new: true },
       );
+
+      if (playerProf) {
+        await PlayerAttributes.findOneAndUpdate(
+          { playerId: playerProf._id },
+          { playerId: playerProf._id },
+          { upsert: true, new: true },
+        );
+        await PlayerMentalAnalysis.findOneAndUpdate(
+          { playerId: playerProf._id },
+          { playerId: playerProf._id },
+          { upsert: true, new: true },
+        );
+        await PlayerFullPotential.findOneAndUpdate(
+          { playerId: playerProf._id },
+          { playerId: playerProf._id },
+          { upsert: true, new: true },
+        );
+        await FifaCardStats.findOneAndUpdate(
+          { playerId: playerProf._id },
+          { playerId: playerProf._id, overallRating: 50, position: playerProf.position },
+          { upsert: true, new: true },
+        );
+
+        await this.userRepo.updateById(newUser._id.toString(), {
+          playerId: playerProf._id.toString(),
+        });
+        (newUser as any).playerId = playerProf._id.toString();
+      }
     }
 
     // Generate 6-digit OTP
@@ -423,7 +488,9 @@ export class UserService {
 
     const userObj = newUser.toObject() as unknown as IUser;
     delete (userObj as any).password;
-    if (userObj.role !== 'PLAYER') {
+    if (userObj.role === 'PLAYER' && (newUser as any).playerId) {
+      (userObj as any).playerId = (newUser as any).playerId;
+    } else if (userObj.role !== 'PLAYER') {
       delete (userObj as any).accountManagedBy;
     }
     return { user: userObj as unknown as IUserDocument, isResent: false };
@@ -762,12 +829,30 @@ export class UserService {
         userObj.height = userObj.height ?? playerProfile.height;
         userObj.weight = userObj.weight ?? playerProfile.weight;
         userObj.currentClub = userObj.currentClub ?? playerProfile.currentClub;
+        userObj.contractUntil = userObj.contractUntil ?? playerProfile.contractUntil;
         userObj.country = userObj.country ?? playerProfile.country;
         userObj.overallRating = userObj.overallRating ?? playerProfile.overallRating;
         userObj.marketValue = userObj.marketValue ?? playerProfile.marketValue;
         userObj.cvTier = userObj.cvTier ?? playerProfile.cvTier;
         userObj.profileCompletion = userObj.profileCompletion ?? playerProfile.profileCompletion;
         userObj.isVerifiedByCoach = userObj.isVerifiedByCoach ?? playerProfile.isVerifiedByCoach;
+        userObj.profileViews = playerProfile.profileViews ?? 0;
+        userObj.totalLikes = playerProfile.totalLikes ?? 0;
+
+        const matchCount = await MatchRecord.countDocuments({ playerId: playerProfile._id });
+        const totalReports =
+          (playerProfile as any).reports !== undefined &&
+          (playerProfile as any).reports !== null &&
+          (playerProfile as any).reports > 0
+            ? (playerProfile as any).reports
+            : matchCount;
+        delete (userObj as any).reports;
+        userObj.totalReports = totalReports;
+        userObj.overviewStats = {
+          profileViews: userObj.profileViews,
+          totalLikes: userObj.totalLikes,
+          reports: totalReports,
+        };
       }
     }
 
@@ -869,6 +954,14 @@ export class UserService {
       if (updateData.weight !== undefined && updateData.weight !== '')
         playerUpdate.weight = Number(updateData.weight);
       if (updateData.currentClub !== undefined) playerUpdate.currentClub = updateData.currentClub;
+      if (updateData.contractUntil !== undefined)
+        playerUpdate.contractUntil = new Date(updateData.contractUntil);
+      if (updateData.reports !== undefined && updateData.reports !== '')
+        playerUpdate.reports = Number(updateData.reports);
+      if (updateData.profileViews !== undefined && updateData.profileViews !== '')
+        playerUpdate.profileViews = Number(updateData.profileViews);
+      if (updateData.totalLikes !== undefined && updateData.totalLikes !== '')
+        playerUpdate.totalLikes = Number(updateData.totalLikes);
       if (updateData.country !== undefined) playerUpdate.country = updateData.country;
       if (updateData.dateOfBirth) {
         playerUpdate.dateOfBirth = new Date(updateData.dateOfBirth);

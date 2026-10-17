@@ -45,6 +45,8 @@ const ParentMatchReportSchema = new Schema<IParentMatchReportDocument>(
   { timestamps: true },
 );
 
+ParentMatchReportSchema.index({ childPlayerId: 1, matchDate: -1 });
+
 export const ParentProfile = model<IParentProfileDocument>('ParentProfile', ParentProfileSchema);
 export const ParentChild = model<IParentChildDocument>('ParentChild', ParentChildSchema);
 export const ParentMatchReport = model<IParentMatchReportDocument>(

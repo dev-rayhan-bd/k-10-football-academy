@@ -599,6 +599,41 @@
           }
         },
         {
+          "name": "⚡ ✏️ Update My Player Profile (/players/me - FormData or JSON)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"secondaryPositions\": [\"Winger\"],\n  \"preferredFoot\": \"RIGHT\",\n  \"height\": 180,\n  \"weight\": 75,\n  \"currentClub\": \"K10 Football Academy\",\n  \"contractUntil\": \"2028-06-30\",\n  \"marketValue\": 25000\n}",
+                  "type": "text",
+                  "description": "JSON text containing any player profile fields to update"
+                },
+                {
+                  "key": "profileImage",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional updated player profile photo file"
+                },
+                {
+                  "key": "highlightVideo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional updated player highlight video file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/players/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["players", "me"]
+            }
+          }
+        },
+        {
           "name": "🆕 ✏️ Update Player Profile (FormData with JSON 'data' + Optional Avatar/Video)",
           "request": {
             "method": "PATCH",

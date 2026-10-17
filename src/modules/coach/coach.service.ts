@@ -1,4 +1,6 @@
+import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
+import { UserModel } from '@/modules/user/user.model';
 import { ICoachProfile, ITacticalFormation, ICoachTestimonial } from './coach.interface';
 import { CoachProfile, TacticalFormation, CoachTestimonial } from './coach.model';
 
@@ -12,7 +14,45 @@ export class CoachService {
   }
 
   async getProfileById(id: string) {
-    const profile = await CoachProfile.findById(id).populate('userId', 'name email avatar phone');
+    let profile = null;
+    if (Types.ObjectId.isValid(id)) {
+      profile = await CoachProfile.findById(id).populate('userId', 'name email avatar phone');
+      if (!profile) {
+        profile = await CoachProfile.findOne({ userId: id }).populate(
+          'userId',
+          'name email avatar phone',
+        );
+      }
+    }
+    if (!profile) {
+      throw new AppError(404, 'Coach profile not found');
+    }
+    return profile;
+  }
+
+  async getMyProfile(userId: string) {
+    let profile = await CoachProfile.findOne({ userId }).populate(
+      'userId',
+      'name email avatar phone',
+    );
+    if (!profile) {
+      // Check if user is a coach and create profile
+      const user = await UserModel.findById(userId);
+      if (user && user.role === 'COACH') {
+        profile = await CoachProfile.create({
+          userId: user._id,
+          fullName: user.name,
+          title: 'Football Coach',
+          coachType: 'INDIVIDUAL_COACH',
+          yearsExperience: 0,
+          licenseStatus: 'No Official License',
+          speciality: 'Tactical Coaching',
+          cvTier: 'BRONZE',
+          status: 'AVAILABLE',
+        });
+        await profile.populate('userId', 'name email avatar phone');
+      }
+    }
     if (!profile) {
       throw new AppError(404, 'Coach profile not found');
     }

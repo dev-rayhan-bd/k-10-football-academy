@@ -14,6 +14,11 @@ import {
   getWelcomeEmailTemplate,
 } from '@/utils/emailTemplates';
 import { AcademyProfile } from '@/modules/academy/academy.model';
+import { CoachProfile, TacticalFormation } from '@/modules/coach/coach.model';
+import { ClubProfile } from '@/modules/club/club.model';
+import { AgentProfile } from '@/modules/agent/agent.model';
+import { PlayerProfile } from '@/modules/player/player.model';
+import { ParentProfile } from '@/modules/parent/parent.model';
 
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
@@ -31,6 +36,16 @@ export class UserService {
       userData.accountManagedBy = userData.accountManagedBy || 'ATHLETE';
     } else {
       delete (userData as any).accountManagedBy;
+    }
+
+    if ((userData as any).licenseId && !userData.fifaLicenseNumber) {
+      userData.fifaLicenseNumber = (userData as any).licenseId;
+    }
+    if ((userData as any).country && !userData.countryOfOperation) {
+      userData.countryOfOperation = (userData as any).country;
+    }
+    if ((userData as any).countryOfOperation && !userData.country) {
+      userData.country = (userData as any).countryOfOperation;
     }
 
     const existingUser = await this.userRepo.findByEmail(normalizedEmail, true);
@@ -77,6 +92,51 @@ export class UserService {
       if (userData.dateOfBirth !== undefined) {
         existingUser.dateOfBirth = new Date(userData.dateOfBirth);
       }
+      if (userData.yearsExperience !== undefined) {
+        existingUser.yearsExperience = Number(userData.yearsExperience);
+      }
+      if (userData.licenseStatus !== undefined || userData.coachingLicenseLevel !== undefined) {
+        existingUser.licenseStatus = (userData.licenseStatus ||
+          userData.coachingLicenseLevel) as any;
+        existingUser.coachingLicenseLevel = (userData.coachingLicenseLevel ||
+          userData.licenseStatus) as any;
+      }
+      if (userData.preferredFormation !== undefined) {
+        existingUser.preferredFormation = userData.preferredFormation as any;
+      }
+      if ((userData as any).clubName !== undefined) {
+        existingUser.clubName = (userData as any).clubName;
+      }
+      if ((userData as any).title !== undefined) {
+        existingUser.title = (userData as any).title;
+      }
+      if ((userData as any).league !== undefined || (userData as any).leagueTier !== undefined) {
+        existingUser.league = (userData as any).league || (userData as any).leagueTier;
+        existingUser.leagueTier = (userData as any).leagueTier || (userData as any).league;
+      }
+      if ((userData as any).country !== undefined) {
+        existingUser.country = (userData as any).country;
+      }
+      if (
+        (userData as any).fifaLicenseNumber !== undefined ||
+        (userData as any).licenseId !== undefined
+      ) {
+        existingUser.fifaLicenseNumber =
+          (userData as any).fifaLicenseNumber || (userData as any).licenseId;
+      }
+      if ((userData as any).agencyName !== undefined) {
+        existingUser.agencyName = (userData as any).agencyName;
+      }
+      if (
+        (userData as any).countryOfOperation !== undefined ||
+        (userData as any).country !== undefined
+      ) {
+        existingUser.countryOfOperation =
+          (userData as any).countryOfOperation || (userData as any).country;
+        if (!existingUser.country) {
+          existingUser.country = (userData as any).countryOfOperation || (userData as any).country;
+        }
+      }
       await existingUser.save();
 
       // Generate 6-digit OTP
@@ -119,6 +179,102 @@ export class UserService {
         );
       }
 
+      if (existingUser.role === 'COACH') {
+        const coachProf = await CoachProfile.findOneAndUpdate(
+          { userId: existingUser._id },
+          {
+            userId: existingUser._id,
+            fullName: userData.name || existingUser.name,
+            title: (userData as any).title || 'Football Coach',
+            coachType: (userData as any).coachType || 'INDIVIDUAL_COACH',
+            yearsExperience: Number((userData as any).yearsExperience) || 0,
+            licenseStatus:
+              (userData as any).coachingLicenseLevel ||
+              (userData as any).licenseStatus ||
+              'No Official License',
+            speciality:
+              (userData as any).preferredFormation ||
+              (userData as any).speciality ||
+              'Tactical Coaching',
+            cvTier: 'BRONZE',
+            status: 'AVAILABLE',
+          },
+          { upsert: true, new: true },
+        );
+
+        if ((userData as any).preferredFormation && coachProf) {
+          await TacticalFormation.findOneAndUpdate(
+            { coachId: coachProf._id, formationSlot: 1 },
+            {
+              coachId: coachProf._id,
+              formationSlot: 1,
+              formationName: (userData as any).preferredFormation,
+              positionsJson: JSON.stringify({ formation: (userData as any).preferredFormation }),
+            },
+            { upsert: true, new: true },
+          );
+        }
+      }
+
+      if (existingUser.role === 'CLUB') {
+        await ClubProfile.findOneAndUpdate(
+          { userId: existingUser._id },
+          {
+            userId: existingUser._id,
+            name: (userData as any).clubName || userData.name || existingUser.name,
+            clubType: (userData as any).title || 'Professional Club',
+            establishedYear: (userData as any).establishedYear || new Date().getFullYear(),
+            country: (userData as any).country || 'Bangladesh',
+            league: (userData as any).leagueTier || (userData as any).league || 'Premier League',
+            logo: userData.avatar || existingUser.avatar || '',
+          },
+          { upsert: true, new: true },
+        );
+      }
+
+      if (existingUser.role === 'AGENT') {
+        await AgentProfile.findOneAndUpdate(
+          { userId: existingUser._id },
+          {
+            userId: existingUser._id,
+            licenseId:
+              (userData as any).fifaLicenseNumber ||
+              (userData as any).licenseId ||
+              existingUser.fifaLicenseNumber ||
+              '',
+            certifications: (userData as any).agencyName || existingUser.agencyName || '',
+          },
+          { upsert: true, new: true },
+        );
+      }
+
+      if (existingUser.role === 'PLAYER') {
+        const birthDate = userData.dateOfBirth
+          ? new Date(userData.dateOfBirth)
+          : existingUser.dateOfBirth
+            ? new Date(existingUser.dateOfBirth)
+            : new Date('2006-01-01');
+        const age = !isNaN(birthDate.getTime())
+          ? new Date().getFullYear() - birthDate.getFullYear()
+          : 18;
+        await PlayerProfile.findOneAndUpdate(
+          { userId: existingUser._id },
+          {
+            userId: existingUser._id,
+            fullName: userData.name || existingUser.name,
+            position: userData.position || existingUser.position || 'Forward',
+            dateOfBirth: birthDate,
+            age,
+            country: userData.country || existingUser.country || 'Bangladesh',
+            height: userData.height || existingUser.height,
+            weight: userData.weight || existingUser.weight,
+            currentClub: userData.currentClub || existingUser.currentClub || '',
+            profileImage: userData.avatar || existingUser.avatar || '',
+          },
+          { upsert: true, new: true },
+        );
+      }
+
       const userObj = existingUser.toObject() as unknown as IUser;
       delete (userObj as any).password;
       if (userObj.role !== 'PLAYER') {
@@ -151,6 +307,102 @@ export class UserService {
           city,
           country,
           logo: userData.avatar || newUser.avatar || '',
+        },
+        { upsert: true, new: true },
+      );
+    }
+
+    if (newUser.role === 'COACH') {
+      const coachProf = await CoachProfile.findOneAndUpdate(
+        { userId: newUser._id },
+        {
+          userId: newUser._id,
+          fullName: newUser.name,
+          title: (userData as any).title || 'Football Coach',
+          coachType: (userData as any).coachType || 'INDIVIDUAL_COACH',
+          yearsExperience: Number((userData as any).yearsExperience) || 0,
+          licenseStatus:
+            (userData as any).coachingLicenseLevel ||
+            (userData as any).licenseStatus ||
+            'No Official License',
+          speciality:
+            (userData as any).preferredFormation ||
+            (userData as any).speciality ||
+            'Tactical Coaching',
+          cvTier: 'BRONZE',
+          status: 'AVAILABLE',
+        },
+        { upsert: true, new: true },
+      );
+
+      if ((userData as any).preferredFormation && coachProf) {
+        await TacticalFormation.findOneAndUpdate(
+          { coachId: coachProf._id, formationSlot: 1 },
+          {
+            coachId: coachProf._id,
+            formationSlot: 1,
+            formationName: (userData as any).preferredFormation,
+            positionsJson: JSON.stringify({ formation: (userData as any).preferredFormation }),
+          },
+          { upsert: true, new: true },
+        );
+      }
+    }
+
+    if (newUser.role === 'CLUB') {
+      await ClubProfile.findOneAndUpdate(
+        { userId: newUser._id },
+        {
+          userId: newUser._id,
+          name: (userData as any).clubName || newUser.name,
+          clubType: (userData as any).title || 'Professional Club',
+          establishedYear: (userData as any).establishedYear || new Date().getFullYear(),
+          country: (userData as any).country || 'Bangladesh',
+          league: (userData as any).leagueTier || (userData as any).league || 'Premier League',
+          logo: userData.avatar || newUser.avatar || '',
+        },
+        { upsert: true, new: true },
+      );
+    }
+
+    if (newUser.role === 'AGENT') {
+      await AgentProfile.findOneAndUpdate(
+        { userId: newUser._id },
+        {
+          userId: newUser._id,
+          licenseId:
+            (userData as any).fifaLicenseNumber ||
+            (userData as any).licenseId ||
+            newUser.fifaLicenseNumber ||
+            '',
+          certifications: (userData as any).agencyName || newUser.agencyName || '',
+        },
+        { upsert: true, new: true },
+      );
+    }
+
+    if (newUser.role === 'PLAYER') {
+      const birthDate = userData.dateOfBirth
+        ? new Date(userData.dateOfBirth)
+        : newUser.dateOfBirth
+          ? new Date(newUser.dateOfBirth)
+          : new Date('2006-01-01');
+      const age = !isNaN(birthDate.getTime())
+        ? new Date().getFullYear() - birthDate.getFullYear()
+        : 18;
+      await PlayerProfile.findOneAndUpdate(
+        { userId: newUser._id },
+        {
+          userId: newUser._id,
+          fullName: newUser.name,
+          position: userData.position || newUser.position || 'Forward',
+          dateOfBirth: birthDate,
+          age,
+          country: userData.country || newUser.country || 'Bangladesh',
+          height: userData.height || newUser.height,
+          weight: userData.weight || newUser.weight,
+          currentClub: userData.currentClub || newUser.currentClub || '',
+          profileImage: userData.avatar || newUser.avatar || '',
         },
         { upsert: true, new: true },
       );
@@ -213,11 +465,7 @@ export class UserService {
       { expiresIn: env.JWT_REFRESH_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
     );
 
-    const userObj = user.toObject() as unknown as IUser;
-    delete (userObj as any).password;
-    if (userObj.role !== 'PLAYER') {
-      delete (userObj as any).accountManagedBy;
-    }
+    const userObj = await this.getUserById(user._id.toString());
 
     return {
       user: userObj,
@@ -462,16 +710,253 @@ export class UserService {
     await fullUser!.save();
   }
 
-  async getUserById(id: string): Promise<IUserDocument> {
+  async getUserById(id: string): Promise<any> {
     const user = await this.userRepo.findById(id);
     if (!user) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
     }
-    return user;
+
+    const userObj: any = user.toObject();
+    delete userObj.password;
+
+    if (user.role === 'COACH') {
+      const coachProfile = await CoachProfile.findOne({ userId: user._id });
+      if (coachProfile) {
+        userObj.yearsExperience = userObj.yearsExperience ?? coachProfile.yearsExperience;
+        userObj.licenseStatus = userObj.licenseStatus ?? coachProfile.licenseStatus;
+        userObj.coachingLicenseLevel = userObj.coachingLicenseLevel ?? coachProfile.licenseStatus;
+        userObj.preferredFormation = userObj.preferredFormation ?? coachProfile.speciality;
+      }
+    }
+
+    if (user.role === 'CLUB') {
+      const clubProfile = await ClubProfile.findOne({ userId: user._id });
+      if (clubProfile) {
+        userObj.clubName = userObj.clubName ?? clubProfile.name;
+        userObj.title = userObj.title ?? clubProfile.clubType;
+        userObj.league = userObj.league ?? clubProfile.league;
+        userObj.leagueTier = userObj.leagueTier ?? clubProfile.league;
+        userObj.country = userObj.country ?? clubProfile.country;
+      }
+    }
+
+    if (user.role === 'AGENT') {
+      const agentProfile = await AgentProfile.findOne({ userId: user._id });
+      if (agentProfile) {
+        userObj.fifaLicenseNumber = userObj.fifaLicenseNumber ?? agentProfile.licenseId;
+        userObj.agencyName = userObj.agencyName ?? agentProfile.certifications;
+      }
+      userObj.countryOfOperation = userObj.countryOfOperation ?? userObj.country;
+      userObj.country = userObj.country ?? userObj.countryOfOperation;
+    }
+
+    if (user.role === 'PLAYER') {
+      const playerProfile = await PlayerProfile.findOne({ userId: user._id });
+      if (playerProfile) {
+        userObj.playerId = playerProfile._id;
+        userObj.position = userObj.position ?? playerProfile.position;
+        userObj.secondaryPositions = userObj.secondaryPositions ?? playerProfile.secondaryPositions;
+        userObj.preferredFoot = userObj.preferredFoot ?? playerProfile.preferredFoot;
+        userObj.dateOfBirth = userObj.dateOfBirth ?? playerProfile.dateOfBirth;
+        userObj.age = userObj.age ?? playerProfile.age;
+        userObj.height = userObj.height ?? playerProfile.height;
+        userObj.weight = userObj.weight ?? playerProfile.weight;
+        userObj.currentClub = userObj.currentClub ?? playerProfile.currentClub;
+        userObj.country = userObj.country ?? playerProfile.country;
+        userObj.overallRating = userObj.overallRating ?? playerProfile.overallRating;
+        userObj.marketValue = userObj.marketValue ?? playerProfile.marketValue;
+        userObj.cvTier = userObj.cvTier ?? playerProfile.cvTier;
+        userObj.profileCompletion = userObj.profileCompletion ?? playerProfile.profileCompletion;
+        userObj.isVerifiedByCoach = userObj.isVerifiedByCoach ?? playerProfile.isVerifiedByCoach;
+      }
+    }
+
+    if (user.role === 'ACADEMY') {
+      const academyProfile = await AcademyProfile.findOne({ userId: user._id });
+      if (academyProfile) {
+        userObj.academyId = academyProfile._id;
+        userObj.academyName = userObj.academyName ?? academyProfile.name;
+        userObj.location = userObj.location ?? academyProfile.location;
+        userObj.city = userObj.city ?? academyProfile.city;
+        userObj.country = userObj.country ?? academyProfile.country;
+        userObj.registrationId = userObj.registrationId ?? academyProfile.registrationId;
+        userObj.estimatedAcademySize =
+          userObj.estimatedAcademySize ?? academyProfile.estimatedAcademySize;
+        userObj.category = userObj.category ?? academyProfile.category;
+      }
+    }
+
+    if ((user.role as string) === 'GUARDIAN' || (user.role as string) === 'PARENT') {
+      const parentProfile = await ParentProfile.findOne({ userId: user._id });
+      if (parentProfile) {
+        userObj.parentProfileId = parentProfile._id;
+        userObj.contactPhone = userObj.contactPhone ?? parentProfile.contactPhone;
+        userObj.address = userObj.address ?? (parentProfile as any).address;
+      }
+    }
+
+    return userObj;
   }
 
   async getAllUsers(): Promise<IUserDocument[]> {
     return this.userRepo.findAll();
+  }
+
+  async updateMyProfile(userId: string, updateData: any): Promise<any> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+    }
+
+    // Protect sensitive fields from arbitrary override
+    delete updateData.password;
+    delete updateData.email;
+    delete updateData.role;
+    delete updateData.isEmailVerified;
+    delete updateData._id;
+
+    // Normalizations
+    if (updateData.coachingLicenseLevel && !updateData.licenseStatus) {
+      updateData.licenseStatus = updateData.coachingLicenseLevel;
+    }
+    if (updateData.licenseStatus && !updateData.coachingLicenseLevel) {
+      updateData.coachingLicenseLevel = updateData.licenseStatus;
+    }
+    if (updateData.leagueTier && !updateData.league) {
+      updateData.league = updateData.leagueTier;
+    }
+    if (updateData.league && !updateData.leagueTier) {
+      updateData.leagueTier = updateData.league;
+    }
+    if (updateData.licenseId && !updateData.fifaLicenseNumber) {
+      updateData.fifaLicenseNumber = updateData.licenseId;
+    }
+    if (updateData.fifaLicenseNumber && !updateData.licenseId) {
+      updateData.licenseId = updateData.fifaLicenseNumber;
+    }
+    if (updateData.countryOfOperation && !updateData.country) {
+      updateData.country = updateData.countryOfOperation;
+    }
+    if (updateData.country && !updateData.countryOfOperation) {
+      updateData.countryOfOperation = updateData.country;
+    }
+    if (updateData.height !== undefined && updateData.height !== '') {
+      updateData.height = Number(updateData.height);
+    }
+    if (updateData.weight !== undefined && updateData.weight !== '') {
+      updateData.weight = Number(updateData.weight);
+    }
+    if (updateData.yearsExperience !== undefined && updateData.yearsExperience !== '') {
+      updateData.yearsExperience = Number(updateData.yearsExperience);
+    }
+    if (updateData.dateOfBirth) {
+      updateData.dateOfBirth = new Date(updateData.dateOfBirth);
+    }
+
+    // 1. Update User document
+    await this.userRepo.updateById(userId, updateData);
+
+    // 2. Sync Role-Specific Profiles
+    if (user.role === 'PLAYER') {
+      const playerUpdate: any = {};
+      if (updateData.name) playerUpdate.fullName = updateData.name;
+      if (updateData.position) playerUpdate.position = updateData.position;
+      if (updateData.secondaryPositions)
+        playerUpdate.secondaryPositions = updateData.secondaryPositions;
+      if (updateData.preferredFoot) playerUpdate.preferredFoot = updateData.preferredFoot;
+      if (updateData.height !== undefined && updateData.height !== '')
+        playerUpdate.height = Number(updateData.height);
+      if (updateData.weight !== undefined && updateData.weight !== '')
+        playerUpdate.weight = Number(updateData.weight);
+      if (updateData.currentClub !== undefined) playerUpdate.currentClub = updateData.currentClub;
+      if (updateData.country !== undefined) playerUpdate.country = updateData.country;
+      if (updateData.dateOfBirth) {
+        playerUpdate.dateOfBirth = new Date(updateData.dateOfBirth);
+        const birthYear = new Date(updateData.dateOfBirth).getFullYear();
+        if (!isNaN(birthYear)) playerUpdate.age = new Date().getFullYear() - birthYear;
+      }
+      if (updateData.avatar) playerUpdate.profileImage = updateData.avatar;
+
+      if (Object.keys(playerUpdate).length > 0) {
+        await PlayerProfile.findOneAndUpdate({ userId }, { $set: playerUpdate }, { new: true });
+      }
+    } else if (user.role === 'COACH') {
+      const coachUpdate: any = {};
+      if (updateData.name) coachUpdate.fullName = updateData.name;
+      if (updateData.title) coachUpdate.title = updateData.title;
+      if (updateData.coachType) coachUpdate.coachType = updateData.coachType;
+      if (updateData.yearsExperience !== undefined && updateData.yearsExperience !== '')
+        coachUpdate.yearsExperience = Number(updateData.yearsExperience);
+      if (updateData.licenseStatus || updateData.coachingLicenseLevel) {
+        coachUpdate.licenseStatus = updateData.coachingLicenseLevel || updateData.licenseStatus;
+      }
+      if (updateData.preferredFormation) coachUpdate.speciality = updateData.preferredFormation;
+
+      if (Object.keys(coachUpdate).length > 0) {
+        const coachProf = await CoachProfile.findOneAndUpdate(
+          { userId },
+          { $set: coachUpdate },
+          { new: true },
+        );
+        if (updateData.preferredFormation && coachProf) {
+          await TacticalFormation.findOneAndUpdate(
+            { coachId: coachProf._id, formationSlot: 1 },
+            {
+              coachId: coachProf._id,
+              formationSlot: 1,
+              formationName: updateData.preferredFormation,
+              positionsJson: JSON.stringify({ formation: updateData.preferredFormation }),
+            },
+            { upsert: true, new: true },
+          );
+        }
+      }
+    } else if (user.role === 'CLUB') {
+      const clubUpdate: any = {};
+      if (updateData.clubName || updateData.name)
+        clubUpdate.name = updateData.clubName || updateData.name;
+      if (updateData.title) clubUpdate.clubType = updateData.title;
+      if (updateData.leagueTier || updateData.league)
+        clubUpdate.league = updateData.leagueTier || updateData.league;
+      if (updateData.country) clubUpdate.country = updateData.country;
+      if (updateData.avatar) clubUpdate.logo = updateData.avatar;
+
+      if (Object.keys(clubUpdate).length > 0) {
+        await ClubProfile.findOneAndUpdate({ userId }, { $set: clubUpdate }, { new: true });
+      }
+    } else if (user.role === 'AGENT') {
+      const agentUpdate: any = {};
+      if (updateData.fifaLicenseNumber || updateData.licenseId) {
+        agentUpdate.licenseId = updateData.fifaLicenseNumber || updateData.licenseId;
+      }
+      if (updateData.agencyName) agentUpdate.certifications = updateData.agencyName;
+
+      if (Object.keys(agentUpdate).length > 0) {
+        await AgentProfile.findOneAndUpdate({ userId }, { $set: agentUpdate }, { new: true });
+      }
+    } else if ((user.role as string) === 'GUARDIAN' || (user.role as string) === 'PARENT') {
+      const parentUpdate: any = {};
+      if (updateData.phone || updateData.contactPhone)
+        parentUpdate.contactPhone = updateData.phone || updateData.contactPhone;
+      if (updateData.address) parentUpdate.address = updateData.address;
+      if (updateData.avatar) parentUpdate.profileImage = updateData.avatar;
+
+      if (Object.keys(parentUpdate).length > 0) {
+        await ParentProfile.findOneAndUpdate({ userId }, { $set: parentUpdate }, { new: true });
+      }
+    } else if (user.role === 'ACADEMY') {
+      const academyUpdate: any = {};
+      if (updateData.academyName || updateData.name)
+        academyUpdate.name = updateData.academyName || updateData.name;
+      if (updateData.avatar) academyUpdate.logo = updateData.avatar;
+      if (updateData.country) academyUpdate.country = updateData.country;
+
+      if (Object.keys(academyUpdate).length > 0) {
+        await AcademyProfile.findOneAndUpdate({ userId }, { $set: academyUpdate }, { new: true });
+      }
+    }
+
+    return this.getUserById(userId);
   }
 
   async updateUser(id: string, updateData: Partial<IUser>): Promise<IUserDocument> {

@@ -40,6 +40,19 @@ export const globalErrorHandler: ErrorRequestHandler = (err, _req, res, _next) =
     statusCode = simplifiedError.statusCode;
     message = simplifiedError.message;
     errorSources = simplifiedError.errorSources;
+  } else if (
+    (err as any)?.type === 'entity.parse.failed' ||
+    ((err as any)?.status === 400 && err instanceof SyntaxError)
+  ) {
+    statusCode = StatusCodes.BAD_REQUEST;
+    message =
+      'Invalid JSON in request body. Standard JSON does not support comments (//). Please provide valid JSON like {} or select Body -> none.';
+    errorSources = [
+      {
+        path: '',
+        message: err.message,
+      },
+    ];
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;

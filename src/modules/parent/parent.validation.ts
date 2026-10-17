@@ -37,3 +37,11 @@ export const switchProfileZodSchema = z.object({
     childUserId: z.string().min(1, { message: 'Child User ID is required' }),
   }),
 });
+
+export const switchToParentZodSchema = z.object({
+  body: z
+    .object({
+      parentId: z.string().optional(),
+    })
+    .optional(),
+});

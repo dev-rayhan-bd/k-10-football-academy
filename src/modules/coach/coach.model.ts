@@ -16,8 +16,18 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
     fullName: { type: String, required: true },
     title: { type: String, required: true },
     yearsExperience: { type: Number, default: 0 },
-    overallRatingScore: { type: Number, default: 5.0 },
-    licenseStatus: { type: String, required: true },
+    licenseStatus: {
+      type: String,
+      enum: [
+        'UEFA Pro License',
+        'UEFA A License',
+        'UEFA B License',
+        'AFC/BFF A or B License',
+        'Grassroots / C License',
+        'No Official License',
+      ],
+      required: true,
+    },
     cvTier: { type: String, enum: ['BRONZE', 'SILVER', 'GOLD'], default: 'BRONZE' },
     speciality: { type: String, required: true },
     status: {

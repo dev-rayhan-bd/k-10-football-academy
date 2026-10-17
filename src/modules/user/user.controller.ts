@@ -174,6 +174,27 @@ export class UserController {
     });
   });
 
+  updateProfile = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user!.userId;
+    const file =
+      req.file ||
+      (Array.isArray(req.files)
+        ? req.files[0]
+        : (req.files as any)?.avatar?.[0] || (req.files as any)?.profileImage?.[0]);
+    if (file) {
+      const avatarUrl = await uploadToStorage(file, 'avatars');
+      req.body.avatar = avatarUrl;
+    }
+
+    const updatedUser = await this.service.updateMyProfile(userId, req.body);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Profile updated successfully',
+      data: updatedUser,
+    });
+  });
+
   update = catchAsync(async (req: Request, res: Response): Promise<void> => {
     if (req.file) {
       const avatarUrl = await uploadToStorage(req.file, 'avatars');

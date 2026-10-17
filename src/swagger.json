@@ -484,6 +484,108 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Users & Authentication"
+        ],
+        "summary": "Update logged-in user profile (All roles supported)",
+        "description": "Update user profile for any authenticated role. Accepts JSON or multipart/form-data with 'data' and optional 'avatar'.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "avatar": {
+                    "type": "string"
+                  },
+                  "dateOfBirth": {
+                    "type": "string"
+                  },
+                  "gender": {
+                    "type": "string",
+                    "enum": [
+                      "MALE",
+                      "FEMALE",
+                      "OTHER"
+                    ]
+                  },
+                  "country": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "type": "string"
+                  },
+                  "height": {
+                    "type": "number"
+                  },
+                  "weight": {
+                    "type": "number"
+                  },
+                  "currentClub": {
+                    "type": "string"
+                  },
+                  "yearsExperience": {
+                    "type": "number"
+                  },
+                  "coachingLicenseLevel": {
+                    "type": "string"
+                  },
+                  "preferredFormation": {
+                    "type": "string"
+                  },
+                  "clubName": {
+                    "type": "string"
+                  },
+                  "leagueTier": {
+                    "type": "string"
+                  },
+                  "fifaLicenseNumber": {
+                    "type": "string"
+                  },
+                  "agencyName": {
+                    "type": "string"
+                  },
+                  "countryOfOperation": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "JSON string containing updated profile fields"
+                  },
+                  "avatar": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated successfully"
+          }
+        }
       }
     },
     "/api/v1/players": {
@@ -906,6 +1008,19 @@
         "responses": {
           "200": {
             "description": "List of coach profiles"
+          }
+        }
+      }
+    },
+    "/api/v1/coaches/my-profile": {
+      "get": {
+        "tags": [
+          "Coaches"
+        ],
+        "summary": "Get logged-in coach profile",
+        "responses": {
+          "200": {
+            "description": "Current coach profile details"
           }
         }
       }
@@ -1469,6 +1584,35 @@
         "responses": {
           "200": {
             "description": "Successfully switched profile returning new tokens"
+          }
+        }
+      }
+    },
+    "/api/v1/parents/switch-to-parent": {
+      "post": {
+        "tags": [
+          "Parents"
+        ],
+        "summary": "Switch back from child to parent profile (Player/Guardian mode)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parentId": {
+                    "type": "string",
+                    "description": "Optional parent user ID (auto-resolved from token or parent-child link if omitted)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully switched back to parent profile returning parent user and tokens"
           }
         }
       }

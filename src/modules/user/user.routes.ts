@@ -75,6 +75,13 @@ router.post(
 );
 
 router.get('/me', auth(), userController.getProfile);
+router.patch(
+  '/me',
+  auth(),
+  upload.any() as any,
+  validateRequest(UserValidation.updateProfileZodSchema),
+  userController.updateProfile,
+);
 
 // Resource-Intensive Search/Query Route (Protected with Search Rate Limiter)
 router.get('/search', auth('ADMIN', 'SUPER_ADMIN'), searchRateLimiter, userController.getAll);

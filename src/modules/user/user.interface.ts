@@ -30,6 +30,39 @@ export interface IUser {
   height?: number;
   weight?: number;
   currentClub?: string;
+  yearsExperience?: number;
+  licenseStatus?: string;
+  coachingLicenseLevel?: string;
+  preferredFormation?: string;
+  clubName?: string;
+  title?: string;
+  league?: string;
+  leagueTier?: string;
+  country?: string;
+  fifaLicenseNumber?: string;
+  agencyName?: string;
+  countryOfOperation?: string;
+  age?: number;
+  secondaryPositions?: string[];
+  preferredFoot?: string;
+  overallRating?: number;
+  marketValue?: number;
+  cvTier?: string;
+  profileCompletion?: number;
+  isVerifiedByCoach?: boolean;
+  playerId?: string;
+  // Academy specific
+  academyId?: string;
+  academyName?: string;
+  location?: string;
+  city?: string;
+  registrationId?: string;
+  estimatedAcademySize?: string;
+  category?: string;
+  // Parent specific
+  parentProfileId?: string;
+  contactPhone?: string;
+  address?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -14,6 +14,22 @@ const userRoleEnum = z.enum([
 ]);
 const userStatusEnum = z.enum(['ACTIVE', 'INACTIVE', 'BLOCKED']);
 
+export const coachingLicenseLevelEnum = z.enum([
+  'UEFA Pro License',
+  'UEFA A License',
+  'UEFA B License',
+  'AFC/BFF A or B License',
+  'Grassroots / C License',
+  'No Official License',
+]);
+
+export const preferredFormationEnum = z.enum([
+  '4-3-3 (Attack-focused)',
+  '3-5-2 (Wingbacks control)',
+  '4-4-2 (Standard flat)',
+  '4-2-3-1 (Modern possession)',
+]);
+
 export const createUserZodSchema = z.object({
   body: z
     .object({
@@ -29,9 +45,9 @@ export const createUserZodSchema = z.object({
 
       // Coach details from Signup Form
       yearsExperience: z.union([z.number(), z.string()]).optional(),
-      licenseStatus: z.string().optional(),
-      coachingLicenseLevel: z.string().optional(),
-      preferredFormation: z.string().optional(),
+      licenseStatus: coachingLicenseLevelEnum.optional(),
+      coachingLicenseLevel: coachingLicenseLevelEnum.optional(),
+      preferredFormation: preferredFormationEnum.optional(),
 
       // Player details from Signup Form
       dateOfBirth: z.string().optional(),
@@ -267,10 +283,56 @@ export const resetPasswordZodSchema = z.object({
   }),
 });
 
+export const updateProfileZodSchema = z.object({
+  body: z.object({
+    name: z.string().min(2, 'Name must be at least 2 characters').optional(),
+    phone: z.string().optional(),
+    avatar: z.string().optional(),
+    coverPhoto: z.string().optional(),
+    dateOfBirth: z.string().or(z.date()).optional(),
+    gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
+    country: z.string().optional(),
+    address: z.string().optional(),
+
+    // Player specific
+    position: z.string().optional(),
+    secondaryPositions: z.array(z.string()).optional(),
+    preferredFoot: z.enum(['RIGHT', 'LEFT', 'BOTH']).optional(),
+    height: z.union([z.number(), z.string()]).optional(),
+    weight: z.union([z.number(), z.string()]).optional(),
+    currentClub: z.string().optional(),
+
+    // Coach specific
+    yearsExperience: z.union([z.number(), z.string()]).optional(),
+    licenseStatus: z.string().optional(),
+    coachingLicenseLevel: z.string().optional(),
+    preferredFormation: z.string().optional(),
+    coachType: z.string().optional(),
+
+    // Club / Academy specific
+    clubName: z.string().optional(),
+    academyName: z.string().optional(),
+    title: z.string().optional(),
+    league: z.string().optional(),
+    leagueTier: z.string().optional(),
+
+    // Agent specific
+    fifaLicenseNumber: z.string().optional(),
+    licenseId: z.string().optional(),
+    agencyName: z.string().optional(),
+    countryOfOperation: z.string().optional(),
+
+    // Parent specific
+    contactPhone: z.string().optional(),
+    relationship: z.string().optional(),
+  }),
+});
+
 export const UserValidation = {
   createUserZodSchema,
   loginUserZodSchema,
   updateUserZodSchema,
+  updateProfileZodSchema,
   verifyOtpZodSchema,
   resendOtpZodSchema,
   refreshTokenZodSchema,

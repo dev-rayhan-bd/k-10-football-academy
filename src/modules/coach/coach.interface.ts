@@ -4,6 +4,20 @@ export type CoachType = 'INDIVIDUAL_COACH' | 'CLUB_COACH';
 export type CoachStatus = 'AVAILABLE' | 'CONTRACTED' | 'ACTIVE' | 'INACTIVE';
 export type CvTier = 'BRONZE' | 'SILVER' | 'GOLD';
 
+export type CoachingLicenseLevel =
+  | 'UEFA Pro License'
+  | 'UEFA A License'
+  | 'UEFA B License'
+  | 'AFC/BFF A or B License'
+  | 'Grassroots / C License'
+  | 'No Official License';
+
+export type PreferredFormation =
+  | '4-3-3 (Attack-focused)'
+  | '3-5-2 (Wingbacks control)'
+  | '4-4-2 (Standard flat)'
+  | '4-2-3-1 (Modern possession)';
+
 export interface ICoachProfile {
   userId: Types.ObjectId;
   coachType: CoachType;

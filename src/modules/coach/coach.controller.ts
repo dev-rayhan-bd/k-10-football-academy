@@ -13,6 +13,16 @@ export const createCoachProfile = catchAsync(async (req: Request, res: Response)
   });
 });
 
+export const getMyCoachProfile = catchAsync(async (req: Request, res: Response) => {
+  const result = await coachService.getMyProfile((req as any).user.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'My coach profile fetched successfully',
+    data: result,
+  });
+});
+
 export const getCoachProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await coachService.getProfileById(req.params.id);
   sendResponse(res, {

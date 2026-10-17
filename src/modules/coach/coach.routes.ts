@@ -9,6 +9,7 @@ import {
 } from './coach.validation';
 import {
   createCoachProfile,
+  getMyCoachProfile,
   getCoachProfile,
   getAllCoachProfiles,
   updateCoachProfile,
@@ -29,6 +30,7 @@ router.post(
   validateRequest(createCoachProfileZodSchema),
   createCoachProfile,
 );
+router.get('/my-profile', auth('COACH', 'SUPER_ADMIN'), getMyCoachProfile);
 router.get('/', getAllCoachProfiles);
 router.get('/:id', getCoachProfile);
 router.patch(

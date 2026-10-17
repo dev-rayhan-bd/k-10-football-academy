@@ -48,6 +48,30 @@ app.use(globalRateLimiter);
  * 4. Strict Body Parsers (Payload Size Limiting - 10kb DOS Protection)
  */
 app.use(express.json({ limit: '10kb' }));
+// Gracefully heal empty whitespace or commented JSON bodies without crashing
+app.use((err: any, req: Request, _res: Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && (err as any).status === 400 && 'body' in err) {
+    const raw = (err as any).body;
+    if (!raw || (typeof raw === 'string' && raw.trim() === '')) {
+      req.body = {};
+      return next();
+    }
+    if (typeof raw === 'string') {
+      try {
+        const withoutComments = raw.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').trim();
+        if (withoutComments === '' || withoutComments === '{}') {
+          req.body = {};
+          return next();
+        }
+        req.body = JSON.parse(withoutComments);
+        return next();
+      } catch {
+        // Continue to standard error handler if unrecoverable
+      }
+    }
+  }
+  next(err);
+});
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(parseBodyData);
 

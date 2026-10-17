@@ -351,7 +351,7 @@
           }
         },
         {
-          "name": "Update User Profile (FormData with JSON 'data' + Avatar)",
+          "name": "Update Profile - Player (FormData + Avatar)",
           "request": {
             "method": "PATCH",
             "header": [],
@@ -360,9 +360,154 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"name\": \"John Updated Doe\",\n  \"phone\": \"+1-555-0199\"\n}",
+                  "value": "{\n  \"name\": \"Marcus Player (Updated)\",\n  \"phone\": \"+8801711223344\",\n  \"position\": \"Central Midfielder\",\n  \"secondaryPositions\": [\"Attacking Midfielder\", \"Right Winger\"],\n  \"preferredFoot\": \"RIGHT\",\n  \"height\": 182,\n  \"weight\": 75,\n  \"currentClub\": \"Dhaka Mohammedan SC\",\n  \"country\": \"Bangladesh\",\n  \"dateOfBirth\": \"2006-03-20\"\n}",
                   "type": "text",
-                  "description": "JSON string containing updated text parameters"
+                  "description": "Player profile update JSON"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Updated profile picture file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile - Coach (FormData + Avatar)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"Alex Coach (Updated)\",\n  \"phone\": \"+8801722334455\",\n  \"title\": \"Head Coach\",\n  \"coachType\": \"INDIVIDUAL_COACH\",\n  \"yearsExperience\": 12,\n  \"coachingLicenseLevel\": \"UEFA Pro License\",\n  \"preferredFormation\": \"4-3-3 Attacking\",\n  \"country\": \"United Kingdom\"\n}",
+                  "type": "text",
+                  "description": "Coach profile update JSON"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Updated profile picture file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile - Club (FormData + Avatar)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"Dhaka Club (Updated)\",\n  \"phone\": \"+8801733445566\",\n  \"clubName\": \"Dhaka Mariners FC\",\n  \"title\": \"Professional Football Club\",\n  \"leagueTier\": \"Bangladesh Premier League\",\n  \"country\": \"Bangladesh\"\n}",
+                  "type": "text",
+                  "description": "Club profile update JSON"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Updated profile picture file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile - Agent (FormData + Avatar)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"David Agent (Updated)\",\n  \"phone\": \"+8801744444444\",\n  \"fifaLicenseNumber\": \"FIFA-LIC-902831\",\n  \"agencyName\": \"Elite Football Management Global\",\n  \"countryOfOperation\": \"United Kingdom\"\n}",
+                  "type": "text",
+                  "description": "Agent profile update JSON"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Updated profile picture file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile - Parent (FormData + Avatar)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"Robert Silva (Updated)\",\n  \"phone\": \"+8801755555555\",\n  \"address\": \"Banani, Dhaka, Bangladesh\",\n  \"relationship\": \"Father\"\n}",
+                  "type": "text",
+                  "description": "Parent profile update JSON"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Updated profile picture file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile - Academy (FormData + Avatar)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"name\": \"K10 Elite Academy (Updated)\",\n  \"phone\": \"+8801766666666\",\n  \"academyName\": \"K10 Elite Academy\",\n  \"country\": \"Bangladesh\"\n}",
+                  "type": "text",
+                  "description": "Academy profile update JSON"
                 },
                 {
                   "key": "avatar",
@@ -651,6 +796,18 @@
                 { "key": "sort", "value": "-yearsExperience", "description": "Sorting criteria" },
                 { "key": "fields", "value": "fullName,title,speciality,avatar", "description": "Selected response fields" }
               ]
+            }
+          }
+        },
+        {
+          "name": "Get My Coach Profile (Logged In Coach)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/coaches/my-profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["coaches", "my-profile"]
             }
           }
         },
@@ -1101,7 +1258,12 @@
                 "exec": [
                   "const res = pm.response.json();",
                   "if (res.data && res.data.accessToken) {",
+                  "    if (pm.environment.get('accessToken')) {",
+                  "        pm.environment.set('parentAccessToken', pm.environment.get('accessToken'));",
+                  "        pm.environment.set('parentToken', pm.environment.get('accessToken'));",
+                  "    }",
                   "    pm.environment.set('childAccessToken', res.data.accessToken);",
+                  "    pm.environment.set('childToken', res.data.accessToken);",
                   "    pm.environment.set('accessToken', res.data.accessToken);",
                   "    console.log('✅ Switched to Child Profile! Token saved: ' + res.data.user.role);",
                   "}"
@@ -1126,6 +1288,38 @@
               "raw": "{{baseUrl}}/parents/switch-profile",
               "host": ["{{baseUrl}}"],
               "path": ["parents", "switch-profile"]
+            }
+          }
+        },
+        {
+          "name": "Switch Back to Parent Profile (Toggle to Parent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.accessToken) {",
+                  "    pm.environment.set('parentAccessToken', res.data.accessToken);",
+                  "    pm.environment.set('parentToken', res.data.accessToken);",
+                  "    pm.environment.set('accessToken', res.data.accessToken);",
+                  "    console.log('✅ Switched back to Parent Profile! Token saved: ' + res.data.user.role);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "none"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/parents/switch-to-parent",
+              "host": ["{{baseUrl}}"],
+              "path": ["parents", "switch-to-parent"]
             }
           }
         }

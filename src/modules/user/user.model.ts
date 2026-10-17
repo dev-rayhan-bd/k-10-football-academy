@@ -60,23 +60,136 @@ const userSchema = new Schema<IUserDocument>(
     height: { type: Number },
     weight: { type: Number },
     currentClub: { type: String },
+    yearsExperience: { type: Number },
+    licenseStatus: { type: String },
+    coachingLicenseLevel: { type: String },
+    preferredFormation: { type: String },
+    clubName: { type: String },
+    title: { type: String },
+    league: { type: String },
+    leagueTier: { type: String },
+    country: { type: String },
+    fifaLicenseNumber: { type: String },
+    agencyName: { type: String },
+    countryOfOperation: { type: String },
+    age: { type: Number },
+    secondaryPositions: { type: [String], default: undefined },
+    preferredFoot: { type: String },
+    overallRating: { type: Number },
+    marketValue: { type: Number },
+    cvTier: { type: String },
+    profileCompletion: { type: Number },
+    isVerifiedByCoach: { type: Boolean },
+    playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile' },
+    // Academy specific
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile' },
+    academyName: { type: String },
+    location: { type: String },
+    city: { type: String },
+    registrationId: { type: String },
+    estimatedAcademySize: { type: String },
+    category: { type: String },
+    // Parent specific
+    parentProfileId: { type: Schema.Types.ObjectId, ref: 'ParentProfile' },
+    contactPhone: { type: String },
+    address: { type: String },
   },
   {
     timestamps: true,
     toJSON: {
-      transform: (_doc, ret) => {
+      transform: (_doc, ret: any) => {
         delete ret.password;
         if (ret.role !== 'PLAYER') {
           delete ret.accountManagedBy;
+          delete ret.secondaryPositions;
+          delete ret.position;
+          delete ret.preferredFoot;
+          delete ret.height;
+          delete ret.weight;
+          delete ret.overallRating;
+          delete ret.marketValue;
+          delete ret.cvTier;
+          delete ret.profileCompletion;
+          delete ret.isVerifiedByCoach;
+          delete ret.playerId;
+        }
+        if (ret.role !== 'COACH') {
+          delete ret.yearsExperience;
+          delete ret.licenseStatus;
+          delete ret.coachingLicenseLevel;
+          delete ret.preferredFormation;
+        }
+        if (ret.role !== 'CLUB') {
+          delete ret.clubName;
+          delete ret.leagueTier;
+          delete ret.league;
+        }
+        if (ret.role !== 'AGENT') {
+          delete ret.fifaLicenseNumber;
+          delete ret.agencyName;
+          delete ret.countryOfOperation;
+        }
+        if (ret.role !== 'ACADEMY') {
+          delete ret.academyId;
+          delete ret.academyName;
+          delete ret.location;
+          delete ret.city;
+          delete ret.registrationId;
+          delete ret.estimatedAcademySize;
+        }
+        if (ret.role !== 'GUARDIAN' && ret.role !== 'PARENT') {
+          delete ret.parentProfileId;
+          delete ret.contactPhone;
+          delete ret.address;
         }
         return ret;
       },
     },
     toObject: {
-      transform: (_doc, ret) => {
+      transform: (_doc, ret: any) => {
         delete ret.password;
         if (ret.role !== 'PLAYER') {
           delete ret.accountManagedBy;
+          delete ret.secondaryPositions;
+          delete ret.position;
+          delete ret.preferredFoot;
+          delete ret.height;
+          delete ret.weight;
+          delete ret.overallRating;
+          delete ret.marketValue;
+          delete ret.cvTier;
+          delete ret.profileCompletion;
+          delete ret.isVerifiedByCoach;
+          delete ret.playerId;
+        }
+        if (ret.role !== 'COACH') {
+          delete ret.yearsExperience;
+          delete ret.licenseStatus;
+          delete ret.coachingLicenseLevel;
+          delete ret.preferredFormation;
+        }
+        if (ret.role !== 'CLUB') {
+          delete ret.clubName;
+          delete ret.leagueTier;
+          delete ret.league;
+        }
+        if (ret.role !== 'AGENT') {
+          delete ret.fifaLicenseNumber;
+          delete ret.agencyName;
+          delete ret.countryOfOperation;
+        }
+        if (ret.role !== 'ACADEMY') {
+          delete ret.academyId;
+          delete ret.academyName;
+          delete ret.location;
+          delete ret.city;
+          delete ret.registrationId;
+          delete ret.estimatedAcademySize;
+        }
+        if (ret.role !== 'GUARDIAN' && ret.role !== 'PARENT') {
+          delete ret.parentProfileId;
+          delete ret.contactPhone;
+          delete ret.address;
         }
         return ret;
       },

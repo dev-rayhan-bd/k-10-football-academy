@@ -16,6 +16,7 @@ import {
   createMatchReport,
   getMatchReports,
   switchProfile,
+  switchToParent,
 } from './parent.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -28,6 +29,10 @@ router.post(
   validateRequest(switchProfileZodSchema),
   switchProfile,
 );
+
+router.post('/switch-to-parent', auth('PLAYER', 'GUARDIAN', 'SUPER_ADMIN'), switchToParent);
+
+router.post('/switch-back', auth('PLAYER', 'GUARDIAN', 'SUPER_ADMIN'), switchToParent);
 
 router.get('/my-children', auth('GUARDIAN', 'SUPER_ADMIN'), getMyChildren);
 

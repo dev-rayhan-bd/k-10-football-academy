@@ -13,6 +13,20 @@ export const switchProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+export const switchToParent = catchAsync(async (req: Request, res: Response) => {
+  const result = await parentService.switchToParent(
+    req.user!.userId,
+    req.body?.parentId,
+    (req.user as any)?.parentUserId,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Profile switched back to parent successfully',
+    data: result,
+  });
+});
+
 export const createParentProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await parentService.createProfile(req.body);
   sendResponse(res, {

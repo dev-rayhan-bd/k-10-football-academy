@@ -29,6 +29,9 @@ export const updatePlayerProfileZodSchema = z.object({
     country: z.string().optional(),
     dualNationality: z.string().optional(),
     currentClub: z.string().optional(),
+    academy: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().email().optional(),
     contractUntil: z.string().or(z.date()).optional(),
     marketValue: z.union([z.number(), z.string()]).optional(),
     height: z.union([z.number(), z.string()]).optional(),
@@ -43,12 +46,28 @@ export const updatePlayerProfileZodSchema = z.object({
     clubHistory: z.union([z.array(z.any()), z.string()]).optional(),
     positionMap: z.union([z.array(z.any()), z.string()]).optional(),
     futsalMap: z.union([z.array(z.any()), z.string()]).optional(),
+    agentStatus: z.string().optional(),
+    agentName: z.string().optional(),
+    agencyName: z.string().optional(),
+    clubStatus: z.string().optional(),
     transferStatus: z.union([z.record(z.any()), z.string()]).optional(),
+    playerEvaluation: z.union([z.record(z.any()), z.string()]).optional(),
     coachVerification: z.union([z.record(z.any()), z.string()]).optional(),
     perceptionMetrics: z.union([z.record(z.any()), z.string()]).optional(),
     visionMetrics: z.union([z.record(z.any()), z.string()]).optional(),
     profileViews: z.union([z.number(), z.string()]).optional(),
     totalLikes: z.union([z.number(), z.string()]).optional(),
+    data: z.union([z.record(z.any()), z.string()]).optional(),
+    coachName: z.string().optional(),
+    licenseNumber: z.string().optional(),
+    clubManaged: z.string().optional(),
+    rightFoot: z.union([z.number(), z.string()]).optional(),
+    leftFoot: z.union([z.number(), z.string()]).optional(),
+    clubLogo: z.string().optional(),
+    clubName: z.string().optional(),
+    period: z.string().optional(),
+    isCurrent: z.union([z.boolean(), z.string()]).optional(),
+    addClub: z.union([z.record(z.any()), z.string()]).optional(),
   }),
 });
 
@@ -77,10 +96,11 @@ export const updateClubHistoryZodSchema = z.object({
 
 export const addClubHistoryItemZodSchema = z.object({
   body: z.object({
-    clubName: z.string().min(1, 'Club name is required'),
+    clubName: z.string().optional(),
     logoUrl: z.string().optional(),
-    period: z.string().min(1, 'Period is required'),
-    isCurrent: z.boolean().optional(),
+    period: z.string().optional(),
+    isCurrent: z.union([z.boolean(), z.string()]).optional(),
+    data: z.union([z.record(z.any()), z.string()]).optional(),
   }),
 });
 

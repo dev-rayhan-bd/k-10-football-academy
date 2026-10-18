@@ -17,6 +17,7 @@ import { playerAttributeService } from './services/player-attribute.service';
 import { playerMatchService } from './services/player-match.service';
 import { playerCareerService } from './services/player-career.service';
 import { playerMediaService } from './services/player-media.service';
+import { videoQueue } from '@/jobs/queues/video.queue';
 
 export { computeProfileCompletion };
 
@@ -115,7 +116,27 @@ export class PlayerService {
   }
 
   async updateProfile(id: string, payload: any) {
-    const existing = await PlayerProfile.findOne({ $or: [{ _id: id }, { userId: id }] });
+    let existing = await PlayerProfile.findOne({ $or: [{ _id: id }, { userId: id }] });
+    if (!existing) {
+      if (Types.ObjectId.isValid(id)) {
+        const user = await UserModel.findById(id);
+        if (user) {
+          existing = await PlayerProfile.create({
+            userId: user._id,
+            fullName: user.name || payload.fullName || 'New Player',
+            position: payload.position || user.position || 'Forward',
+            age: payload.age || user.age || 18,
+            country: payload.country || user.country || 'Bangladesh',
+            profileImage: user.avatar || '',
+          });
+          await PlayerAttributes.findOneAndUpdate(
+            { playerId: existing._id },
+            { playerId: existing._id },
+            { upsert: true, new: true },
+          );
+        }
+      }
+    }
     if (!existing) {
       throw new AppError(404, 'Player profile not found');
     }
@@ -130,6 +151,30 @@ export class PlayerService {
     }
     if (payload.profileImage) {
       await UserModel.findByIdAndUpdate(existing.userId, { avatar: payload.profileImage });
+    }
+    if (payload.dateOfBirth) {
+      const dob = new Date(payload.dateOfBirth);
+      if (!isNaN(dob.getTime())) {
+        payload.dateOfBirth = dob;
+        if (payload.age === undefined || payload.age === '') {
+          payload.age = new Date().getFullYear() - dob.getFullYear();
+        }
+      }
+    }
+    if (payload.academy && !payload.currentClub) {
+      payload.currentClub = payload.academy;
+    }
+    if (payload.coachName || payload.licenseNumber || payload.clubManaged) {
+      payload.coachVerification = {
+        ...(existing.coachVerification &&
+        typeof (existing.coachVerification as any).toObject === 'function'
+          ? (existing.coachVerification as any).toObject()
+          : existing.coachVerification || {}),
+        ...(payload.coachVerification || {}),
+        ...(payload.coachName ? { coachName: payload.coachName } : {}),
+        ...(payload.licenseNumber ? { licenseNumber: payload.licenseNumber } : {}),
+        ...(payload.clubManaged ? { clubManaged: payload.clubManaged } : {}),
+      };
     }
     if (payload.height !== undefined && payload.height !== '') {
       payload.height = Number(payload.height);
@@ -181,6 +226,11 @@ export class PlayerService {
         }
       }
     }
+    // Handle clubLogo & club adding / updating directly in updateProfile
+    if (payload.clubLogo) {
+      existing.clubLogo = payload.clubLogo;
+    }
+
     if (typeof payload.clubHistory === 'string') {
       try {
         payload.clubHistory = JSON.parse(payload.clubHistory);
@@ -188,8 +238,106 @@ export class PlayerService {
         // ignore
       }
     }
-    if (Array.isArray(payload.clubHistory) && payload.clubHistory.length > 6) {
-      throw new AppError(400, 'Maximum 6 clubs allowed in career timeline');
+
+    // Support adding or updating a single club item directly via payload (e.g. clubName, addClub)
+    let newClubItem: any = null;
+    if (payload.addClub) {
+      newClubItem =
+        typeof payload.addClub === 'string' ? JSON.parse(payload.addClub) : payload.addClub;
+    } else if (payload.clubName) {
+      newClubItem = {
+        clubName: payload.clubName,
+        period: payload.period || 'Present',
+        isCurrent:
+          payload.isCurrent !== undefined
+            ? typeof payload.isCurrent === 'string'
+              ? payload.isCurrent.toLowerCase() === 'true'
+              : Boolean(payload.isCurrent)
+            : true,
+      };
+    }
+
+    if (newClubItem) {
+      if (payload.clubLogo && !newClubItem.logoUrl) {
+        newClubItem.logoUrl = payload.clubLogo;
+      }
+      if (newClubItem.isCurrent) {
+        payload.currentClub = newClubItem.clubName;
+        existing.currentClub = newClubItem.clubName;
+      }
+      const history = Array.isArray(payload.clubHistory)
+        ? [...payload.clubHistory]
+        : existing.clubHistory && Array.isArray(existing.clubHistory)
+          ? [...existing.clubHistory]
+          : [];
+
+      const existingIdx = history.findIndex(
+        (c: any) => c.clubName && c.clubName.toLowerCase() === newClubItem.clubName.toLowerCase(),
+      );
+      if (existingIdx !== -1) {
+        history[existingIdx] = { ...history[existingIdx], ...newClubItem };
+      } else {
+        history.push(newClubItem);
+      }
+      payload.clubHistory = history;
+    } else if (
+      payload.clubLogo &&
+      Array.isArray(payload.clubHistory) &&
+      payload.clubHistory.length > 0
+    ) {
+      const targetClub =
+        payload.clubHistory.find((c: any) => c.isCurrent) ||
+        payload.clubHistory[payload.clubHistory.length - 1];
+      if (targetClub && !targetClub.logoUrl) {
+        targetClub.logoUrl = payload.clubLogo;
+      }
+    } else if (
+      payload.clubLogo &&
+      existing.currentClub &&
+      (!payload.clubHistory || payload.clubHistory.length === 0)
+    ) {
+      if (Array.isArray(existing.clubHistory)) {
+        const cur = existing.clubHistory.find(
+          (c: any) =>
+            c.isCurrent || c.clubName?.toLowerCase() === existing.currentClub?.toLowerCase(),
+        );
+        if (cur) {
+          cur.logoUrl = payload.clubLogo;
+          payload.clubHistory = existing.clubHistory;
+        }
+      }
+    }
+
+    // Map index-based uploaded club logos (e.g. clubLogo_0, clubLogo_1, clubLogo[0])
+    if (Array.isArray(payload.clubHistory) && payload.clubLogosByIndex) {
+      Object.entries(payload.clubLogosByIndex).forEach(([key, url]) => {
+        const idx = Number(key);
+        if (payload.clubHistory[idx]) {
+          payload.clubHistory[idx].logoUrl = url;
+        }
+      });
+    }
+
+    // Map sequential club logos uploaded in clubLogos field
+    if (Array.isArray(payload.clubHistory) && Array.isArray(payload.clubLogosList)) {
+      let listIdx = 0;
+      payload.clubHistory.forEach((c: any) => {
+        if (!c.logoUrl && listIdx < payload.clubLogosList.length) {
+          c.logoUrl = payload.clubLogosList[listIdx++];
+        }
+      });
+    }
+
+    if (Array.isArray(payload.clubHistory)) {
+      payload.clubHistory = payload.clubHistory.map((item: any) => {
+        if (typeof item.isCurrent === 'string') {
+          return { ...item, isCurrent: item.isCurrent.toLowerCase() === 'true' };
+        }
+        return item;
+      });
+      if (payload.clubHistory.length > 6) {
+        throw new AppError(400, 'Maximum 6 clubs allowed in career timeline');
+      }
     }
     if (typeof payload.languages === 'string') {
       try {
@@ -247,6 +395,68 @@ export class PlayerService {
         // ignore
       }
     }
+    if (typeof payload.playerEvaluation === 'string') {
+      try {
+        payload.playerEvaluation = JSON.parse(payload.playerEvaluation);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Sync player evaluation & representation fields as per client specification
+    const evalData = payload.playerEvaluation || {};
+    const agentStatus =
+      payload.agentStatus || evalData.agentStatus || existing.agentStatus || 'UNREPRESENTED';
+    const clubStatus =
+      payload.clubStatus || evalData.clubStatus || existing.clubStatus || 'WITHOUT_CLUB';
+    const agentName = payload.agentName ?? evalData.agentName ?? existing.agentName ?? '';
+    const agencyName = payload.agencyName ?? evalData.agencyName ?? existing.agencyName ?? '';
+    const currentClub =
+      payload.currentClub !== undefined
+        ? payload.currentClub
+        : evalData.currentClub !== undefined
+          ? evalData.currentClub
+          : (existing.currentClub ?? '');
+    const contractUntil = payload.contractUntil ?? evalData.contractUntil ?? existing.contractUntil;
+
+    const normAgent = String(agentStatus).toUpperCase();
+    const hasAgent = normAgent.includes('REPRESENTED') && !normAgent.includes('UNREPRESENTED');
+
+    const normClub = String(clubStatus).toUpperCase();
+    const hasClub =
+      (normClub.includes('SIGNED') || Boolean(currentClub && currentClub.trim())) &&
+      !normClub.includes('WITHOUT');
+
+    let mv =
+      payload.marketValue !== undefined
+        ? Number(payload.marketValue)
+        : evalData.marketValue !== undefined
+          ? Number(evalData.marketValue)
+          : existing.marketValue || 0;
+
+    // Business rule: Only players represented by an agent OR belonging to a professional club can specify market value
+    if (!hasAgent && !hasClub) {
+      mv = 0;
+    }
+
+    payload.agentStatus = hasAgent ? 'REPRESENTED' : 'UNREPRESENTED';
+    payload.clubStatus = hasClub ? 'SIGNED' : 'WITHOUT_CLUB';
+    payload.agentName = agentName;
+    payload.agencyName = agencyName;
+    payload.currentClub = currentClub;
+    payload.marketValue = mv;
+
+    payload.playerEvaluation = {
+      agentStatus: payload.agentStatus,
+      hasAgent,
+      agentName,
+      agencyName,
+      clubStatus: payload.clubStatus,
+      hasClub,
+      currentClub,
+      contractUntil,
+      marketValue: mv,
+    };
 
     const profile = await PlayerProfile.findOneAndUpdate({ _id: existing._id }, payload, {
       new: true,
@@ -254,6 +464,24 @@ export class PlayerService {
     });
 
     if (profile) {
+      if (payload.highlightVideo) {
+        try {
+          await videoQueue.add(
+            'process-highlight-video',
+            {
+              videoId: profile._id.toString(),
+              videoUrl: payload.highlightVideo,
+              playerId: profile._id.toString(),
+            },
+            {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 2000 },
+            },
+          );
+        } catch {
+          // Safe logging without interrupting HTTP response
+        }
+      }
       const updatedProfile = await this.recalculatePlayerStats(profile._id);
       return updatedProfile || profile;
     }

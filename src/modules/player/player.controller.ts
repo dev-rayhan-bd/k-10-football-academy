@@ -77,14 +77,67 @@ export const getAllPlayerProfiles = catchAsync(async (req: Request, res: Respons
 });
 
 export const updatePlayerProfile = catchAsync(async (req: Request, res: Response) => {
-  const payload = { ...req.body };
+  let payload = { ...req.body };
+  if (req.body.data) {
+    try {
+      const parsed = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
+      payload = { ...parsed, ...payload };
+      delete payload.data;
+    } catch {
+      // ignore
+    }
+  }
+
+  const clubLogosByIndex: Record<number, string> = {};
+  const clubLogosList: string[] = [];
+
   if (req.files && Array.isArray(req.files)) {
     for (const file of req.files as Express.Multer.File[]) {
       if (file.fieldname === 'profileImage' || file.fieldname === 'avatar') {
         payload.profileImage = await uploadToStorage(file, 'player_profiles');
-      } else if (file.fieldname === 'highlightVideo') {
+      } else if (file.fieldname === 'highlightVideo' || file.fieldname === 'video') {
         payload.highlightVideo = await uploadToStorage(file, 'player_videos');
+      } else if (
+        file.fieldname === 'clubLogo' ||
+        file.fieldname === 'clubImage' ||
+        file.fieldname === 'logo' ||
+        file.fieldname === 'crest'
+      ) {
+        payload.clubLogo = await uploadToStorage(file, 'club_crests');
+      } else {
+        const match =
+          file.fieldname.match(/clubLogo_?(\d+)/i) || file.fieldname.match(/clubLogo\[(\d+)\]/i);
+        if (match) {
+          const idx = parseInt(match[1], 10);
+          const uploadedUrl = await uploadToStorage(file, 'club_crests');
+          clubLogosByIndex[idx] = uploadedUrl;
+        } else if (file.fieldname === 'clubLogos') {
+          const uploadedUrl = await uploadToStorage(file, 'club_crests');
+          clubLogosList.push(uploadedUrl);
+        }
       }
+    }
+  }
+
+  if (Object.keys(clubLogosByIndex).length > 0) {
+    payload.clubLogosByIndex = clubLogosByIndex;
+  }
+  if (clubLogosList.length > 0) {
+    payload.clubLogosList = clubLogosList;
+  }
+
+  if (req.file) {
+    if (
+      req.file.fieldname === 'clubLogo' ||
+      req.file.fieldname === 'clubImage' ||
+      req.file.fieldname === 'logo' ||
+      req.file.fieldname === 'crest'
+    ) {
+      payload.clubLogo = await uploadToStorage(req.file, 'club_crests');
+    } else if (req.file.fieldname === 'profileImage' || req.file.fieldname === 'avatar') {
+      payload.profileImage = await uploadToStorage(req.file, 'player_profiles');
+    } else if (req.file.fieldname === 'highlightVideo' || req.file.fieldname === 'video') {
+      payload.highlightVideo = await uploadToStorage(req.file, 'player_videos');
     }
   }
 
@@ -166,7 +219,24 @@ export const updateClubHistory = catchAsync(async (req: Request, res: Response) 
   if (!playerId) {
     throw new AppError(400, 'Player ID is required or authenticate as a player');
   }
-  const result = await playerService.updateClubHistory(playerId, req.body.clubHistory);
+  let clubHistory = req.body.clubHistory;
+  if (req.body?.data) {
+    try {
+      const parsed = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
+      if (parsed.clubHistory) clubHistory = parsed.clubHistory;
+      else if (Array.isArray(parsed)) clubHistory = parsed;
+    } catch {
+      // ignore
+    }
+  }
+  if (typeof clubHistory === 'string') {
+    try {
+      clubHistory = JSON.parse(clubHistory);
+    } catch {
+      // ignore
+    }
+  }
+  const result = await playerService.updateClubHistory(playerId, clubHistory);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -180,7 +250,74 @@ export const addClubHistoryItem = catchAsync(async (req: Request, res: Response)
   if (!playerId) {
     throw new AppError(400, 'Player ID is required or authenticate as a player');
   }
-  const result = await playerService.addClubHistoryItem(playerId, req.body);
+
+  const payload: any = { ...req.body };
+  delete payload.data;
+
+  if (req.body?.data) {
+    let parsedData: any = {};
+    if (typeof req.body.data === 'string') {
+      try {
+        parsedData = JSON.parse(req.body.data);
+      } catch {
+        try {
+          const cleaned = req.body.data.replace(/,\s*([}\]])/g, '$1');
+          parsedData = JSON.parse(cleaned);
+        } catch {
+          throw new AppError(400, "Invalid JSON format in 'data' field");
+        }
+      }
+    } else if (typeof req.body.data === 'object' && req.body.data !== null) {
+      parsedData = req.body.data;
+    }
+
+    if (parsedData && typeof parsedData === 'object') {
+      Object.keys(parsedData).forEach((key) => {
+        if (parsedData[key] !== undefined && parsedData[key] !== '') {
+          payload[key] = parsedData[key];
+        }
+      });
+    }
+  }
+
+  if (req.file) {
+    payload.logoUrl = await uploadToStorage(req.file, 'club_crests');
+  }
+
+  if (req.files && Array.isArray(req.files)) {
+    for (const file of req.files as Express.Multer.File[]) {
+      if (
+        file.fieldname === 'logo' ||
+        file.fieldname === 'logoUrl' ||
+        file.fieldname === 'image' ||
+        file.fieldname === 'file'
+      ) {
+        payload.logoUrl = await uploadToStorage(file, 'club_crests');
+      }
+    }
+  }
+
+  const clubName = payload.clubName || payload.name || payload.club;
+  const period = payload.period || payload.years || payload.duration;
+  let isCurrent = payload.isCurrent;
+  if (typeof isCurrent === 'string') {
+    isCurrent = isCurrent.toLowerCase() === 'true';
+  } else if (isCurrent === undefined && typeof period === 'string') {
+    isCurrent = period.toLowerCase().includes('present');
+  }
+
+  payload.clubName = clubName;
+  payload.period = period;
+  payload.isCurrent = Boolean(isCurrent);
+
+  if (!payload.clubName) {
+    throw new AppError(400, 'Club name is required');
+  }
+  if (!payload.period) {
+    throw new AppError(400, 'Period is required (e.g. 2020 - Present)');
+  }
+
+  const result = await playerService.addClubHistoryItem(playerId, payload);
   sendResponse(res, {
     statusCode: 201,
     success: true,

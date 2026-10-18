@@ -8,7 +8,6 @@ import {
   createMatchRecordZodSchema,
   updatePlayerStylesZodSchema,
   updateClubHistoryZodSchema,
-  addClubHistoryItemZodSchema,
   updatePitchMapZodSchema,
 } from './player.validation';
 import {
@@ -67,8 +66,14 @@ router.patch(
   validateRequest(updatePlayerStylesZodSchema),
   updatePlayerStyles,
 );
-router.patch('/me/clubs', auth(), validateRequest(updateClubHistoryZodSchema), updateClubHistory);
-router.post('/me/clubs', auth(), validateRequest(addClubHistoryItemZodSchema), addClubHistoryItem);
+router.patch(
+  '/me/clubs',
+  auth(),
+  upload.any() as any,
+  validateRequest(updateClubHistoryZodSchema),
+  updateClubHistory,
+);
+router.post('/me/clubs', auth(), upload.any() as any, addClubHistoryItem);
 router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
 router.get('/me/matches', auth(), getMatchRecords);
 router.post('/me/matches', auth(), validateRequest(createMatchRecordZodSchema), addMatchRecord);
@@ -119,13 +124,14 @@ router.patch(
 router.patch(
   '/:playerId/clubs',
   auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  upload.any() as any,
   validateRequest(updateClubHistoryZodSchema),
   updateClubHistory,
 );
 router.post(
   '/:playerId/clubs',
   auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
-  validateRequest(addClubHistoryItemZodSchema),
+  upload.any() as any,
   addClubHistoryItem,
 );
 router.patch(

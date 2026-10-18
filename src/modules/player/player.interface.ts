@@ -38,6 +38,8 @@ export interface IPlayerProfile {
   country?: string;
   dualNationality?: string;
   currentClub?: string;
+  clubLogo?: string;
+  academy?: string;
   contractUntil?: Date;
   marketValue?: number;
   overallRating: number;
@@ -87,11 +89,28 @@ export interface IPlayerProfile {
     x?: number;
     y?: number;
   }>;
+  agentStatus?: 'UNREPRESENTED' | 'REPRESENTED' | string;
+  agentName?: string;
+  agencyName?: string;
+  clubStatus?: 'WITHOUT_CLUB' | 'SIGNED' | string;
   transferStatus?: {
     status?: string;
     contractUntil?: Date | string;
     agentName?: string;
     agencyName?: string;
+  };
+  playerEvaluation?: {
+    agentStatus?: string;
+    hasAgent?: boolean;
+    agentName?: string;
+    agencyName?: string;
+    clubStatus?: string;
+    hasClub?: boolean;
+    currentClub?: string;
+    contractUntil?: Date | string;
+    marketValue?: number;
+    marketValueFormatted?: string;
+    canSpecifyMarketValue?: boolean;
   };
   coachVerification?: {
     isVerified?: boolean;

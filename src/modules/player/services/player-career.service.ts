@@ -1,9 +1,31 @@
+import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
+import { UserModel } from '@/modules/user/user.model';
 import { ALLOWED_PLAYER_STYLES } from '../player.interface';
 import { PlayerProfile } from '../player.model';
 import { playerCacheService } from './player-cache.service';
 
 export class PlayerCareerService {
+  private async getOrCreateProfile(playerId: string) {
+    let profile = await PlayerProfile.findOne({
+      $or: [{ _id: playerId }, { userId: playerId }],
+    });
+    if (!profile && Types.ObjectId.isValid(playerId)) {
+      const user = await UserModel.findById(playerId);
+      if (user) {
+        profile = await PlayerProfile.create({
+          userId: user._id,
+          fullName: user.name || 'New Player',
+          position: user.position || 'Forward',
+          age: user.age || 18,
+          country: user.country || 'Bangladesh',
+          profileImage: user.avatar || '',
+        });
+      }
+    }
+    return profile;
+  }
+
   async updatePlayerStyles(playerId: string, styles: string[]) {
     if (!Array.isArray(styles)) {
       throw new AppError(400, 'Styles must be an array of strings');
@@ -16,9 +38,7 @@ export class PlayerCareerService {
         throw new AppError(400, `Invalid player style: ${style}`);
       }
     }
-    const profile = await PlayerProfile.findOne({
-      $or: [{ _id: playerId }, { userId: playerId }],
-    });
+    const profile = await this.getOrCreateProfile(playerId);
     if (!profile) {
       throw new AppError(404, 'Player profile not found');
     }
@@ -40,9 +60,7 @@ export class PlayerCareerService {
     if (clubHistory.length > 6) {
       throw new AppError(400, 'Maximum 6 clubs allowed in career timeline');
     }
-    const profile = await PlayerProfile.findOne({
-      $or: [{ _id: playerId }, { userId: playerId }],
-    });
+    const profile = await this.getOrCreateProfile(playerId);
     if (!profile) {
       throw new AppError(404, 'Player profile not found');
     }
@@ -58,9 +76,7 @@ export class PlayerCareerService {
   }
 
   async addClubHistoryItem(playerId: string, clubItem: any) {
-    const profile = await PlayerProfile.findOne({
-      $or: [{ _id: playerId }, { userId: playerId }],
-    });
+    const profile = await this.getOrCreateProfile(playerId);
     if (!profile) {
       throw new AppError(404, 'Player profile not found');
     }
@@ -79,9 +95,7 @@ export class PlayerCareerService {
   }
 
   async updatePitchMap(playerId: string, payload: { positionMap?: any[]; futsalMap?: any[] }) {
-    const profile = await PlayerProfile.findOne({
-      $or: [{ _id: playerId }, { userId: playerId }],
-    });
+    const profile = await this.getOrCreateProfile(playerId);
     if (!profile) {
       throw new AppError(404, 'Player profile not found');
     }

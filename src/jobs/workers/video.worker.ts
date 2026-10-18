@@ -14,10 +14,10 @@ export const videoWorker = new Worker<IVideoProcessingJobData>(
   { connection: redisConfig },
 );
 
-videoWorker.on('completed', (job) => {
+videoWorker.on('completed', (job: Job<IVideoProcessingJobData>) => {
   logger.info(`Video Job [${job.id}] completed successfully`);
 });
 
-videoWorker.on('failed', (job, err) => {
-  logger.error(`Video Job [${job?.id}] failed: ${err.message}`);
+videoWorker.on('failed', (job: Job<IVideoProcessingJobData> | undefined, err: Error) => {
+  logger.error(`Video Job [${job?.id}] failed: ${err?.message}`);
 });

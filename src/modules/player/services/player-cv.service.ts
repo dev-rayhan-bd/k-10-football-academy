@@ -1,8 +1,9 @@
 import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { redisCache } from '@/utils/redisCache.util';
-import { PlayerProfile } from '../player.model';
+import { PlayerProfile, PlayerAttributes } from '../player.model';
 import { ClubProfile } from '@/modules/club/club.model';
+import { UserModel } from '@/modules/user/user.model';
 import {
   normalizePositionKey,
   POSITION_ATTRIBUTE_COEFFICIENTS,
@@ -13,7 +14,7 @@ import {
 import { playerAttributeService } from './player-attribute.service';
 
 export class PlayerCvService {
-  async getProfileById(id: string, viewer?: { userId?: string; role?: string }) {
+  async getProfileById(id: string, viewer?: { userId?: string; role?: string }): Promise<any> {
     let matchStage: any;
     let cacheKey: string | null;
 
@@ -128,11 +129,39 @@ export class PlayerCvService {
       },
     ]);
 
-    if (!aggregatedProfile) {
+    const currentAggregated = aggregatedProfile;
+    if (!currentAggregated) {
+      const searchUserId =
+        (id === 'me' || id === 'my-profile') && viewer?.userId
+          ? viewer.userId
+          : Types.ObjectId.isValid(id)
+            ? id
+            : null;
+
+      if (searchUserId) {
+        const user = await UserModel.findById(searchUserId);
+        if (user) {
+          const newProfile = await PlayerProfile.create({
+            userId: user._id,
+            fullName: user.name || 'New Player',
+            position: user.position || 'Forward',
+            age: user.age || 18,
+            country: user.country || 'Bangladesh',
+            profileImage: user.avatar || '',
+          });
+          await PlayerAttributes.findOneAndUpdate(
+            { playerId: newProfile._id },
+            { playerId: newProfile._id },
+            { upsert: true, new: true },
+          );
+          return this.getProfileById(newProfile._id.toString(), viewer);
+        }
+      }
       throw new AppError(404, 'Player profile not found');
     }
 
-    const playerId = aggregatedProfile._id;
+    const aggregatedProfileToUse = currentAggregated;
+    const playerId = aggregatedProfileToUse._id;
 
     // Track profile view & club interest asynchronously without blocking the response
     if (viewer && viewer.role === 'CLUB' && viewer.userId) {
@@ -372,12 +401,50 @@ export class PlayerCvService {
     delete profileObj.matchRecords;
     delete profileObj.professionalReports;
 
-    const marketValNumber = Number(aggregatedProfile.marketValue ?? 0);
+    const rawAgentStatus =
+      aggregatedProfile.agentStatus ||
+      aggregatedProfile.playerEvaluation?.agentStatus ||
+      'UNREPRESENTED';
+    const normAgent = String(rawAgentStatus).toUpperCase();
+    const hasAgent = normAgent.includes('REPRESENTED') && !normAgent.includes('UNREPRESENTED');
+
+    const rawClubStatus =
+      aggregatedProfile.clubStatus ||
+      aggregatedProfile.playerEvaluation?.clubStatus ||
+      'WITHOUT_CLUB';
+    const normClub = String(rawClubStatus).toUpperCase();
+    const hasClub =
+      (normClub.includes('SIGNED') ||
+        Boolean(aggregatedProfile.currentClub && aggregatedProfile.currentClub.trim())) &&
+      !normClub.includes('WITHOUT');
+
+    const canSpecifyMarketValue = hasAgent || hasClub;
+    const marketValNumber = canSpecifyMarketValue ? Number(aggregatedProfile.marketValue ?? 0) : 0;
     const mvObj = formatMarketValue(marketValNumber);
+
+    const playerEvaluation = {
+      agentStatus: hasAgent ? 'REPRESENTED' : 'UNREPRESENTED',
+      agentStatusLabel: hasAgent ? 'Represented by an agent' : 'Unrepresented (no agent)',
+      hasAgent,
+      agentName: aggregatedProfile.agentName || aggregatedProfile.playerEvaluation?.agentName || '',
+      agencyName:
+        aggregatedProfile.agencyName || aggregatedProfile.playerEvaluation?.agencyName || '',
+      clubStatus: hasClub ? 'SIGNED' : 'WITHOUT_CLUB',
+      clubStatusLabel: hasClub ? 'Signed to a club' : 'Without a club',
+      hasClub,
+      currentClub: aggregatedProfile.currentClub || '',
+      contractUntil: aggregatedProfile.contractUntil || null,
+      marketValue: marketValNumber,
+      marketValueFormatted: mvObj.formatted,
+      canSpecifyMarketValue,
+    };
 
     const finalProfile = {
       ...profileObj,
       playerId: aggregatedProfile._id,
+      agentStatus: playerEvaluation.agentStatus,
+      clubStatus: playerEvaluation.clubStatus,
+      playerEvaluation,
       marketValue: marketValNumber,
       marketValueFormatted: mvObj.formatted,
       phone: userPhone,
@@ -392,6 +459,10 @@ export class PlayerCvService {
       playerStyles: aggregatedProfile.playerStyles || [],
       languages: aggregatedProfile.languages || [],
       accomplishments: aggregatedProfile.accomplishments || [],
+      clubLogo:
+        aggregatedProfile.clubLogo ||
+        aggregatedProfile.clubHistory?.find((c: any) => c.isCurrent)?.logoUrl ||
+        '',
       clubHistory: aggregatedProfile.clubHistory || [],
       positionMap: aggregatedProfile.positionMap || [],
       futsalMap: aggregatedProfile.futsalMap || [],

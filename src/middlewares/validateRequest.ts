@@ -10,14 +10,14 @@ export const validateRequest = (schema: AnyZodObject) => {
       if (typeof req.body.data === 'string') {
         try {
           const parsedData = JSON.parse(req.body.data);
-          req.body = { ...parsedData, ...req.body };
+          req.body = { ...req.body, ...parsedData };
           delete req.body.data;
         } catch {
           try {
             // Auto-heal trailing commas in JSON text (e.g. `{"role": "PARENT",}`)
             const cleaned = req.body.data.replace(/,\s*([}\]])/g, '$1');
             const parsedData = JSON.parse(cleaned);
-            req.body = { ...parsedData, ...req.body };
+            req.body = { ...req.body, ...parsedData };
             delete req.body.data;
           } catch {
             throw new AppError(
@@ -27,7 +27,7 @@ export const validateRequest = (schema: AnyZodObject) => {
           }
         }
       } else if (typeof req.body.data === 'object') {
-        req.body = { ...req.body.data, ...req.body };
+        req.body = { ...req.body, ...req.body.data };
         delete req.body.data;
       }
     }

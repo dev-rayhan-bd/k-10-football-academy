@@ -42,6 +42,18 @@ export const getPlayerProfile = catchAsync(async (req: Request, res: Response) =
   });
 });
 
+export const getPlayerCV = catchAsync(async (req: Request, res: Response) => {
+  const targetId =
+    req.params.id === 'me' || !req.params.id ? req.user?.userId || req.params.id : req.params.id;
+  const result = await playerService.getCVProfile(targetId, req.user);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player CV fetched successfully',
+    data: result,
+  });
+});
+
 export const addClubInterest = catchAsync(async (req: Request, res: Response) => {
   const playerId = req.params.playerId || req.params.id;
   const result = await playerService.addClubInterest(playerId, req.body);
@@ -131,6 +143,62 @@ export const getPlayerAttributes = catchAsync(async (req: Request, res: Response
     statusCode: 200,
     success: true,
     message: 'Player attributes fetched successfully',
+    data: result,
+  });
+});
+
+export const updatePlayerStyles = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+  const result = await playerService.updatePlayerStyles(playerId, req.body.playerStyles);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player styles updated successfully',
+    data: result,
+  });
+});
+
+export const updateClubHistory = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+  const result = await playerService.updateClubHistory(playerId, req.body.clubHistory);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Club history updated successfully',
+    data: result,
+  });
+});
+
+export const addClubHistoryItem = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+  const result = await playerService.addClubHistoryItem(playerId, req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Club added to history successfully',
+    data: result,
+  });
+});
+
+export const updatePitchMap = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+  const result = await playerService.updatePitchMap(playerId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Pitch map updated successfully',
     data: result,
   });
 });

@@ -6,14 +6,23 @@ import {
   updatePlayerProfileZodSchema,
   updatePlayerAttributesZodSchema,
   createMatchRecordZodSchema,
+  updatePlayerStylesZodSchema,
+  updateClubHistoryZodSchema,
+  addClubHistoryItemZodSchema,
+  updatePitchMapZodSchema,
 } from './player.validation';
 import {
   createPlayerProfile,
   getPlayerProfile,
+  getPlayerCV,
   getAllPlayerProfiles,
   updatePlayerProfile,
   updatePlayerAttributes,
   getPlayerAttributes,
+  updatePlayerStyles,
+  updateClubHistory,
+  addClubHistoryItem,
+  updatePitchMap,
   addMatchRecord,
   getMatchRecords,
   uploadHighlightVideo,
@@ -35,6 +44,7 @@ router.post(
 );
 router.get('/', getAllPlayerProfiles);
 router.get('/me', auth(), getPlayerProfile);
+router.get('/me/cv', auth(), getPlayerCV);
 router.patch(
   '/me',
   auth(),
@@ -51,12 +61,22 @@ router.patch(
   validateRequest(updatePlayerAttributesZodSchema),
   updatePlayerAttributes,
 );
+router.patch(
+  '/me/styles',
+  auth(),
+  validateRequest(updatePlayerStylesZodSchema),
+  updatePlayerStyles,
+);
+router.patch('/me/clubs', auth(), validateRequest(updateClubHistoryZodSchema), updateClubHistory);
+router.post('/me/clubs', auth(), validateRequest(addClubHistoryItemZodSchema), addClubHistoryItem);
+router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
 router.get('/me/matches', auth(), getMatchRecords);
 router.post('/me/matches', auth(), validateRequest(createMatchRecordZodSchema), addMatchRecord);
 router.get('/me/media', auth(), getMediaGallery);
 router.post('/me/media', auth(), upload.any() as any, uploadMediaGallery);
 router.post('/me/videos', auth(), upload.any() as any, uploadHighlightVideo);
 
+router.get('/:id/cv', optionalAuth(), getPlayerCV);
 router.get('/:id', optionalAuth(), getPlayerProfile);
 router.patch(
   '/:id',
@@ -88,6 +108,31 @@ router.patch(
   auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
   validateRequest(updatePlayerAttributesZodSchema),
   updatePlayerAttributes,
+);
+
+router.patch(
+  '/:playerId/styles',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  validateRequest(updatePlayerStylesZodSchema),
+  updatePlayerStyles,
+);
+router.patch(
+  '/:playerId/clubs',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  validateRequest(updateClubHistoryZodSchema),
+  updateClubHistory,
+);
+router.post(
+  '/:playerId/clubs',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  validateRequest(addClubHistoryItemZodSchema),
+  addClubHistoryItem,
+);
+router.patch(
+  '/:playerId/pitch-map',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  validateRequest(updatePitchMapZodSchema),
+  updatePitchMap,
 );
 
 router.post(

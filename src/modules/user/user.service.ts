@@ -26,6 +26,7 @@ import {
   FifaCardStats,
 } from '@/modules/player/player.model';
 import { ParentProfile } from '@/modules/parent/parent.model';
+import { formatMarketValue } from '@/utils/ratingCalculator';
 
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
@@ -833,6 +834,8 @@ export class UserService {
         userObj.country = userObj.country ?? playerProfile.country;
         userObj.overallRating = userObj.overallRating ?? playerProfile.overallRating;
         userObj.marketValue = userObj.marketValue ?? playerProfile.marketValue;
+        const mvObj = formatMarketValue(userObj.marketValue);
+        userObj.marketValueFormatted = mvObj.formatted;
         userObj.cvTier = userObj.cvTier ?? playerProfile.cvTier;
         userObj.profileCompletion = userObj.profileCompletion ?? playerProfile.profileCompletion;
         userObj.isVerifiedByCoach = userObj.isVerifiedByCoach ?? playerProfile.isVerifiedByCoach;

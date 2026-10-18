@@ -5,14 +5,37 @@ export type PreferredFoot = 'RIGHT' | 'LEFT' | 'BOTH';
 export type MatchResult = 'W' | 'D' | 'L';
 export type ValidationStatus = 'ASSIGNED' | 'REQUESTED' | 'REVIEWED' | 'EXPIRED';
 
+export const ALLOWED_PLAYER_STYLES = [
+  'Technical',
+  'Finesse Shot',
+  'Incisive Pass',
+  'Long Ball Specialist',
+  'Speedster',
+  'Power Header',
+  'Interceptor',
+  'Block Specialist',
+  'Clinical Finisher',
+  'Dribbling Wizard',
+  'Set Piece Specialist',
+  'Playmaker',
+  'Acrobatic',
+  'Dead Ball Specialist',
+  'Relentless',
+  'Quick Step',
+  'Trickster',
+  'Whipped Cross',
+] as const;
+
+export type PlayerStyle = (typeof ALLOWED_PLAYER_STYLES)[number];
+
 export interface IPlayerProfile {
   userId: Types.ObjectId;
   fullName: string;
   position: string;
   secondaryPositions?: string[];
-  age: number;
-  dateOfBirth: Date;
-  country: string;
+  age?: number;
+  dateOfBirth?: Date;
+  country?: string;
   dualNationality?: string;
   currentClub?: string;
   contractUntil?: Date;
@@ -37,6 +60,56 @@ export interface IPlayerProfile {
     logoUrl?: string;
     viewedAt: Date;
   }[];
+  website?: string;
+  playerStyles?: string[];
+  languages?: Array<{
+    language: string;
+    proficiency: 'Native' | 'Fluent' | 'Intermediate' | 'Basic';
+  }>;
+  accomplishments?: Array<{ year: number; title: string }>;
+  clubHistory?: Array<{
+    clubName: string;
+    logoUrl?: string;
+    period: string;
+    isCurrent?: boolean;
+  }>;
+  positionMap?: Array<{
+    slot: string;
+    position?: string;
+    role?: string;
+    x?: number;
+    y?: number;
+  }>;
+  futsalMap?: Array<{
+    slot: string;
+    position?: string;
+    role?: string;
+    x?: number;
+    y?: number;
+  }>;
+  transferStatus?: {
+    status?: string;
+    contractUntil?: Date | string;
+    agentName?: string;
+    agencyName?: string;
+  };
+  coachVerification?: {
+    isVerified?: boolean;
+    coachName?: string;
+    licenseNumber?: string;
+    clubManaged?: string;
+    verifiedAt?: Date;
+  };
+  perceptionMetrics?: {
+    spaceAwareness?: { score: number; trend: number; grade: string };
+    opponentReading?: { score: number; trend: number; grade: string };
+    gameFlowUnderstanding?: { score: number; trend: number; grade: string };
+    pressureHandling?: { score: number; trend: number; grade: string };
+  };
+  visionMetrics?: {
+    visionField?: { score: number; trend: number; grade: string };
+    targetFinding?: { score: number; trend: number; grade: string };
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -174,6 +247,7 @@ export interface IMatchRecord {
   netContribution?: number;
   interpretation?: string;
   categoryScores?: Record<string, number>;
+  categoryRatings?: Record<string, number>;
   plottedEventsJson?: string;
   reportPdfUrl?: string;
 }

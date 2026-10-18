@@ -34,8 +34,80 @@ export const updatePlayerProfileZodSchema = z.object({
     height: z.union([z.number(), z.string()]).optional(),
     weight: z.union([z.number(), z.string()]).optional(),
     preferredFoot: z.enum(['RIGHT', 'LEFT', 'BOTH']).optional(),
+    rightFootDominance: z.union([z.number(), z.string()]).optional(),
+    leftFootDominance: z.union([z.number(), z.string()]).optional(),
+    website: z.string().optional(),
+    playerStyles: z.union([z.array(z.string()), z.string()]).optional(),
+    languages: z.union([z.array(z.any()), z.string()]).optional(),
+    accomplishments: z.union([z.array(z.any()), z.string()]).optional(),
+    clubHistory: z.union([z.array(z.any()), z.string()]).optional(),
+    positionMap: z.union([z.array(z.any()), z.string()]).optional(),
+    futsalMap: z.union([z.array(z.any()), z.string()]).optional(),
+    transferStatus: z.union([z.record(z.any()), z.string()]).optional(),
+    coachVerification: z.union([z.record(z.any()), z.string()]).optional(),
+    perceptionMetrics: z.union([z.record(z.any()), z.string()]).optional(),
+    visionMetrics: z.union([z.record(z.any()), z.string()]).optional(),
     profileViews: z.union([z.number(), z.string()]).optional(),
     totalLikes: z.union([z.number(), z.string()]).optional(),
+  }),
+});
+
+export const updatePlayerStylesZodSchema = z.object({
+  body: z.object({
+    playerStyles: z
+      .array(z.string())
+      .max(4, 'Maximum 4 player styles can be selected simultaneously'),
+  }),
+});
+
+export const updateClubHistoryZodSchema = z.object({
+  body: z.object({
+    clubHistory: z
+      .array(
+        z.object({
+          clubName: z.string().min(1, 'Club name is required'),
+          logoUrl: z.string().optional(),
+          period: z.string().min(1, 'Period is required'),
+          isCurrent: z.boolean().optional(),
+        }),
+      )
+      .max(6, 'Maximum 6 clubs allowed in career timeline'),
+  }),
+});
+
+export const addClubHistoryItemZodSchema = z.object({
+  body: z.object({
+    clubName: z.string().min(1, 'Club name is required'),
+    logoUrl: z.string().optional(),
+    period: z.string().min(1, 'Period is required'),
+    isCurrent: z.boolean().optional(),
+  }),
+});
+
+export const updatePitchMapZodSchema = z.object({
+  body: z.object({
+    positionMap: z
+      .array(
+        z.object({
+          slot: z.string(),
+          position: z.string().optional(),
+          role: z.string().optional(),
+          x: z.number().optional(),
+          y: z.number().optional(),
+        }),
+      )
+      .optional(),
+    futsalMap: z
+      .array(
+        z.object({
+          slot: z.string(),
+          position: z.string().optional(),
+          role: z.string().optional(),
+          x: z.number().optional(),
+          y: z.number().optional(),
+        }),
+      )
+      .optional(),
   }),
 });
 

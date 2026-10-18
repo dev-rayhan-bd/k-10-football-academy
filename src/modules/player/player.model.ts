@@ -16,9 +16,9 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     fullName: { type: String, required: true },
     position: { type: String, required: true },
     secondaryPositions: [{ type: String }],
-    age: { type: Number, required: true },
-    dateOfBirth: { type: Date, required: true },
-    country: { type: String, required: true },
+    age: { type: Number, default: 18 },
+    dateOfBirth: { type: Date },
+    country: { type: String, default: 'Bangladesh' },
     dualNationality: { type: String },
     currentClub: { type: String },
     contractUntil: { type: Date },
@@ -45,11 +45,97 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
         viewedAt: { type: Date, default: Date.now },
       },
     ],
+    website: { type: String },
+    playerStyles: [{ type: String }],
+    languages: [
+      {
+        language: { type: String, required: true },
+        proficiency: { type: String, default: 'Intermediate' },
+      },
+    ],
+    accomplishments: [
+      {
+        year: { type: Number, required: true },
+        title: { type: String, required: true },
+      },
+    ],
+    clubHistory: [
+      {
+        clubName: { type: String, required: true },
+        logoUrl: { type: String },
+        period: { type: String, required: true },
+        isCurrent: { type: Boolean, default: false },
+      },
+    ],
+    positionMap: [
+      {
+        slot: { type: String, required: true },
+        position: { type: String },
+        role: { type: String },
+        x: { type: Number },
+        y: { type: Number },
+      },
+    ],
+    futsalMap: [
+      {
+        slot: { type: String, required: true },
+        position: { type: String },
+        role: { type: String },
+        x: { type: Number },
+        y: { type: Number },
+      },
+    ],
+    transferStatus: {
+      status: { type: String, default: 'Active' },
+      contractUntil: { type: Date },
+      agentName: { type: String },
+      agencyName: { type: String },
+    },
+    coachVerification: {
+      isVerified: { type: Boolean, default: false },
+      coachName: { type: String },
+      licenseNumber: { type: String },
+      clubManaged: { type: String },
+      verifiedAt: { type: Date },
+    },
+    perceptionMetrics: {
+      spaceAwareness: {
+        score: { type: Number, default: 85 },
+        trend: { type: Number, default: 0 },
+        grade: { type: String, default: 'GOOD' },
+      },
+      opponentReading: {
+        score: { type: Number, default: 85 },
+        trend: { type: Number, default: 0 },
+        grade: { type: String, default: 'GOOD' },
+      },
+      gameFlowUnderstanding: {
+        score: { type: Number, default: 85 },
+        trend: { type: Number, default: 0 },
+        grade: { type: String, default: 'GOOD' },
+      },
+      pressureHandling: {
+        score: { type: Number, default: 85 },
+        trend: { type: Number, default: 0 },
+        grade: { type: String, default: 'GOOD' },
+      },
+    },
+    visionMetrics: {
+      visionField: {
+        score: { type: Number, default: 85 },
+        trend: { type: Number, default: 0 },
+        grade: { type: String, default: 'GOOD' },
+      },
+      targetFinding: {
+        score: { type: Number, default: 85 },
+        trend: { type: Number, default: 0 },
+        grade: { type: String, default: 'GOOD' },
+      },
+    },
   },
   { timestamps: true },
 );
 
-PlayerProfileSchema.index({ userId: 1 });
 PlayerProfileSchema.index({ overallRating: -1 });
 PlayerProfileSchema.index({ cvTier: 1 });
 PlayerProfileSchema.index({ position: 1 });
@@ -180,6 +266,7 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
     netContribution: { type: Number },
     interpretation: { type: String },
     categoryScores: { type: Map, of: Number },
+    categoryRatings: { type: Map, of: Number },
     plottedEventsJson: { type: String },
     reportPdfUrl: { type: String },
   },

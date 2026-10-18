@@ -453,6 +453,7 @@ export interface IMatchPerformanceResult {
   netContribution: number;
   interpretation: string;
   categoryAdjustedScores: Record<CategoryKey, number>;
+  categoryRatings: Record<CategoryKey, number>;
 }
 
 export const normalizePositionKey = (pos: string): PositionKey => {
@@ -515,7 +516,52 @@ export const calculatePositionRating = (
   let totalWeight = 0;
 
   for (const [attr, weight] of Object.entries(coefficients)) {
-    const val = attributes[attr] ?? 50;
+    let val = attributes[attr];
+    if (val === undefined) {
+      if (attr === 'attPosition') val = attributes.attackingPositioning ?? attributes.attPosition;
+      else if (attr === 'decisions') val = attributes.decisionMaking ?? attributes.decisions;
+      else if (attr === 'composure') val = attributes.composition ?? attributes.composure;
+      else if (attr === 'tackling') val = attributes.standingTackle ?? attributes.tackling;
+      else if (attr === 'interceptions') val = attributes.interception ?? attributes.interceptions;
+      else if (attr === 'aerialAbility' || attr === 'aerialDuels')
+        val = attributes.aerialDuels ?? attributes.heading ?? attributes.aerialAbility;
+      else if (attr === 'oneOnOne' || attr === 'oneOnOneDefending')
+        val =
+          attributes.oneOnOneDefending ??
+          attributes.standingTackle ??
+          attributes.tackling ??
+          attributes.oneOnOne;
+      else if (attr === 'defensivePositioning')
+        val = attributes.positioning ?? attributes.defensivePositioning;
+      else if (attr === 'defensiveAwareness')
+        val = attributes.defensiveAwareness ?? attributes.awareness;
+      else if (attr === 'shortPassing' || attr === 'passing')
+        val = attributes.shortPassing ?? attributes.passing;
+      else if (attr === 'oneOnOneFinishing')
+        val = attributes.finishing ?? attributes.oneOnOneFinishing;
+      else if (attr === 'shotAccuracy')
+        val =
+          attributes.shooting ??
+          attributes.finishing ??
+          attributes.shotPower ??
+          attributes.shotAccuracy;
+      else if (attr === 'offTheBall')
+        val = attributes.attPosition ?? attributes.positioning ?? attributes.offTheBall;
+      else if (attr === 'throughPassing')
+        val = attributes.vision ?? attributes.shortPassing ?? attributes.throughPassing;
+      else if (attr === 'oneOnOneAttacking')
+        val = attributes.dribbling ?? attributes.oneOnOneAttacking;
+      else if (attr === 'chanceCreation')
+        val =
+          attributes.vision ??
+          attributes.shortPassing ??
+          attributes.crossing ??
+          attributes.chanceCreation;
+      else if (attr === 'linkUpPlay')
+        val = attributes.teamwork ?? attributes.shortPassing ?? attributes.linkUpPlay;
+      else val = 50;
+    }
+    val = val ?? 50;
     totalScore += val * weight;
     totalWeight += weight;
   }
@@ -579,10 +625,20 @@ export const calculateMatchPerformance = (
     categoryAdjustedScores[eventDef.category] += adjustedContribution;
   }
 
-  // Round category scores to 2 decimal places
+  const categoryRatings: Record<CategoryKey, number> = {
+    Attack: 50,
+    Passing: 50,
+    Possession: 50,
+    Defending: 50,
+    Discipline: 50,
+    Goalkeeping: 50,
+  };
+
+  // Round category scores and calculate 0-100 category ratings (50 + adjusted)
   for (const cat in categoryAdjustedScores) {
     const key = cat as CategoryKey;
     categoryAdjustedScores[key] = Math.round(categoryAdjustedScores[key] * 100) / 100;
+    categoryRatings[key] = Math.min(100, Math.max(0, Math.round(50 + categoryAdjustedScores[key])));
   }
 
   const netContribution = positivePoints + negativePoints;
@@ -596,5 +652,104 @@ export const calculateMatchPerformance = (
     netContribution: Math.round(netContribution * 100) / 100,
     interpretation: getInterpretationScore(overallRating),
     categoryAdjustedScores,
+    categoryRatings,
+  };
+};
+
+export const formatAttributeLabel = (key: string): string => {
+  const map: Record<string, string> = {
+    finishing: 'Finishing',
+    attPosition: 'Att. Positioning',
+    offTheBall: 'Off the Ball',
+    firstTouch: 'First Touch',
+    shotAccuracy: 'Shot Accuracy',
+    oneOnOneFinishing: '1v1 Finishing',
+    aerialAbility: 'Aerial Ability',
+    strength: 'Strength',
+    acceleration: 'Acceleration',
+    anticipation: 'Anticipation',
+    decisions: 'Decisions',
+    composure: 'Composure',
+    positioning: 'Positioning',
+    marking: 'Marking',
+    tackling: 'Tackling',
+    interceptions: 'Interceptions',
+    defensiveAwareness: 'Def. Awareness',
+    shortPassing: 'Short Passing',
+    ballControl: 'Ball Control',
+    sprintSpeed: 'Sprint Speed',
+    stamina: 'Stamina',
+    crossing: 'Crossing',
+    dribbling: 'Dribbling',
+    longPassing: 'Long Passing',
+    vision: 'Vision',
+    awareness: 'Awareness',
+    teamwork: 'Teamwork',
+    throughPassing: 'Through Passing',
+    creativity: 'Creativity',
+    chanceCreation: 'Chance Creation',
+    linkUpPlay: 'Link-up Play',
+    reflexes: 'Reflexes',
+    handling: 'Handling',
+    oneOnOne: '1v1 Defending',
+    crossClaiming: 'Cross Claiming',
+    shotStopping: 'Shot Stopping',
+    footwork: 'Footwork',
+    distribution: 'Distribution',
+    communication: 'Communication',
+    standingTackle: 'Standing Tackle',
+    slidingTackle: 'Sliding Tackle',
+    aerialDuels: 'Aerial Duels',
+    clearance: 'Clearance',
+    pressing: 'Pressing',
+    shotPower: 'Shot Power',
+    curve: 'Curve',
+    freeKick: 'Free Kick',
+    penalties: 'Penalties',
+    volleys: 'Volleys',
+    headingAccuracy: 'Heading Accuracy',
+    weakFoot: 'Weak Foot',
+    aggression: 'Aggression',
+    concentration: 'Concentration',
+    consistency: 'Consistency',
+    leadership: 'Leadership',
+    bravery: 'Bravery',
+    determination: 'Determination',
+    heading: 'Heading',
+    influence: 'Influence',
+    balance: 'Balance',
+    agility: 'Agility',
+    reactions: 'Reactions',
+    jumping: 'Jumping',
+  };
+  return map[key] || key.charAt(0).toUpperCase() + key.slice(1);
+};
+
+export const formatMarketValue = (
+  val?: number | null,
+  currency = '$',
+): { formatted: string; short: string } => {
+  if (val === undefined || val === null || isNaN(Number(val))) {
+    return { formatted: `${currency}0`, short: '0' };
+  }
+  const num = Number(val);
+  if (num === 0) {
+    return { formatted: `${currency}0`, short: '0' };
+  }
+
+  let short = `${num}`;
+  const abs = Math.abs(num);
+
+  if (abs >= 1_000_000_000) {
+    short = `${(num / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+  } else if (abs >= 1_000_000) {
+    short = `${(num / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  } else if (abs >= 1_000) {
+    short = `${(num / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  }
+
+  return {
+    formatted: `${currency}${short}`,
+    short,
   };
 };

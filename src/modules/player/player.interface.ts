@@ -249,6 +249,60 @@ export interface IFifaCardStats {
 
 export interface IFifaCardStatsDocument extends IFifaCardStats, Document {}
 
+export interface IAccurateShot {
+  x: number;
+  y: number;
+  target?: 'goal' | 'saved' | 'missed';
+}
+
+export interface IAccurateAssist {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  assistType?: 'ground' | 'through' | 'aerial' | 'cross';
+}
+
+export interface IMatchRecordStats {
+  shotsOnGoal?: number;
+  goalScored?: number;
+  assists?: number;
+  passAccurate?: number;
+  wrongPass?: number;
+  penaltiesTaken?: number;
+  freeKick?: number;
+  cornerKick?: number;
+  standTackle?: number;
+  slidingTackle?: number;
+  interception?: number;
+  fault?: number;
+  yellowCard?: number;
+  redCard?: number;
+  savesAccurate?: number;
+  goalUnsave?: number;
+  penaltiesSaves?: number;
+  punching?: number;
+  handling?: number;
+  reflex?: number;
+  aerialAbility?: number;
+  throwing?: number;
+  reactions?: number;
+  [key: string]: any;
+}
+
+export interface ICoachReviewInfo {
+  coachId?: Types.ObjectId;
+  coachEmail?: string;
+  coachName?: string;
+  paymentStatus?: 'UNPAID' | 'PAID' | 'FREE';
+  paymentAmount?: number;
+  transactionId?: string;
+  status?: 'PENDING' | 'COMPLETED' | 'UNREQUESTED';
+  evaluatedAt?: Date;
+  coachRating?: number;
+  coachFeedback?: string;
+}
+
 export interface IMatchRecord {
   playerId: Types.ObjectId;
   matchDate: Date;
@@ -259,6 +313,10 @@ export interface IMatchRecord {
   awayScore: number;
   result: MatchResult;
   location?: string;
+  weather?: string;
+  temperature?: number;
+  scoutName?: string;
+  reportCompletionType?: 'SELF' | 'COACH';
   playerRating: number;
   goals: number;
   assists: number;
@@ -269,6 +327,10 @@ export interface IMatchRecord {
   redCards?: number;
   tackles?: number;
   events?: Array<{ eventId: string; count: number }>;
+  stats?: IMatchRecordStats;
+  accurateShots?: IAccurateShot[];
+  accurateAssists?: IAccurateAssist[];
+  coachReview?: ICoachReviewInfo;
   positivePoints?: number;
   negativePoints?: number;
   netContribution?: number;

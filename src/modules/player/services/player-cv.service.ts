@@ -543,9 +543,18 @@ export class PlayerCvService {
         yellowCards: match.yellowCards ?? 0,
         redCards: match.redCards ?? 0,
         tackles: match.tackles ?? 0,
+        weather: match.weather || null,
+        temperature: match.temperature || null,
+        scoutName: match.scoutName || null,
+        reportCompletionType: match.reportCompletionType || 'SELF',
+        stats: match.stats || {},
+        accurateShots: match.accurateShots || [],
+        accurateAssists: match.accurateAssists || [],
+        coachReview: match.coachReview || null,
         file: match.reportPdfUrl || null,
         reportPdfUrl: match.reportPdfUrl || null,
-        isVerified: true,
+        isVerified:
+          match.reportCompletionType === 'COACH' ? match.coachReview?.status === 'COMPLETED' : true,
       };
     });
 

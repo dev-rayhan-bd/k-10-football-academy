@@ -221,10 +221,14 @@ export const createMatchRecordZodSchema = z.object({
     leagueType: z.string().min(1),
     homeTeam: z.string().min(1),
     awayTeam: z.string().min(1),
-    homeScore: z.number().min(0),
-    awayScore: z.number().min(0),
+    homeScore: z.number().min(0).default(0),
+    awayScore: z.number().min(0).default(0),
     result: z.enum(['W', 'D', 'L']),
     location: z.string().optional(),
+    weather: z.string().optional(),
+    temperature: z.number().optional(),
+    scoutName: z.string().optional(),
+    reportCompletionType: z.enum(['SELF', 'COACH']).optional(),
     playerRating: z.number().min(0).max(100).optional(),
     goals: z.number().optional(),
     assists: z.number().optional(),
@@ -235,6 +239,38 @@ export const createMatchRecordZodSchema = z.object({
     redCards: z.number().optional(),
     tackles: z.number().optional(),
     reportPdfUrl: z.string().optional(),
+    stats: z.record(z.any()).optional(),
+    accurateShots: z
+      .array(
+        z.object({
+          x: z.number(),
+          y: z.number(),
+          target: z.enum(['goal', 'saved', 'missed']).optional(),
+        }),
+      )
+      .optional(),
+    accurateAssists: z
+      .array(
+        z.object({
+          fromX: z.number(),
+          fromY: z.number(),
+          toX: z.number(),
+          toY: z.number(),
+          assistType: z.enum(['ground', 'through', 'aerial', 'cross']).optional(),
+        }),
+      )
+      .optional(),
+    coachReview: z
+      .object({
+        coachId: z.string().optional(),
+        coachEmail: z.string().email().optional(),
+        coachName: z.string().optional(),
+        paymentStatus: z.enum(['UNPAID', 'PAID', 'FREE']).optional(),
+        paymentAmount: z.number().optional(),
+        transactionId: z.string().optional(),
+        status: z.enum(['PENDING', 'COMPLETED', 'UNREQUESTED']).optional(),
+      })
+      .optional(),
     events: z
       .array(
         z.object({

@@ -18,6 +18,7 @@ import { playerMatchService } from './services/player-match.service';
 import { playerCareerService } from './services/player-career.service';
 import { playerMediaService } from './services/player-media.service';
 import { videoQueue } from '@/jobs/queues/video.queue';
+import { calculateMetricGrade } from '@/utils/ratingCalculator';
 
 export { computeProfileCompletion };
 
@@ -381,6 +382,26 @@ export class PlayerService {
         // ignore
       }
     }
+    // Support flat dot-notation keys for metrics if sent via multipart/form-data
+    Object.keys(payload).forEach((key) => {
+      const pMatch = key.match(/^perceptionMetrics\.([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)$/);
+      if (pMatch) {
+        const [, subKey, prop] = pMatch;
+        payload.perceptionMetrics = payload.perceptionMetrics || {};
+        payload.perceptionMetrics[subKey] = payload.perceptionMetrics[subKey] || {};
+        payload.perceptionMetrics[subKey][prop] = payload[key];
+        delete payload[key];
+      }
+      const vMatch = key.match(/^visionMetrics\.([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)$/);
+      if (vMatch) {
+        const [, subKey, prop] = vMatch;
+        payload.visionMetrics = payload.visionMetrics || {};
+        payload.visionMetrics[subKey] = payload.visionMetrics[subKey] || {};
+        payload.visionMetrics[subKey][prop] = payload[key];
+        delete payload[key];
+      }
+    });
+
     if (typeof payload.perceptionMetrics === 'string') {
       try {
         payload.perceptionMetrics = JSON.parse(payload.perceptionMetrics);
@@ -388,12 +409,90 @@ export class PlayerService {
         // ignore
       }
     }
+    if (payload.perceptionMetrics && typeof payload.perceptionMetrics === 'object') {
+      const existingPerception = (existing.perceptionMetrics as any) || {};
+      const mergedPerception: Record<string, any> = { ...existingPerception };
+
+      const perceptionKeys = [
+        'spaceAwareness',
+        'opponentReading',
+        'gameFlowUnderstanding',
+        'pressureHandling',
+      ];
+
+      for (const key of perceptionKeys) {
+        if (payload.perceptionMetrics[key] !== undefined) {
+          const currentItem = existingPerception[key] || {
+            score: 85,
+            trend: 0,
+            grade: 'GOOD',
+          };
+          const inputItem = payload.perceptionMetrics[key];
+
+          const score =
+            inputItem.score !== undefined
+              ? Math.max(0, Math.min(100, Number(inputItem.score)))
+              : currentItem.score;
+          const trend =
+            inputItem.trend !== undefined ? Number(inputItem.trend) : (currentItem.trend ?? 0);
+          const grade = inputItem.grade || calculateMetricGrade(score);
+
+          mergedPerception[key] = {
+            score,
+            trend,
+            grade,
+          };
+        }
+      }
+      payload.perceptionMetrics = mergedPerception;
+    }
+
     if (typeof payload.visionMetrics === 'string') {
       try {
         payload.visionMetrics = JSON.parse(payload.visionMetrics);
       } catch {
         // ignore
       }
+    }
+    if (payload.visionMetrics && typeof payload.visionMetrics === 'object') {
+      const existingVision = (existing.visionMetrics as any) || {};
+      const mergedVision: Record<string, any> = { ...existingVision };
+
+      const visionKeys = [
+        'peripheralVision',
+        'focusControl',
+        'patternRecognition',
+        'decisionSpeed',
+        'visualAcuity',
+        'visionField',
+        'targetFinding',
+      ];
+
+      for (const key of visionKeys) {
+        if (payload.visionMetrics[key] !== undefined) {
+          const currentItem = existingVision[key] || {
+            score: 85,
+            trend: 0,
+            grade: 'GOOD',
+          };
+          const inputItem = payload.visionMetrics[key];
+
+          const score =
+            inputItem.score !== undefined
+              ? Math.max(0, Math.min(100, Number(inputItem.score)))
+              : currentItem.score;
+          const trend =
+            inputItem.trend !== undefined ? Number(inputItem.trend) : (currentItem.trend ?? 0);
+          const grade = inputItem.grade || calculateMetricGrade(score);
+
+          mergedVision[key] = {
+            score,
+            trend,
+            grade,
+          };
+        }
+      }
+      payload.visionMetrics = mergedVision;
     }
     if (typeof payload.playerEvaluation === 'string') {
       try {

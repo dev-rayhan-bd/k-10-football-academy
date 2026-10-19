@@ -123,27 +123,52 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     },
     perceptionMetrics: {
       spaceAwareness: {
-        score: { type: Number, default: 85 },
-        trend: { type: Number, default: 0 },
-        grade: { type: String, default: 'GOOD' },
+        score: { type: Number, default: 92 },
+        trend: { type: Number, default: 3 },
+        grade: { type: String, default: 'EXCELLENT' },
       },
       opponentReading: {
-        score: { type: Number, default: 85 },
-        trend: { type: Number, default: 0 },
+        score: { type: Number, default: 88 },
+        trend: { type: Number, default: 5 },
         grade: { type: String, default: 'GOOD' },
       },
       gameFlowUnderstanding: {
         score: { type: Number, default: 85 },
-        trend: { type: Number, default: 0 },
+        trend: { type: Number, default: 2 },
         grade: { type: String, default: 'GOOD' },
       },
       pressureHandling: {
-        score: { type: Number, default: 85 },
-        trend: { type: Number, default: 0 },
-        grade: { type: String, default: 'GOOD' },
+        score: { type: Number, default: 90 },
+        trend: { type: Number, default: 4 },
+        grade: { type: String, default: 'EXCELLENT' },
       },
     },
     visionMetrics: {
+      peripheralVision: {
+        score: { type: Number, default: 87 },
+        trend: { type: Number, default: 3 },
+        grade: { type: String, default: 'GOOD' },
+      },
+      focusControl: {
+        score: { type: Number, default: 85 },
+        trend: { type: Number, default: 2 },
+        grade: { type: String, default: 'GOOD' },
+      },
+      patternRecognition: {
+        score: { type: Number, default: 89 },
+        trend: { type: Number, default: 4 },
+        grade: { type: String, default: 'GOOD' },
+      },
+      decisionSpeed: {
+        score: { type: Number, default: 91 },
+        trend: { type: Number, default: 5 },
+        grade: { type: String, default: 'EXCELLENT' },
+      },
+      visualAcuity: {
+        score: { type: Number, default: 86 },
+        trend: { type: Number, default: 1 },
+        grade: { type: String, default: 'GOOD' },
+      },
       visionField: {
         score: { type: Number, default: 85 },
         trend: { type: Number, default: 0 },

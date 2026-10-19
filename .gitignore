@@ -10,3 +10,5 @@ coverage/
 
 # DBML ERD Files
 *.dbml
+
+.vercel

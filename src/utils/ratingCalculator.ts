@@ -753,3 +753,11 @@ export const formatMarketValue = (
     short,
   };
 };
+
+export const calculateMetricGrade = (score: number | string): 'EXCELLENT' | 'GOOD' | 'AVERAGE' => {
+  const num = Number(score);
+  if (isNaN(num)) return 'GOOD';
+  if (num >= 80) return 'EXCELLENT';
+  if (num >= 60) return 'GOOD';
+  return 'AVERAGE';
+};

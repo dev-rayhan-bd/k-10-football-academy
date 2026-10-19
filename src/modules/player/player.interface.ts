@@ -126,6 +126,11 @@ export interface IPlayerProfile {
     pressureHandling?: { score: number; trend: number; grade: string };
   };
   visionMetrics?: {
+    peripheralVision?: { score: number; trend: number; grade: string };
+    focusControl?: { score: number; trend: number; grade: string };
+    patternRecognition?: { score: number; trend: number; grade: string };
+    decisionSpeed?: { score: number; trend: number; grade: string };
+    visualAcuity?: { score: number; trend: number; grade: string };
     visionField?: { score: number; trend: number; grade: string };
     targetFinding?: { score: number; trend: number; grade: string };
   };

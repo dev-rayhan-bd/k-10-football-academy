@@ -464,6 +464,76 @@ export class PlayerService {
     });
 
     if (profile) {
+      // Sync attribute updates into PlayerAttributes collection if passed
+      const attrsToUpdate =
+        payload.attributes || payload.analysisOfPlayerAttributes || payload.categories;
+      if (attrsToUpdate) {
+        await playerAttributeService.updateAttributes(profile._id.toString(), attrsToUpdate);
+      } else {
+        const attributeKeys = [
+          'ballControl',
+          'dribbling',
+          'shortPassing',
+          'longPassing',
+          'crossing',
+          'shooting',
+          'finishing',
+          'longShots',
+          'positioning',
+          'vision',
+          'anticipation',
+          'composure',
+          'composition',
+          'teamwork',
+          'workRate',
+          'decisions',
+          'attPosition',
+          'acceleration',
+          'sprintSpeed',
+          'stamina',
+          'strength',
+          'balance',
+          'agility',
+          'reactions',
+          'jumping',
+          'aggression',
+          'concentration',
+          'consistency',
+          'interceptions',
+          'marking',
+          'leadership',
+          'bravery',
+          'determination',
+          'heading',
+          'firstTouch',
+          'shotPower',
+          'curve',
+          'freeKick',
+          'penalties',
+          'volleys',
+          'headingAccuracy',
+          'weakFoot',
+          'standingTackle',
+          'slidingTackle',
+          'tackling',
+          'interception',
+          'aerialDuels',
+          'clearance',
+          'pressing',
+          'defensiveAwareness',
+        ];
+        const hasDirectAttr = attributeKeys.some((k) => payload[k] !== undefined);
+        if (hasDirectAttr) {
+          const directAttrs: Record<string, any> = {};
+          attributeKeys.forEach((k) => {
+            if (payload[k] !== undefined && payload[k] !== '') {
+              directAttrs[k] = Number(payload[k]);
+            }
+          });
+          await playerAttributeService.updateAttributes(profile._id.toString(), directAttrs);
+        }
+      }
+
       if (payload.highlightVideo) {
         try {
           await videoQueue.add(

@@ -267,10 +267,100 @@ export class PlayerCvService {
       aggregatedProfile.rightFootDominance ??
       (prefFoot === 'LEFT' ? 25 : prefFoot === 'BOTH' ? 50 : 80);
     const leftFoot = aggregatedProfile.leftFootDominance ?? 100 - rightFoot;
+    const headingScore = rawAttrDoc.heading ?? rawAttrDoc.headingAccuracy ?? 70;
+    const footOverallScore = Math.round((rightFoot + leftFoot + headingScore) / 3);
+
     const footDonut = {
+      overall: footOverallScore,
+      percentage: `${footOverallScore}%`,
       right: rightFoot,
+      rightFoot,
       left: leftFoot,
+      leftFoot,
+      heading: headingScore,
       preferredFoot: prefFoot,
+    };
+
+    const technicalOverall = categoryAverages.Technical ?? 50;
+    const tacticalOverall = categoryAverages.Tactical ?? 50;
+    const physicalOverall = categoryAverages.Physical ?? 50;
+    const mentalOverall = categoryAverages.Mental ?? 50;
+    const attackingOverall = categoryAverages.Attacking ?? 50;
+    const defendingOverall = categoryAverages.Defending ?? 50;
+
+    const performanceAnalytics = {
+      skills: {
+        overall: skillsDonutScore,
+        percentage: `${skillsDonutScore}%`,
+        categories: {
+          technical: technicalOverall,
+          tactical: tacticalOverall,
+          physical: physicalOverall,
+          mental: mentalOverall,
+          attacking: attackingOverall,
+          defending: defendingOverall,
+        },
+      },
+      foot: {
+        overall: footOverallScore,
+        percentage: `${footOverallScore}%`,
+        rightFoot,
+        leftFoot,
+        heading: headingScore,
+        preferredFoot: prefFoot,
+      },
+    };
+
+    const techObj: Record<string, any> = formattedAttributes?.categories?.technical || {};
+    const tactObj: Record<string, any> = formattedAttributes?.categories?.tactical || {};
+    const physObj: Record<string, any> = formattedAttributes?.categories?.physical || {};
+    const mentObj: Record<string, any> = formattedAttributes?.categories?.mental || {};
+    const attObj: Record<string, any> = formattedAttributes?.categories?.attacking || {};
+    const defObj: Record<string, any> = formattedAttributes?.categories?.defending || {};
+
+    const analysisOfPlayerAttributes = {
+      technical: {
+        overallScore: technicalOverall,
+        ballControl: techObj.ballControl ?? 50,
+        dribbling: techObj.dribbling ?? 50,
+        shortPassing: techObj.shortPassing ?? 50,
+        longPassing: techObj.longPassing ?? 50,
+      },
+      tactical: {
+        overallScore: tacticalOverall,
+        positioning: tactObj.positioning ?? 50,
+        vision: tactObj.vision ?? 50,
+        anticipation: tactObj.anticipation ?? 50,
+        composition: tactObj.composition ?? tactObj.composure ?? 50,
+      },
+      physical: {
+        overallScore: physicalOverall,
+        acceleration: physObj.acceleration ?? 50,
+        sprintSpeed: physObj.sprintSpeed ?? 50,
+        stamina: physObj.stamina ?? 50,
+        strength: physObj.strength ?? 50,
+      },
+      mental: {
+        overallScore: mentalOverall,
+        aggression: mentObj.aggression ?? 50,
+        interceptions: mentObj.interceptions ?? 50,
+        marking: mentObj.marking ?? 50,
+        leadership: mentObj.leadership ?? 50,
+      },
+      attacking: {
+        overallScore: attackingOverall,
+        firstTouch: attObj.firstTouch ?? 50,
+        shotPower: attObj.shotPower ?? 50,
+        curve: attObj.curve ?? 50,
+        freeKick: attObj.freeKick ?? 50,
+      },
+      defending: {
+        overallScore: defendingOverall,
+        standingTackle: defObj.standingTackle ?? 50,
+        slidingTackle: defObj.slidingTackle ?? 50,
+        interception: defObj.interception ?? 50,
+        marking: defObj.marking ?? 50,
+      },
     };
 
     // Fast memory aggregation for match metrics
@@ -495,6 +585,8 @@ export class PlayerCvService {
         reports: totalReportsCount,
       },
       totalReports: totalReportsCount,
+      performanceAnalytics,
+      analysisOfPlayerAttributes,
       attributes: formattedAttributes,
       categoryAverages,
       skillsDonutScore,

@@ -229,7 +229,12 @@ export const createMatchRecordZodSchema = z.object({
     goals: z.number().optional(),
     assists: z.number().optional(),
     passes: z.number().optional(),
+    passAccuracy: z.number().optional(),
     minutesPlayed: z.number().optional(),
+    yellowCards: z.number().optional(),
+    redCards: z.number().optional(),
+    tackles: z.number().optional(),
+    reportPdfUrl: z.string().optional(),
     events: z
       .array(
         z.object({

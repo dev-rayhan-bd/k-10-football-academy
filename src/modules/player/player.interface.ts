@@ -260,6 +260,9 @@ export interface IMatchRecord {
   passes: number;
   passAccuracy: number;
   minutesPlayed: number;
+  yellowCards?: number;
+  redCards?: number;
+  tackles?: number;
   events?: Array<{ eventId: string; count: number }>;
   positivePoints?: number;
   negativePoints?: number;

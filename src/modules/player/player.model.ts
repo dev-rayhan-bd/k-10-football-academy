@@ -278,6 +278,9 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
     passes: { type: Number, default: 0 },
     passAccuracy: { type: Number, default: 0 },
     minutesPlayed: { type: Number, default: 0 },
+    yellowCards: { type: Number, default: 0 },
+    redCards: { type: Number, default: 0 },
+    tackles: { type: Number, default: 0 },
     events: [
       {
         eventId: { type: String, required: true },

@@ -370,6 +370,7 @@ export class PlayerCvService {
     let totalAssists = 0;
     let totalPasses = 0;
     let totalPassAccSum = 0;
+    let totalTackles = 0;
     let wins = 0;
     let draws = 0;
     let losses = 0;
@@ -381,6 +382,7 @@ export class PlayerCvService {
       totalAssists += m.assists || 0;
       totalPasses += m.passes || 0;
       totalPassAccSum += m.passAccuracy || 0;
+      totalTackles += m.tackles || 0;
       if (m.result === 'W') wins++;
       else if (m.result === 'D') draws++;
       else if (m.result === 'L') losses++;
@@ -389,6 +391,7 @@ export class PlayerCvService {
     }
 
     const avgPassAccuracy = totalMatches > 0 ? Math.round(totalPassAccSum / totalMatches) : 0;
+    const avgTackles = totalMatches > 0 ? Math.round((totalTackles / totalMatches) * 10) / 10 : 0;
     const avgMatchRating =
       totalMatches > 0 ? Math.round((sumNormalizedRatings / totalMatches) * 10) / 100 : 6.0;
     const formGuide = matchRecords
@@ -445,6 +448,9 @@ export class PlayerCvService {
         passes: match.passes ?? 0,
         passAccuracy: match.passAccuracy ?? 0,
         minutesPlayed: match.minutesPlayed ?? 0,
+        yellowCards: match.yellowCards ?? 0,
+        redCards: match.redCards ?? 0,
+        tackles: match.tackles ?? 0,
         file: match.reportPdfUrl || null,
         reportPdfUrl: match.reportPdfUrl || null,
         isVerified: true,
@@ -603,6 +609,7 @@ export class PlayerCvService {
         totalAssists,
         totalPasses,
         avgPassAccuracy,
+        avgTackles,
         wins,
         draws,
         losses,

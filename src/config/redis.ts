@@ -7,7 +7,12 @@ export const redisConfig = {
   port: env.REDIS_PORT,
   password: env.REDIS_PASSWORD || undefined,
   maxRetriesPerRequest: null, // Critical requirement for BullMQ compatibility
+  enableOfflineQueue: false,
   retryStrategy(times: number) {
+    if (process.env.RENDER && times > 3) {
+      // Don't keep blocking forever on Render if Redis is missing
+      return null;
+    }
     // Backoff reconnect delay: 2s, 4s, max 5s between retry attempts
     const delay = Math.min(times * 2000, 5000);
     return delay;

@@ -12,14 +12,19 @@ async function bootstrap() {
     // 1. Connect to Database
     await connectDB();
 
-    // 2. Initialize BullMQ Background Workers
-    initBackgroundJobs();
+    // 2. Initialize BullMQ Background Workers (Only if Redis is configured)
+    if ((process.env.REDIS_HOST && process.env.REDIS_HOST !== '127.0.0.1') || !process.env.RENDER) {
+      initBackgroundJobs();
+    } else {
+      logger.warn(
+        'Skipping BullMQ background workers on Render because external Redis is not configured.',
+      );
+    }
 
     // 3. Start HTTP Server
-    server = app.listen(env.PORT, () => {
-      logger.info(
-        `⚽ K10 Football Academy Server running in ${env.NODE_ENV} mode on port ${env.PORT}`,
-      );
+    const port = Number(process.env.PORT) || env.PORT || 5000;
+    server = app.listen(port, '0.0.0.0', () => {
+      logger.info(`⚽ K10 Football Academy Server running in ${env.NODE_ENV} mode on port ${port}`);
     });
 
     /**

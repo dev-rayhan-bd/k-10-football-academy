@@ -4,6 +4,7 @@ import { calculateMatchPerformance } from '@/utils/ratingCalculator';
 import { IMatchRecord } from '../player.interface';
 import { PlayerProfile, MatchRecord } from '../player.model';
 import { playerStatsService } from './player-stats.service';
+import { parseTimerInput } from './game-report.service';
 
 export class PlayerMatchService {
   async addMatchRecord(payload: Partial<IMatchRecord>) {
@@ -50,9 +51,10 @@ export class PlayerMatchService {
         }));
       }
 
-      const minutes =
-        payload.minutesPlayed && payload.minutesPlayed > 0 ? payload.minutesPlayed : 90;
-      payload.minutesPlayed = minutes;
+      const timerResult = parseTimerInput(payload as any);
+      payload.minutesPlayed = timerResult.minutesPlayed;
+      payload.matchDuration = timerResult.matchDuration;
+      const minutes = timerResult.minutesPlayed;
 
       if (payload.events && payload.events.length > 0) {
         const position = targetProfile.position || 'CM';

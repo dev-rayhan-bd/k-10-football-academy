@@ -295,3 +295,44 @@ export const getWelcomeEmailTemplate = (name: string, role: string): string => {
     footerNote: 'We are thrilled to have you in the K10 Football family!',
   });
 };
+
+/**
+ * Coach Match Report Evaluation Request Template (Sent to Coach)
+ */
+export const getCoachReportRequestEmailTemplate = (
+  coachName: string,
+  playerName: string,
+  matchDetails: { leagueType: string; homeTeam: string; awayTeam: string; matchDate: string },
+  actionUrl: string,
+): string => {
+  return renderBaseTemplate({
+    title: 'New Game Report Review Request - K10 Football',
+    subtitle: 'COACH EVALUATION REQUEST',
+    name: coachName,
+    message: `Player <b>${playerName}</b> has requested your professional match review and verified evaluation for their recent match: <b>${matchDetails.homeTeam} vs ${matchDetails.awayTeam}</b> (${matchDetails.leagueType}) on ${matchDetails.matchDate}.<br><br>The evaluation fee of <b>$6.99</b> has been paid. Please review the match performance, enter the stats, and submit the final evaluation.`,
+    actionText: 'START MATCH EVALUATION',
+    actionUrl,
+    footerNote: 'Professional analysis delivered within 48 hours is expected.',
+  });
+};
+
+/**
+ * Player Report Evaluated Notification Template (Sent to Player)
+ */
+export const getPlayerReportCompletedEmailTemplate = (
+  playerName: string,
+  coachName: string,
+  rating: number,
+  interpretation: string,
+  actionUrl: string,
+): string => {
+  return renderBaseTemplate({
+    title: 'Your Match Report Has Been Evaluated! - K10 Football',
+    subtitle: 'COACH EVALUATION COMPLETED',
+    name: playerName,
+    message: `Great news! Coach <b>${coachName}</b> has completed the official evaluation of your match performance.<br><br>Your calculated Match Rating is <b>${rating} / 10</b> (<b>${interpretation}</b>). Your official Player CV has been updated with verified statistics.`,
+    actionText: 'VIEW MY UPDATED CV',
+    actionUrl,
+    footerNote: 'Keep striving for excellence on the pitch!',
+  });
+};

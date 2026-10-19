@@ -515,13 +515,20 @@ export class PlayerCvService {
         title: match.awayTeam ? `vs ${match.awayTeam}` : 'Match Report',
         matchDate: match.matchDate,
         date: match.matchDate,
-        leagueType: match.leagueType,
+        playerInfo: match.playerInfo || null,
+        gameType: match.gameType || match.leagueType,
+        gameDate: match.gameDate || match.matchDate,
+        gameLocation: match.gameLocation || match.location || 'London',
+        matchResult:
+          match.matchResult ||
+          `${match.homeTeam || 'Home'} ${match.homeScore ?? 0} x ${match.awayScore ?? 0} ${match.awayTeam || 'Opponent'}`,
+        leagueType: match.leagueType || match.gameType,
         homeTeam: match.homeTeam,
         awayTeam: match.awayTeam,
         homeScore: match.homeScore ?? 0,
         awayScore: match.awayScore ?? 0,
         result: match.result,
-        location: match.location || 'Home Ground',
+        location: match.gameLocation || match.location || 'Home Ground',
         playerRating: r10,
         rating: r10,
         rating10: r10,
@@ -538,8 +545,13 @@ export class PlayerCvService {
         goals: match.goals ?? 0,
         assists: match.assists ?? 0,
         passes: match.passes ?? 0,
-        passAccuracy: match.passAccuracy ?? 0,
         minutesPlayed: match.minutesPlayed ?? 0,
+        matchDuration:
+          match.matchDuration ||
+          (match.minutesPlayed ? `${Math.floor(match.minutesPlayed)}:00` : '00:00'),
+        timer:
+          match.matchDuration ||
+          (match.minutesPlayed ? `${Math.floor(match.minutesPlayed)}:00` : '00:00'),
         yellowCards: match.yellowCards ?? 0,
         redCards: match.redCards ?? 0,
         tackles: match.tackles ?? 0,
@@ -573,6 +585,34 @@ export class PlayerCvService {
             : 'N/A',
       action: report.coachReviewStatus === 'PENDING' ? 'Waiting...' : 'View',
     }));
+
+    const coachGameReports = matchRecords
+      .filter(
+        (m) =>
+          m.reportCompletionType === 'COACH' ||
+          (m.coachReview && m.coachReview.paymentStatus !== 'FREE'),
+      )
+      .map((m) => ({
+        _id: m._id,
+        title: m.awayTeam ? `vs ${m.awayTeam} (Coach Review)` : 'Requested from Coach',
+        rating:
+          m.coachReview?.status === 'COMPLETED'
+            ? m.coachReview?.coachRating || m.playerRating
+            : 'N/A',
+        coachName: m.coachReview?.coachName || 'Coach',
+        coachFeedback: m.coachReview?.coachFeedback || '',
+        amount: m.coachReview?.paymentAmount ? `$${m.coachReview.paymentAmount}` : '$6.99',
+        date: m.matchDate || m.gameDate,
+        status:
+          m.coachReview?.status === 'COMPLETED'
+            ? 'Completed'
+            : m.coachReview?.paymentStatus === 'PAID'
+              ? 'Pending'
+              : 'Awaiting Payment',
+        action: m.coachReview?.status === 'COMPLETED' ? 'View' : 'Waiting...',
+      }));
+
+    const allProfessionalReports = [...mappedProfessionalReports, ...coachGameReports];
 
     const userObj = aggregatedProfile.user || {};
     const userPhone = userObj.phone || '';
@@ -879,7 +919,7 @@ export class PlayerCvService {
         avgMatchRating,
       },
       recentMatches,
-      professionalReports: mappedProfessionalReports,
+      professionalReports: allProfessionalReports,
     };
 
     // Cache profile in Redis for both profileId and userId across PROFILE & CV keys (TTL: 5 minutes = 300s)

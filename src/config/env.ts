@@ -30,6 +30,12 @@ const envSchema = z.object({
   AWS_REGION: z.string().optional(),
   AWS_BUCKET_NAME: z.string().optional(),
   ALLOWED_ORIGINS: z.string().optional(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_SUCCESS_URL: z.string().default('http://localhost:3000/payment/success'),
+  STRIPE_CANCEL_URL: z.string().default('http://localhost:3000/payment/cancel'),
+  CLIENT_URL: z.string().optional(),
 });
 
 if (!process.env.SMTP_PASS && process.env.APP_PASSWARD) {

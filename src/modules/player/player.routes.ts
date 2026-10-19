@@ -9,6 +9,8 @@ import {
   updatePlayerStylesZodSchema,
   updateClubHistoryZodSchema,
   updatePitchMapZodSchema,
+  requestCoachGameReportZodSchema,
+  completeCoachGameReportZodSchema,
 } from './player.validation';
 import {
   createPlayerProfile,
@@ -29,6 +31,12 @@ import {
   getMediaGallery,
   addClubInterest,
 } from './player.controller';
+import {
+  createSelfGameReport,
+  requestCoachGameReport,
+  getCoachPendingReports,
+  completeCoachGameReport,
+} from './game-report.controller';
 
 import { upload } from '@/middlewares/multer';
 
@@ -77,6 +85,28 @@ router.post('/me/clubs', auth(), upload.any() as any, addClubHistoryItem);
 router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
 router.get('/me/matches', auth(), getMatchRecords);
 router.post('/me/matches', auth(), validateRequest(createMatchRecordZodSchema), addMatchRecord);
+
+// Dedicated Game Report Flows (Screen 1 & 2 vs Screen 3, 4, 5)
+router.post(
+  '/me/game-reports/self',
+  auth(),
+  validateRequest(createMatchRecordZodSchema),
+  createSelfGameReport,
+);
+router.post(
+  '/me/game-reports/request-coach',
+  auth(),
+  validateRequest(requestCoachGameReportZodSchema),
+  requestCoachGameReport,
+);
+router.get('/coach/game-reports/pending', auth('SUPER_ADMIN', 'COACH'), getCoachPendingReports);
+router.patch(
+  '/coach/game-reports/:reportId/complete',
+  auth('SUPER_ADMIN', 'COACH'),
+  validateRequest(completeCoachGameReportZodSchema),
+  completeCoachGameReport,
+);
+
 router.get('/me/media', auth(), getMediaGallery);
 router.post('/me/media', auth(), upload.any() as any, uploadMediaGallery);
 router.post('/me/videos', auth(), upload.any() as any, uploadHighlightVideo);

@@ -15,6 +15,7 @@ import { globalRateLimiter } from '@/config/rateLimit.config';
 import notFound from '@/middlewares/notFound';
 import { parseBodyData } from '@/middlewares/parseBodyData';
 import { applicationRoutes } from '@/routes';
+import { handleStripeGameReportWebhook } from '@/modules/player/game-report.controller';
 import { globalErrorHandler } from '@/middlewares/globalErrorHandler';
 import { logger } from '@/utils/logger';
 import { sendResponse } from '@/utils/sendResponse';
@@ -45,7 +46,16 @@ app.use(corsSecurity);
 app.use(globalRateLimiter);
 
 /**
- * 4. Strict Body Parsers (Payload Size Limiting - 10kb DOS Protection)
+ * 4. Stripe Webhook Endpoint (Requires Raw Body for Cryptographic Signature Verification)
+ */
+app.post(
+  '/api/v1/payments/webhook',
+  express.raw({ type: 'application/json' }),
+  handleStripeGameReportWebhook,
+);
+
+/**
+ * 5. Strict Body Parsers (Payload Size Limiting - 10kb DOS Protection)
  */
 app.use(express.json({ limit: '10kb' }));
 // Gracefully heal empty whitespace or commented JSON bodies without crashing

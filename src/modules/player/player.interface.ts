@@ -275,6 +275,7 @@ export interface IMatchRecordStats {
   standTackle?: number;
   slidingTackle?: number;
   interception?: number;
+  appearances?: number;
   fault?: number;
   yellowCard?: number;
   redCard?: number;
@@ -303,26 +304,44 @@ export interface ICoachReviewInfo {
   coachFeedback?: string;
 }
 
+export interface IGameReportPlayerInfo {
+  playerName?: string;
+  dateOfBirth?: string | Date;
+  clubName?: string;
+  position?: string;
+  foot?: string;
+  characteristics?: string[];
+  weight?: number;
+  height?: number;
+}
+
 export interface IMatchRecord {
   playerId: Types.ObjectId;
-  matchDate: Date;
-  leagueType: string;
-  homeTeam: string;
-  awayTeam: string;
-  homeScore: number;
-  awayScore: number;
-  result: MatchResult;
-  location?: string;
+  playerInfo?: IGameReportPlayerInfo;
+  gameType?: string;
+  gameDate?: Date | string;
+  gameLocation?: string;
+  matchResult?: string;
   weather?: string;
   temperature?: number;
   scoutName?: string;
   reportCompletionType?: 'SELF' | 'COACH';
+  // Legacy optional compatibility
+  matchDate?: Date;
+  leagueType?: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeScore?: number;
+  awayScore?: number;
+  result?: MatchResult;
+  location?: string;
   playerRating: number;
   goals: number;
   assists: number;
   passes: number;
   passAccuracy: number;
   minutesPlayed: number;
+  matchDuration?: string;
   yellowCards?: number;
   redCards?: number;
   tackles?: number;

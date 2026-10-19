@@ -217,13 +217,29 @@ export const updatePlayerAttributesZodSchema = z.object({
 export const createMatchRecordZodSchema = z.object({
   body: z.object({
     playerId: z.string().optional(),
-    matchDate: z.string().or(z.date()),
-    leagueType: z.string().min(1),
-    homeTeam: z.string().min(1),
-    awayTeam: z.string().min(1),
-    homeScore: z.number().min(0).default(0),
-    awayScore: z.number().min(0).default(0),
-    result: z.enum(['W', 'D', 'L']),
+    playerInfo: z
+      .object({
+        playerName: z.string().optional(),
+        dateOfBirth: z.string().or(z.date()).optional(),
+        clubName: z.string().optional(),
+        position: z.string().optional(),
+        foot: z.string().optional(),
+        characteristics: z.array(z.string()).optional(),
+        weight: z.number().optional(),
+        height: z.number().optional(),
+      })
+      .optional(),
+    gameType: z.string().optional(),
+    gameDate: z.string().or(z.date()).optional(),
+    gameLocation: z.string().optional(),
+    matchResult: z.string().optional(),
+    matchDate: z.string().or(z.date()).optional(),
+    leagueType: z.string().optional(),
+    homeTeam: z.string().optional(),
+    awayTeam: z.string().optional(),
+    homeScore: z.number().min(0).default(0).optional(),
+    awayScore: z.number().min(0).default(0).optional(),
+    result: z.enum(['W', 'D', 'L']).default('W').optional(),
     location: z.string().optional(),
     weather: z.string().optional(),
     temperature: z.number().optional(),
@@ -232,9 +248,15 @@ export const createMatchRecordZodSchema = z.object({
     playerRating: z.number().min(0).max(100).optional(),
     goals: z.number().optional(),
     assists: z.number().optional(),
-    passes: z.number().optional(),
-    passAccuracy: z.number().optional(),
-    minutesPlayed: z.number().optional(),
+    timer: z.string().optional(),
+    matchTime: z.string().optional(),
+    matchDuration: z.string().optional(),
+    minutesPlayed: z
+      .union([
+        z.number().min(0.01, 'minutesPlayed must be greater than 0'),
+        z.string().min(1, 'Timer / minutesPlayed is required'),
+      ])
+      .optional(),
     yellowCards: z.number().optional(),
     redCards: z.number().optional(),
     tackles: z.number().optional(),
@@ -280,5 +302,76 @@ export const createMatchRecordZodSchema = z.object({
       )
       .optional(),
     plottedEventsJson: z.string().optional(),
+  }),
+});
+
+export const requestCoachGameReportZodSchema = z.object({
+  body: z.object({
+    coachId: z.string().optional(),
+    coachEmail: z.string().email('Valid coach email is required').optional(),
+    coachName: z.string().optional(),
+    playerInfo: z
+      .object({
+        playerName: z.string().optional(),
+        dateOfBirth: z.string().or(z.date()).optional(),
+        clubName: z.string().optional(),
+        position: z.string().optional(),
+        foot: z.string().optional(),
+        characteristics: z.array(z.string()).optional(),
+        weight: z.number().optional(),
+        height: z.number().optional(),
+      })
+      .optional(),
+    gameType: z.string().optional(),
+    gameDate: z.string().or(z.date()).optional(),
+    gameLocation: z.string().optional(),
+    matchResult: z.string().optional(),
+    leagueType: z.string().optional(),
+    homeTeam: z.string().optional(),
+    awayTeam: z.string().optional(),
+    homeScore: z.number().min(0).default(0).optional(),
+    awayScore: z.number().min(0).default(0).optional(),
+    result: z.enum(['W', 'D', 'L']).default('W').optional(),
+    matchDate: z.string().or(z.date()).optional(),
+    location: z.string().optional(),
+    weather: z.string().optional(),
+    temperature: z.number().optional(),
+    scoutName: z.string().optional(),
+  }),
+});
+
+export const completeCoachGameReportZodSchema = z.object({
+  body: z.object({
+    timer: z.string().optional(),
+    matchTime: z.string().optional(),
+    matchDuration: z.string().optional(),
+    minutesPlayed: z
+      .union([
+        z.number().min(0.01, 'minutesPlayed must be greater than 0'),
+        z.string().min(1, 'Timer / minutesPlayed is required'),
+      ])
+      .optional(),
+    stats: z.record(z.any()).optional(),
+    accurateShots: z
+      .array(
+        z.object({
+          x: z.number(),
+          y: z.number(),
+          target: z.enum(['goal', 'saved', 'missed']).optional(),
+        }),
+      )
+      .optional(),
+    accurateAssists: z
+      .array(
+        z.object({
+          fromX: z.number(),
+          fromY: z.number(),
+          toX: z.number(),
+          toY: z.number(),
+          assistType: z.enum(['ground', 'through', 'aerial', 'cross']).optional(),
+        }),
+      )
+      .optional(),
+    coachFeedback: z.string().optional(),
   }),
 });

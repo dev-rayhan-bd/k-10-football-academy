@@ -8,7 +8,11 @@ import { StatusCodes } from 'http-status-codes';
 const isDev = env.NODE_ENV === 'development';
 
 const createRedisStore = (prefix: string) => {
-  if (process.env.NODE_ENV === 'test') {
+  if (
+    process.env.NODE_ENV === 'test' ||
+    (process.env.RENDER && (!process.env.REDIS_HOST || process.env.REDIS_HOST === '127.0.0.1'))
+  ) {
+    // Fallback to fast in-memory rate limiting if external Redis is not provided on cloud
     return undefined;
   }
   try {

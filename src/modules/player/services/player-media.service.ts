@@ -1,5 +1,6 @@
 import { AppError } from '@/utils/AppError';
 import { PlayerProfile, PlayerMedia } from '../player.model';
+import { Media } from '@/modules/media/media.model';
 import { videoQueue } from '@/jobs/queues/video.queue';
 import { playerCacheService } from './player-cache.service';
 import { playerStatsService } from './player-stats.service';
@@ -74,6 +75,18 @@ export class PlayerMediaService {
       mediaType,
       thumbnailUrl,
     });
+
+    // Also sync to centralized Media collection
+    await Media.create({
+      userId: profile.userId,
+      role: 'PLAYER',
+      playerId: profile._id,
+      url: mediaUrl,
+      thumbnailUrl,
+      title: title || 'Untitled Media',
+      mediaType,
+      isPublic: true,
+    }).catch(() => {});
 
     await playerCacheService.invalidatePlayerCache(profile._id, profile.userId);
 

@@ -5,6 +5,8 @@ export interface IVideoProcessingJobData {
   videoId: string;
   videoUrl: string;
   playerId?: string;
+  userId?: string;
+  role?: string;
   resolutions?: string[];
 }
 

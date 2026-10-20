@@ -202,6 +202,7 @@ app.get(
  * 9. Application API Routes
  */
 app.use('/api/v1', applicationRoutes);
+app.use('/api/v1/api/v1', applicationRoutes); // Postman double prefix tolerance alias
 
 /**
  * 10. 404 Not Found Middleware

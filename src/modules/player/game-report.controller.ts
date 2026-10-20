@@ -98,3 +98,22 @@ export const completeCoachGameReport = catchAsync(async (req: Request, res: Resp
     data: result,
   });
 });
+
+/**
+ * 6. Verify Game Report Payment (Direct Stripe API check fallback for local dev / webhook delays)
+ */
+export const verifyGameReportPayment = catchAsync(async (req: Request, res: Response) => {
+  const sessionId = (req.query.session_id || req.query.sessionId) as string | undefined;
+  const reportId = (req.query.reportId || req.query.report_id) as string | undefined;
+
+  const result = await gameReportService.verifyPayment(sessionId, reportId);
+
+  sendResponse(res, {
+    statusCode: result.success ? StatusCodes.OK : StatusCodes.BAD_REQUEST,
+    success: result.success,
+    message: result.success
+      ? 'Payment verified successfully and coach notified'
+      : (result as any).message || 'Payment verification failed or pending',
+    data: result,
+  });
+});

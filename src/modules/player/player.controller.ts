@@ -298,7 +298,16 @@ export const addClubHistoryItem = catchAsync(async (req: Request, res: Response)
   }
 
   const clubName = payload.clubName || payload.name || payload.club;
-  const period = payload.period || payload.years || payload.duration;
+  let period = payload.period || payload.years || payload.duration;
+
+  if (!period && (payload.from || payload.to || payload.fromYear || payload.toYear)) {
+    const fromVal = payload.from || payload.fromYear || '';
+    const toVal = payload.to || payload.toYear || 'Present';
+    if (fromVal) {
+      period = `${fromVal} - ${toVal}`;
+    }
+  }
+
   let isCurrent = payload.isCurrent;
   if (typeof isCurrent === 'string') {
     isCurrent = isCurrent.toLowerCase() === 'true';
@@ -307,6 +316,8 @@ export const addClubHistoryItem = catchAsync(async (req: Request, res: Response)
   }
 
   payload.clubName = clubName;
+  payload.from = payload.from || payload.fromYear || undefined;
+  payload.to = payload.to || payload.toYear || undefined;
   payload.period = period;
   payload.isCurrent = Boolean(isCurrent);
 
@@ -314,7 +325,7 @@ export const addClubHistoryItem = catchAsync(async (req: Request, res: Response)
     throw new AppError(400, 'Club name is required');
   }
   if (!payload.period) {
-    throw new AppError(400, 'Period is required (e.g. 2020 - Present)');
+    throw new AppError(400, 'Period is required (e.g. 2020 - Present, or from/to)');
   }
 
   const result = await playerService.addClubHistoryItem(playerId, payload);
@@ -322,6 +333,27 @@ export const addClubHistoryItem = catchAsync(async (req: Request, res: Response)
     statusCode: 201,
     success: true,
     message: 'Club added to history successfully',
+    data: result,
+  });
+});
+
+export const deleteClubHistoryItem = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
+
+  const clubId = req.params.clubId || req.params.id;
+  if (!clubId) {
+    throw new AppError(400, 'Club ID or name is required');
+  }
+
+  const result = await playerService.deleteClubHistoryItem(playerId, clubId);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Club removed from history successfully',
     data: result,
   });
 });
@@ -508,6 +540,118 @@ export const getMediaGallery = catchAsync(async (req: Request, res: Response) =>
     statusCode: 200,
     success: true,
     message: 'Media gallery fetched successfully',
+    data: result,
+  });
+});
+
+export const uploadPlayerDocuments = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
+
+  let filesToUpload: Express.Multer.File[] = [];
+  if (req.files && Array.isArray(req.files)) {
+    filesToUpload = req.files as Express.Multer.File[];
+  } else if (req.file) {
+    filesToUpload = [req.file];
+  }
+
+  if (filesToUpload.length === 0) {
+    throw new AppError(400, 'No document file provided for upload');
+  }
+
+  let title = req.body.title || '';
+  if (!title && req.body.data) {
+    try {
+      const parsed = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
+      title = parsed.title || '';
+    } catch {
+      // Ignore JSON parse errors
+    }
+  }
+
+  const result = await playerService.uploadDocuments(playerId, filesToUpload, title);
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Document uploaded successfully',
+    data: result,
+  });
+});
+
+export const deletePlayerDocument = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
+
+  const documentId = req.params.documentId || req.params.id;
+  if (!documentId) {
+    throw new AppError(400, 'Document ID is required');
+  }
+
+  const result = await playerService.deleteDocument(playerId, documentId);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Document deleted successfully',
+    data: result,
+  });
+});
+
+export const getPlayerDocuments = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
+
+  const result = await playerService.getDocuments(playerId);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Documents fetched successfully',
+    data: result,
+  });
+});
+
+export const updatePlayerDocument = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required');
+  }
+
+  const documentId = req.params.documentId || req.params.id;
+  if (!documentId) {
+    throw new AppError(400, 'Document ID is required');
+  }
+
+  let title = req.body.title || '';
+  if (!title && req.body.data) {
+    try {
+      const parsed = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
+      title = parsed.title || '';
+    } catch {
+      // Ignore JSON parse errors
+    }
+  }
+
+  const file = req.file || (req.files && Array.isArray(req.files) ? req.files[0] : undefined);
+
+  const result = await playerService.updateDocument(
+    playerId,
+    documentId,
+    { title },
+    file as Express.Multer.File | undefined,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Document updated successfully',
     data: result,
   });
 });

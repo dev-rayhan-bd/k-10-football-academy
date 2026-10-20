@@ -65,7 +65,9 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
       {
         clubName: { type: String, required: true },
         logoUrl: { type: String },
-        period: { type: String, required: true },
+        from: { type: String },
+        to: { type: String },
+        period: { type: String },
         isCurrent: { type: Boolean, default: false },
       },
     ],
@@ -180,6 +182,15 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
         grade: { type: String, default: 'GOOD' },
       },
     },
+    documents: [
+      {
+        title: { type: String, required: true },
+        url: { type: String, required: true },
+        fileType: { type: String },
+        size: { type: Number },
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true },
 );
@@ -367,10 +378,12 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
     ],
     accurateAssists: [
       {
-        fromX: { type: Number, required: true },
-        fromY: { type: Number, required: true },
-        toX: { type: Number, required: true },
-        toY: { type: Number, required: true },
+        x: { type: Number },
+        y: { type: Number },
+        fromX: { type: Number },
+        fromY: { type: Number },
+        toX: { type: Number },
+        toY: { type: Number },
         assistType: {
           type: String,
           enum: ['ground', 'through', 'aerial', 'cross'],

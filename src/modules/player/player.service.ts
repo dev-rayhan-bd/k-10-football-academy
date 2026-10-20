@@ -331,11 +331,39 @@ export class PlayerService {
 
     if (Array.isArray(payload.clubHistory)) {
       payload.clubHistory = payload.clubHistory.map((item: any) => {
-        if (typeof item.isCurrent === 'string') {
-          return { ...item, isCurrent: item.isCurrent.toLowerCase() === 'true' };
+        let isCurrent = item.isCurrent;
+        if (typeof isCurrent === 'string') {
+          isCurrent = isCurrent.toLowerCase() === 'true';
         }
-        return item;
+        const fromStr = item.from !== undefined ? String(item.from) : '';
+        const toStr = item.to !== undefined ? String(item.to) : '';
+
+        if (toStr.toLowerCase() === 'present') {
+          isCurrent = true;
+        }
+
+        let period = item.period;
+        if (!period && (fromStr || toStr)) {
+          period = `${fromStr || ''} - ${toStr || 'Present'}`;
+        }
+
+        return {
+          ...item,
+          from: fromStr || undefined,
+          to: toStr || undefined,
+          period: period || '',
+          isCurrent: Boolean(isCurrent),
+        };
       });
+
+      const currentClubItem = payload.clubHistory.find((c: any) => c.isCurrent);
+      if (currentClubItem) {
+        payload.currentClub = currentClubItem.clubName;
+        if (currentClubItem.logoUrl) {
+          payload.clubLogo = currentClubItem.logoUrl;
+        }
+      }
+
       if (payload.clubHistory.length > 6) {
         throw new AppError(400, 'Maximum 6 clubs allowed in career timeline');
       }
@@ -671,8 +699,33 @@ export class PlayerService {
     return playerCareerService.addClubHistoryItem(playerId, clubItem);
   }
 
+  async deleteClubHistoryItem(playerId: string, clubId: string) {
+    return playerCareerService.deleteClubHistoryItem(playerId, clubId);
+  }
+
   async updatePitchMap(playerId: string, payload: { positionMap?: any[]; futsalMap?: any[] }) {
     return playerCareerService.updatePitchMap(playerId, payload);
+  }
+
+  async uploadDocuments(playerId: string, files: Express.Multer.File[], customTitle?: string) {
+    return playerCareerService.uploadDocuments(playerId, files, customTitle);
+  }
+
+  async deleteDocument(playerId: string, documentId: string) {
+    return playerCareerService.deleteDocument(playerId, documentId);
+  }
+
+  async updateDocument(
+    playerId: string,
+    documentId: string,
+    payload: { title?: string },
+    newFile?: Express.Multer.File,
+  ) {
+    return playerCareerService.updateDocument(playerId, documentId, payload, newFile);
+  }
+
+  async getDocuments(playerId: string) {
+    return playerCareerService.getDocuments(playerId);
   }
 
   // 5. Attributes Management

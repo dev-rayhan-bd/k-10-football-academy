@@ -57,6 +57,7 @@ export const updatePlayerProfileZodSchema = z.object({
     visionMetrics: z.union([z.record(z.any()), z.string()]).optional(),
     profileViews: z.union([z.number(), z.string()]).optional(),
     totalLikes: z.union([z.number(), z.string()]).optional(),
+    documents: z.union([z.array(z.any()), z.string()]).optional(),
     data: z.union([z.record(z.any()), z.string()]).optional(),
     coachName: z.string().optional(),
     licenseNumber: z.string().optional(),
@@ -86,8 +87,10 @@ export const updateClubHistoryZodSchema = z.object({
         z.object({
           clubName: z.string().min(1, 'Club name is required'),
           logoUrl: z.string().optional(),
-          period: z.string().min(1, 'Period is required'),
-          isCurrent: z.boolean().optional(),
+          from: z.union([z.string(), z.number()]).optional(),
+          to: z.union([z.string(), z.number()]).optional(),
+          period: z.string().optional(),
+          isCurrent: z.union([z.boolean(), z.string()]).optional(),
         }),
       )
       .max(6, 'Maximum 6 clubs allowed in career timeline'),
@@ -98,6 +101,8 @@ export const addClubHistoryItemZodSchema = z.object({
   body: z.object({
     clubName: z.string().optional(),
     logoUrl: z.string().optional(),
+    from: z.union([z.string(), z.number()]).optional(),
+    to: z.union([z.string(), z.number()]).optional(),
     period: z.string().optional(),
     isCurrent: z.union([z.boolean(), z.string()]).optional(),
     data: z.union([z.record(z.any()), z.string()]).optional(),
@@ -233,14 +238,13 @@ export const createMatchRecordZodSchema = z.object({
     gameDate: z.string().or(z.date()).optional(),
     gameLocation: z.string().optional(),
     matchResult: z.string().optional(),
-    matchDate: z.string().or(z.date()).optional(),
-    leagueType: z.string().optional(),
     homeTeam: z.string().optional(),
+    ownTeam: z.string().optional(),
     awayTeam: z.string().optional(),
+    opponentTeam: z.string().optional(),
     homeScore: z.number().min(0).default(0).optional(),
     awayScore: z.number().min(0).default(0).optional(),
-    result: z.enum(['W', 'D', 'L']).default('W').optional(),
-    location: z.string().optional(),
+    result: z.enum(['W', 'D', 'L']).optional(),
     weather: z.string().optional(),
     temperature: z.number().optional(),
     scoutName: z.string().optional(),
@@ -264,22 +268,28 @@ export const createMatchRecordZodSchema = z.object({
     stats: z.record(z.any()).optional(),
     accurateShots: z
       .array(
-        z.object({
-          x: z.number(),
-          y: z.number(),
-          target: z.enum(['goal', 'saved', 'missed']).optional(),
-        }),
+        z
+          .object({
+            x: z.number(),
+            y: z.number(),
+            target: z.string().optional(),
+          })
+          .passthrough(),
       )
       .optional(),
     accurateAssists: z
       .array(
-        z.object({
-          fromX: z.number(),
-          fromY: z.number(),
-          toX: z.number(),
-          toY: z.number(),
-          assistType: z.enum(['ground', 'through', 'aerial', 'cross']).optional(),
-        }),
+        z
+          .object({
+            x: z.number().optional(),
+            y: z.number().optional(),
+            fromX: z.number().optional(),
+            fromY: z.number().optional(),
+            toX: z.number().optional(),
+            toY: z.number().optional(),
+            assistType: z.string().optional(),
+          })
+          .passthrough(),
       )
       .optional(),
     coachReview: z
@@ -326,14 +336,13 @@ export const requestCoachGameReportZodSchema = z.object({
     gameDate: z.string().or(z.date()).optional(),
     gameLocation: z.string().optional(),
     matchResult: z.string().optional(),
-    leagueType: z.string().optional(),
     homeTeam: z.string().optional(),
+    ownTeam: z.string().optional(),
     awayTeam: z.string().optional(),
+    opponentTeam: z.string().optional(),
     homeScore: z.number().min(0).default(0).optional(),
     awayScore: z.number().min(0).default(0).optional(),
-    result: z.enum(['W', 'D', 'L']).default('W').optional(),
-    matchDate: z.string().or(z.date()).optional(),
-    location: z.string().optional(),
+    result: z.enum(['W', 'D', 'L']).optional(),
     weather: z.string().optional(),
     temperature: z.number().optional(),
     scoutName: z.string().optional(),
@@ -354,22 +363,28 @@ export const completeCoachGameReportZodSchema = z.object({
     stats: z.record(z.any()).optional(),
     accurateShots: z
       .array(
-        z.object({
-          x: z.number(),
-          y: z.number(),
-          target: z.enum(['goal', 'saved', 'missed']).optional(),
-        }),
+        z
+          .object({
+            x: z.number(),
+            y: z.number(),
+            target: z.string().optional(),
+          })
+          .passthrough(),
       )
       .optional(),
     accurateAssists: z
       .array(
-        z.object({
-          fromX: z.number(),
-          fromY: z.number(),
-          toX: z.number(),
-          toY: z.number(),
-          assistType: z.enum(['ground', 'through', 'aerial', 'cross']).optional(),
-        }),
+        z
+          .object({
+            x: z.number().optional(),
+            y: z.number().optional(),
+            fromX: z.number().optional(),
+            fromY: z.number().optional(),
+            toX: z.number().optional(),
+            toY: z.number().optional(),
+            assistType: z.string().optional(),
+          })
+          .passthrough(),
       )
       .optional(),
     coachFeedback: z.string().optional(),

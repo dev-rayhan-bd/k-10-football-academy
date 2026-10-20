@@ -70,9 +70,12 @@ export interface IPlayerProfile {
   }>;
   accomplishments?: Array<{ year: number; title: string }>;
   clubHistory?: Array<{
+    _id?: Types.ObjectId | string;
     clubName: string;
     logoUrl?: string;
-    period: string;
+    from?: string;
+    to?: string;
+    period?: string;
     isCurrent?: boolean;
   }>;
   positionMap?: Array<{
@@ -134,8 +137,18 @@ export interface IPlayerProfile {
     visionField?: { score: number; trend: number; grade: string };
     targetFinding?: { score: number; trend: number; grade: string };
   };
+  documents?: IPlayerDocument[];
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface IPlayerDocument {
+  _id?: Types.ObjectId | string;
+  title: string;
+  url: string;
+  fileType?: string;
+  size?: number;
+  uploadedAt?: Date;
 }
 
 export interface IPlayerProfileDocument extends IPlayerProfile, Document {}
@@ -256,11 +269,13 @@ export interface IAccurateShot {
 }
 
 export interface IAccurateAssist {
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
-  assistType?: 'ground' | 'through' | 'aerial' | 'cross';
+  x?: number;
+  y?: number;
+  fromX?: number;
+  fromY?: number;
+  toX?: number;
+  toY?: number;
+  assistType?: 'ground' | 'through' | 'aerial' | 'cross' | string;
 }
 
 export interface IMatchRecordStats {

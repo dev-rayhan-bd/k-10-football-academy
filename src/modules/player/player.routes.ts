@@ -23,6 +23,7 @@ import {
   updatePlayerStyles,
   updateClubHistory,
   addClubHistoryItem,
+  deleteClubHistoryItem,
   updatePitchMap,
   addMatchRecord,
   getMatchRecords,
@@ -30,12 +31,17 @@ import {
   uploadMediaGallery,
   getMediaGallery,
   addClubInterest,
+  uploadPlayerDocuments,
+  deletePlayerDocument,
+  getPlayerDocuments,
+  updatePlayerDocument,
 } from './player.controller';
 import {
   createSelfGameReport,
   requestCoachGameReport,
   getCoachPendingReports,
   completeCoachGameReport,
+  verifyGameReportPayment,
 } from './game-report.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -82,6 +88,7 @@ router.patch(
   updateClubHistory,
 );
 router.post('/me/clubs', auth(), upload.any() as any, addClubHistoryItem);
+router.delete('/me/clubs/:clubId', auth(), deleteClubHistoryItem);
 router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
 router.get('/me/matches', auth(), getMatchRecords);
 router.post('/me/matches', auth(), validateRequest(createMatchRecordZodSchema), addMatchRecord);
@@ -99,6 +106,7 @@ router.post(
   validateRequest(requestCoachGameReportZodSchema),
   requestCoachGameReport,
 );
+router.get('/me/game-reports/verify-payment', optionalAuth(), verifyGameReportPayment);
 router.get('/coach/game-reports/pending', auth('SUPER_ADMIN', 'COACH'), getCoachPendingReports);
 router.patch(
   '/coach/game-reports/:reportId/complete',
@@ -110,6 +118,11 @@ router.patch(
 router.get('/me/media', auth(), getMediaGallery);
 router.post('/me/media', auth(), upload.any() as any, uploadMediaGallery);
 router.post('/me/videos', auth(), upload.any() as any, uploadHighlightVideo);
+router.get('/me/documents', auth(), getPlayerDocuments);
+router.post('/me/documents', auth(), upload.any() as any, uploadPlayerDocuments);
+router.patch('/me/documents/:documentId', auth(), upload.any() as any, updatePlayerDocument);
+router.put('/me/documents/:documentId', auth(), upload.any() as any, updatePlayerDocument);
+router.delete('/me/documents/:documentId', auth(), deletePlayerDocument);
 
 router.get('/:id/cv', optionalAuth(), getPlayerCV);
 router.get('/:id', optionalAuth(), getPlayerProfile);
@@ -164,6 +177,11 @@ router.post(
   upload.any() as any,
   addClubHistoryItem,
 );
+router.delete(
+  '/:playerId/clubs/:clubId',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  deleteClubHistoryItem,
+);
 router.patch(
   '/:playerId/pitch-map',
   auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
@@ -179,5 +197,30 @@ router.post(
 );
 router.get('/:playerId/matches', optionalAuth(), getMatchRecords);
 router.post('/:playerId/interest', auth('SUPER_ADMIN', 'CLUB', 'COACH', 'PLAYER'), addClubInterest);
+
+router.get('/:playerId/documents', optionalAuth(), getPlayerDocuments);
+router.post(
+  '/:playerId/documents',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  upload.any() as any,
+  uploadPlayerDocuments,
+);
+router.patch(
+  '/:playerId/documents/:documentId',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  upload.any() as any,
+  updatePlayerDocument,
+);
+router.put(
+  '/:playerId/documents/:documentId',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  upload.any() as any,
+  updatePlayerDocument,
+);
+router.delete(
+  '/:playerId/documents/:documentId',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  deletePlayerDocument,
+);
 
 export const PlayerRoutes = router;

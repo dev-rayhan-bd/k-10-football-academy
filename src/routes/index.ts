@@ -11,6 +11,7 @@ import { ChatRoutes } from '@/modules/chat/chat.routes';
 import { InvoiceRoutes } from '@/modules/invoice/invoice.routes';
 import { ShopRoutes } from '@/modules/shop/shop.routes';
 import { SubscriptionRoutes } from '@/modules/subscription/subscription.routes';
+import { NotificationRoutes } from '@/modules/notification/notification.routes';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ const moduleRoutes = [
   { path: '/invoices', route: InvoiceRoutes },
   { path: '/shop', route: ShopRoutes },
   { path: '/subscriptions', route: SubscriptionRoutes },
+  { path: '/notifications', route: NotificationRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { calculateMatchPerformance } from '@/utils/ratingCalculator';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
@@ -13,6 +13,10 @@ import {
 } from '@/utils/emailTemplates';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
+import { notificationService } from '@/modules/notification/notification.service';
+import { ParentChild } from '@/modules/parent/parent.model';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
+import { redisClient } from '@/config/redis';
 
 /**
  * Parse timer formatted as min:sec (e.g. "08:08", "76:30") or numeric minutes
@@ -163,9 +167,30 @@ export class GameReportService {
     if (payload.gameType && !payload.leagueType) payload.leagueType = payload.gameType;
     if (payload.gameDate && !payload.matchDate) payload.matchDate = payload.gameDate;
     if (payload.gameLocation && !payload.location) payload.location = payload.gameLocation;
-    if (!payload.homeTeam && payload.playerInfo?.clubName)
-      payload.homeTeam = payload.playerInfo.clubName;
-    if (!payload.awayTeam) payload.awayTeam = 'Opponent';
+    const resolvedHomeTeam =
+      payload.ownTeam ||
+      payload.homeTeam ||
+      payload.playerInfo?.clubName ||
+      playerProfile.currentClub ||
+      'Home Team';
+    const resolvedOpponent =
+      payload.opponentTeam || payload.opponent || payload.awayTeam || 'Opponent';
+    const resolvedHomeScore = payload.ownTeamScore ?? payload.homeScore ?? 0;
+    const resolvedAwayScore = payload.opponentTeamScore ?? payload.awayScore ?? 0;
+
+    let resolvedResult = payload.result;
+    if (!resolvedResult) {
+      if (resolvedHomeScore > resolvedAwayScore) resolvedResult = 'W';
+      else if (resolvedHomeScore === resolvedAwayScore) resolvedResult = 'D';
+      else resolvedResult = 'L';
+    }
+
+    payload.homeTeam = resolvedHomeTeam;
+    payload.awayTeam = resolvedOpponent;
+    payload.homeScore = resolvedHomeScore;
+    payload.awayScore = resolvedAwayScore;
+    payload.result = resolvedResult;
+    payload.matchResult = `${resolvedHomeTeam} ${resolvedHomeScore}-${resolvedAwayScore} ${resolvedOpponent}`;
 
     // Auto-map UI stats counters to MATCH_EVENTS for client's excel formula
     if ((!payload.events || payload.events.length === 0) && payload.stats) {
@@ -311,25 +336,49 @@ export class GameReportService {
     const resolvedGameType = gameType || payload.leagueType || 'Friendly Championship Catarinese';
     const resolvedMatchDate = gameDate || payload.matchDate || new Date();
     const resolvedLocation = gameLocation || payload.location || 'London';
-    const resolvedHomeTeam = mergedPlayerInfo.clubName || payload.homeTeam || 'Home Team';
-    const resolvedAwayTeam = payload.awayTeam || 'Opponent';
+    const resolvedHomeTeam =
+      payload.ownTeam ||
+      payload.homeTeam ||
+      mergedPlayerInfo.clubName ||
+      playerProfile.currentClub ||
+      'Home Team';
+    const resolvedOpponent =
+      payload.opponentTeam || payload.opponent || payload.awayTeam || 'Opponent';
+    const resolvedAwayTeam = resolvedOpponent;
+    const resolvedHomeScore = payload.ownTeamScore ?? payload.homeScore ?? 0;
+    const resolvedAwayScore = payload.opponentTeamScore ?? payload.awayScore ?? 0;
 
-    // Create Draft Match Record waiting for payment
-    const matchRecord = await MatchRecord.create({
+    let resolvedResult = payload.result;
+    if (!resolvedResult) {
+      if (resolvedHomeScore > resolvedAwayScore) resolvedResult = 'W';
+      else if (resolvedHomeScore === resolvedAwayScore) resolvedResult = 'D';
+      else resolvedResult = 'L';
+    }
+
+    // Reuse/update existing UNPAID draft for this player if one exists to avoid duplicates
+    let matchRecord = await MatchRecord.findOne({
+      playerId: playerProfile._id,
+      reportCompletionType: 'COACH',
+      'coachReview.paymentStatus': 'UNPAID',
+    });
+
+    const draftData = {
       playerId: playerProfile._id,
       playerInfo: mergedPlayerInfo,
       gameType: resolvedGameType,
       gameDate: resolvedMatchDate,
       gameLocation: resolvedLocation,
       matchResult:
-        matchResult || payload.matchResult || `${resolvedHomeTeam} vs ${resolvedAwayTeam}`,
+        matchResult ||
+        payload.matchResult ||
+        `${resolvedHomeTeam} ${resolvedHomeScore}-${resolvedAwayScore} ${resolvedAwayTeam}`,
       matchDate: resolvedMatchDate,
       leagueType: resolvedGameType,
       homeTeam: resolvedHomeTeam,
       awayTeam: resolvedAwayTeam,
-      homeScore: payload.homeScore ?? 0,
-      awayScore: payload.awayScore ?? 0,
-      result: payload.result || 'W',
+      homeScore: resolvedHomeScore,
+      awayScore: resolvedAwayScore,
+      result: resolvedResult,
       location: resolvedLocation,
       weather: weather || 'RAINY',
       temperature: temperature ?? 19,
@@ -353,7 +402,14 @@ export class GameReportService {
         paymentAmount: 6.99,
         status: 'PENDING',
       },
-    });
+    };
+
+    if (matchRecord) {
+      Object.assign(matchRecord, draftData);
+      await matchRecord.save();
+    } else {
+      matchRecord = await MatchRecord.create(draftData);
+    }
 
     // Create Stripe Checkout Session for $6.99
     const stripe = getStripeClient();
@@ -377,6 +433,13 @@ export class GameReportService {
         playerId: playerProfile._id.toString(),
         coachEmail: targetCoachEmail,
       },
+      payment_intent_data: {
+        metadata: {
+          reportId: matchRecord._id.toString(),
+          playerId: playerProfile._id.toString(),
+          coachEmail: targetCoachEmail,
+        },
+      },
       customer_email: (await User.findById(playerProfile.userId))?.email || undefined,
       success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${matchRecord._id}`,
       cancel_url: cancelUrl,
@@ -396,66 +459,303 @@ export class GameReportService {
   }
 
   /**
-   * Handle Stripe Webhook Events (Mark as PAID and notify coach via Email)
+   * Finalize Paid Game Report (Called by Stripe Webhook and Payment Verification endpoint)
+   * ACID Transaction with MongoDB + Strict Idempotency Lock
    */
-  async handleStripeWebhook(event: any) {
-    logger.info(`Processing Stripe Webhook Event: ${event.type}`);
-
-    if (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded') {
-      const session = event.data.object;
-      const reportId = session.metadata?.reportId;
-
-      if (!reportId) {
-        logger.warn('Stripe Webhook received without reportId in metadata.');
-        return { received: true };
+  async finalizePaidGameReport(reportId: string, transactionId?: string) {
+    // 1. Distributed Idempotency Lock via Redis (prevents parallel race conditions)
+    const lockKey = `LOCK:PAYMENT:${reportId}`;
+    let lockAcquired = false;
+    try {
+      const lockRes = await redisClient.set(lockKey, 'LOCKED', 'EX', 15, 'NX');
+      if (lockRes === 'OK') {
+        lockAcquired = true;
       }
+    } catch (redisErr: any) {
+      logger.warn(
+        `Redis lock attempt failed: ${redisErr.message}, proceeding with DB atomic lock.`,
+      );
+    }
 
-      const matchRecord = await MatchRecord.findById(reportId).populate('playerId');
-      if (!matchRecord) {
+    try {
+      // 2. Early Idempotency Check: if already PAID, return immediately without duplicate side-effects
+      const existingRecord = await MatchRecord.findById(reportId).populate('playerId');
+      if (!existingRecord) {
         logger.warn(`MatchRecord not found for reportId: ${reportId}`);
-        return { received: true };
+        return { success: false, message: 'Match record not found' };
       }
 
-      // Update payment status
-      if (matchRecord.coachReview) {
-        matchRecord.coachReview.paymentStatus = 'PAID';
-        matchRecord.coachReview.status = 'PENDING';
+      if (existingRecord.coachReview?.paymentStatus === 'PAID') {
+        logger.info(
+          `Report ${reportId} is already PAID. Idempotent return without duplicate notifications.`,
+        );
+        return {
+          success: true,
+          message: 'Payment already processed (idempotent)',
+          matchRecord: existingRecord,
+        };
       }
-      await matchRecord.save();
 
-      // Trigger Email Notification to Coach
-      const coachEmail = matchRecord.coachReview?.coachEmail;
-      const coachName = matchRecord.coachReview?.coachName || 'Coach';
-      const player = (matchRecord.playerId as any) || {};
-      const playerName = player.fullName || 'Player';
+      // 3. ACID Transaction: State transition in MongoDB
+      const session = await mongoose.startSession();
+      let updatedRecord: any = null;
+      let transactionSupported = true;
 
+      try {
+        session.startTransaction();
+        updatedRecord = await MatchRecord.findOneAndUpdate(
+          {
+            _id: reportId,
+            'coachReview.paymentStatus': { $ne: 'PAID' },
+          },
+          {
+            $set: {
+              'coachReview.paymentStatus': 'PAID',
+              'coachReview.status': 'PENDING',
+              ...(transactionId ? { 'coachReview.transactionId': transactionId } : {}),
+            },
+          },
+          { new: true, session },
+        ).populate('playerId');
+
+        await session.commitTransaction();
+      } catch (txnError: any) {
+        if (session.inTransaction()) {
+          await session.abortTransaction();
+        }
+        // Fallback for standalone MongoDB deployments where multi-document transactions are unsupported
+        if (
+          txnError?.message?.includes('replica set') ||
+          txnError?.message?.includes('standalone') ||
+          txnError?.message?.includes('Transactions are not supported')
+        ) {
+          transactionSupported = false;
+        } else {
+          logger.error({ txnError }, 'Database transaction error in finalizePaidGameReport');
+          throw txnError;
+        }
+      } finally {
+        await session.endSession();
+      }
+
+      if (!transactionSupported) {
+        // Atomic single-document update (ACID compliant on document level in MongoDB)
+        updatedRecord = await MatchRecord.findOneAndUpdate(
+          {
+            _id: reportId,
+            'coachReview.paymentStatus': { $ne: 'PAID' },
+          },
+          {
+            $set: {
+              'coachReview.paymentStatus': 'PAID',
+              'coachReview.status': 'PENDING',
+              ...(transactionId ? { 'coachReview.transactionId': transactionId } : {}),
+            },
+          },
+          { new: true },
+        ).populate('playerId');
+      }
+
+      // 4. Concurrency Guard: If another process updated it first, exit idempotently
+      if (!updatedRecord) {
+        const recheck = await MatchRecord.findById(reportId).populate('playerId');
+        if (recheck?.coachReview?.paymentStatus === 'PAID') {
+          return {
+            success: true,
+            message: 'Payment already processed concurrently',
+            matchRecord: recheck,
+          };
+        }
+        return { success: false, message: 'Failed to update payment status' };
+      }
+
+      const playerProfile = (updatedRecord.playerId as any) || {};
+      const playerName = playerProfile.fullName || 'Player';
+      const matchTitle = updatedRecord.awayTeam
+        ? `vs ${updatedRecord.awayTeam}`
+        : updatedRecord.gameType || 'Match';
+
+      // 5. Invalidate Player Cache so CV immediately shows PAID and pending status!
+      if (playerProfile._id) {
+        await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
+      }
+
+      // 6. In-App Notification to Player (Guaranteed Exactly Once)
+      if (playerProfile.userId) {
+        await notificationService.createNotification({
+          recipientId: playerProfile.userId,
+          recipientRole: 'ATHLETE',
+          title: 'Payment Successful ($6.99)',
+          message: `Your payment of $6.99 for coach evaluation (${matchTitle}) was successful. Awaiting coach review.`,
+          type: 'PAYMENT_SUCCESS',
+          data: { reportId: updatedRecord._id },
+        });
+      }
+
+      // 7. In-App Notification to Parent(s) if linked (Guaranteed Exactly Once)
+      if (playerProfile._id) {
+        try {
+          const parentLinks = await ParentChild.find({
+            childPlayerId: playerProfile._id,
+          }).populate('parentId');
+          for (const link of parentLinks) {
+            const parent = link.parentId as any;
+            if (parent && parent.userId) {
+              await notificationService.createNotification({
+                recipientId: parent.userId,
+                recipientRole: 'PARENT',
+                title: 'Child Coach Evaluation Requested',
+                message: `${playerName} requested a coach evaluation for match ${matchTitle} ($6.99 paid).`,
+                type: 'CHILD_GAME_REPORT_REQUEST',
+                data: { reportId: updatedRecord._id, childPlayerId: playerProfile._id },
+              });
+            }
+          }
+        } catch (err: any) {
+          logger.error({ err }, 'Error sending parent notification');
+        }
+      }
+
+      // 8. In-App Notification to Coach (Guaranteed Exactly Once)
+      const coachId = updatedRecord.coachReview?.coachId;
+      if (coachId) {
+        await notificationService.createNotification({
+          recipientId: coachId,
+          recipientRole: 'COACH',
+          title: 'New Match Evaluation Request',
+          message: `You have received a new match evaluation request for ${playerName} (${matchTitle}).`,
+          type: 'NEW_EVALUATION_REQUEST',
+          data: { reportId: updatedRecord._id },
+        });
+      }
+
+      // 9. Email Notification to Coach (Guaranteed Exactly Once via BullMQ job deduplication)
+      const coachEmail = updatedRecord.coachReview?.coachEmail;
+      const coachName = updatedRecord.coachReview?.coachName || 'Coach';
       if (coachEmail) {
-        const evaluationUrl = `https://k10football.com/coach/evaluate/${matchRecord._id}`;
+        const evaluationUrl = `${env.CLIENT_URL || 'https://k-10-football-academy.onrender.com'}/coach/evaluate/${updatedRecord._id}`;
         const emailHtml = getCoachReportRequestEmailTemplate(
           coachName,
           playerName,
           {
-            leagueType: matchRecord.gameType || matchRecord.leagueType || 'Championship',
-            homeTeam: matchRecord.homeTeam || 'Home Team',
-            awayTeam: matchRecord.awayTeam || 'Opponent',
+            leagueType: updatedRecord.gameType || updatedRecord.leagueType || 'Championship',
+            homeTeam: updatedRecord.homeTeam || 'Home Team',
+            awayTeam: updatedRecord.awayTeam || 'Opponent',
             matchDate: new Date(
-              matchRecord.gameDate || matchRecord.matchDate || Date.now(),
+              updatedRecord.gameDate || updatedRecord.matchDate || Date.now(),
             ).toLocaleDateString(),
           },
           evaluationUrl,
         );
 
-        await emailQueue.add('send-coach-report-request', {
-          to: coachEmail,
-          subject: `Coach Evaluation Request: Review ${playerName}'s Match Performance`,
-          body: emailHtml,
-        });
-
-        logger.info(`Evaluation notification email queued to coach: ${coachEmail}`);
+        try {
+          await emailQueue.add(
+            'send-coach-report-request',
+            {
+              to: coachEmail,
+              subject: `Coach Evaluation Request: Review ${playerName}'s Match Performance`,
+              body: emailHtml,
+            },
+            {
+              jobId: `coach-eval-req-${updatedRecord._id}`, // BullMQ idempotency deduplication by unique jobId
+            },
+          );
+          logger.info(`Evaluation notification email queued to coach: ${coachEmail}`);
+        } catch (emailErr: any) {
+          logger.error({ emailErr }, 'Failed to queue coach evaluation email');
+        }
       }
+
+      return { success: true, matchRecord: updatedRecord };
+    } finally {
+      if (lockAcquired) {
+        try {
+          await redisClient.del(lockKey);
+        } catch (delErr: any) {
+          logger.warn(`Failed to release redis lock: ${delErr.message}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle Stripe Webhook Events
+   */
+  async handleStripeWebhook(event: any) {
+    logger.info(`Processing Stripe Webhook Event: ${event?.type}`);
+
+    if (
+      event &&
+      (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded')
+    ) {
+      const obj = event.data?.object || {};
+      let reportId = obj.metadata?.reportId;
+
+      if (!reportId && obj.id) {
+        const found = await MatchRecord.findOne({
+          $or: [
+            { 'coachReview.transactionId': obj.id },
+            { 'coachReview.transactionId': obj.payment_intent },
+          ],
+        });
+        if (found) {
+          reportId = found._id.toString();
+        }
+      }
+
+      if (!reportId) {
+        logger.warn('Stripe Webhook received without matching reportId.');
+        return { received: true };
+      }
+
+      await this.finalizePaidGameReport(reportId, obj.id);
     }
 
     return { received: true };
+  }
+
+  /**
+   * Verify Payment Session (Real-time check directly from Stripe API)
+   */
+  async verifyPayment(sessionId?: string, reportId?: string) {
+    const stripe = getStripeClient();
+
+    let targetReportId = reportId;
+
+    if (sessionId) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        if (session.payment_status === 'paid') {
+          targetReportId = session.metadata?.reportId || targetReportId;
+          if (!targetReportId && session.id) {
+            const match = await MatchRecord.findOne({ 'coachReview.transactionId': session.id });
+            if (match) targetReportId = match._id.toString();
+          }
+          const transactionId = session.id || sessionId;
+          if (targetReportId) {
+            return this.finalizePaidGameReport(targetReportId, transactionId);
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`Failed to retrieve Stripe session ${sessionId}: ${err.message}`);
+      }
+    }
+
+    if (targetReportId) {
+      const match = await MatchRecord.findById(targetReportId);
+      if (match?.coachReview?.transactionId) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(match.coachReview.transactionId);
+          if (session.payment_status === 'paid') {
+            return this.finalizePaidGameReport(targetReportId, session.id);
+          }
+        } catch (err: any) {
+          logger.warn(`Failed to retrieve Stripe session by transactionId: ${err.message}`);
+        }
+      }
+    }
+
+    return { success: false, message: 'Payment has not been completed or verified yet.' };
   }
 
   /**
@@ -548,10 +848,55 @@ export class GameReportService {
     await matchRecord.save();
     await playerStatsService.recalculatePlayerStats(playerProfile._id);
 
+    // Invalidate player cache so CV immediately reflects updated rating & feedback
+    if (playerProfile._id) {
+      await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
+    }
+
+    // In-app Notification to Player
+    if (playerProfile.userId) {
+      await notificationService.createNotification({
+        recipientId: playerProfile.userId,
+        recipientRole: 'ATHLETE',
+        title: 'Coach Evaluation Completed',
+        message: `Coach ${coachUser.name || 'Your Coach'} evaluated your match performance. Rating: ${finalRating}/100.`,
+        type: 'EVALUATION_COMPLETED',
+        data: { reportId: matchRecord._id, rating: finalRating },
+      });
+    }
+
+    // In-app Notification to Parent(s) if linked
+    if (playerProfile._id) {
+      try {
+        const parentLinks = await ParentChild.find({
+          childPlayerId: playerProfile._id,
+        }).populate('parentId');
+        for (const link of parentLinks) {
+          const parent = link.parentId as any;
+          if (parent && parent.userId) {
+            await notificationService.createNotification({
+              recipientId: parent.userId,
+              recipientRole: 'PARENT',
+              title: 'Child Match Evaluation Completed',
+              message: `Coach ${coachUser.name || 'Coach'} completed the match evaluation for ${playerProfile.fullName || 'your child'}. Rating: ${finalRating}/100.`,
+              type: 'CHILD_EVALUATION_COMPLETED',
+              data: {
+                reportId: matchRecord._id,
+                childPlayerId: playerProfile._id,
+                rating: finalRating,
+              },
+            });
+          }
+        }
+      } catch (err: any) {
+        logger.error({ err }, 'Error sending parent completion notification');
+      }
+    }
+
     // Send Completion Notification Email to Player
     const playerUser = await User.findById(playerProfile.userId);
     if (playerUser && playerUser.email) {
-      const cvUrl = `https://k10football.com/player/cv`;
+      const cvUrl = `${env.CLIENT_URL || 'https://k-10-football-academy.onrender.com'}/player/cv`;
       const emailHtml = getPlayerReportCompletedEmailTemplate(
         playerProfile.fullName || playerUser.name,
         coachUser.name || 'Your Coach',

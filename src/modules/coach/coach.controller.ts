@@ -34,11 +34,12 @@ export const getCoachProfile = catchAsync(async (req: Request, res: Response) =>
 });
 
 export const getAllCoachProfiles = catchAsync(async (req: Request, res: Response) => {
-  const result = await coachService.getAllProfiles(req.query);
+  const { meta, result } = await coachService.getAllProfiles(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Coach profiles fetched successfully',
+    meta,
     data: result,
   });
 });

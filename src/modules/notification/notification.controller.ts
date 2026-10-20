@@ -6,10 +6,7 @@ import { notificationService } from './notification.service';
 
 export const getMyNotifications = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId || (req.user as any)?._id;
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 20;
-
-  const result = await notificationService.getMyNotifications(userId, page, limit);
+  const result = await notificationService.getMyNotifications(userId, req.query);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,

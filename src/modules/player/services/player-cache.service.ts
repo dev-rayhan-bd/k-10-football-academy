@@ -12,6 +12,7 @@ export class PlayerCacheService {
       keys.push(`CACHE:PLAYER:PROFILE:${pId}`);
       keys.push(`CACHE:PLAYER:ATTRIBUTES:${pId}`);
       keys.push(`CACHE:PLAYER:CV:${pId}`);
+      keys.push(`CACHE:PLAYER:ANALYTICS:${pId}`);
     }
     if (userId) {
       const uId = userId.toString();
@@ -21,9 +22,14 @@ export class PlayerCacheService {
       keys.push(`CACHE:PLAYER:ATTRIBUTES:USER:${uId}`);
       keys.push(`CACHE:PLAYER:CV:${uId}`);
       keys.push(`CACHE:PLAYER:CV:USER:${uId}`);
+      keys.push(`CACHE:PLAYER:ANALYTICS:${uId}`);
+      keys.push(`CACHE:PLAYER:ANALYTICS:USER:${uId}`);
     }
     if (keys.length > 0) {
       await redisCache.del(keys);
+    }
+    if (profileId) {
+      await redisCache.delByPattern(`CACHE:PLAYER:ANALYTICS:${profileId.toString()}*`);
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { Notification } from './notification.model';
 import { logger } from '@/utils/logger';
+import QueryBuilder from '@/builder/QueryBuilder';
 
 export class NotificationService {
   async createNotification(payload: {
@@ -29,24 +30,37 @@ export class NotificationService {
     }
   }
 
-  async getMyNotifications(userId: string, page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
+  async getMyNotifications(userId: string, queryOrPage: any = 1, limit = 20) {
     const filter = { recipientId: new Types.ObjectId(userId) };
 
-    const [items, total, unreadCount] = await Promise.all([
-      Notification.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Notification.countDocuments(filter),
+    const normalizedQuery: Record<string, unknown> =
+      typeof queryOrPage === 'object' && queryOrPage !== null
+        ? { ...queryOrPage }
+        : {
+            page: queryOrPage || 1,
+            limit: limit || 20,
+          };
+
+    const notificationQuery = new QueryBuilder(Notification.find(filter), normalizedQuery)
+      .search(['title', 'message', 'type'])
+      .filter()
+      .sort()
+      .paginate();
+
+    const [items, pagination, unreadCount] = await Promise.all([
+      notificationQuery.modelQuery,
+      notificationQuery.countTotal(),
       Notification.countDocuments({ ...filter, isRead: false }),
     ]);
 
     return {
       notifications: items,
       meta: {
-        total,
+        total: pagination.total,
         unreadCount,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: pagination.totalPage,
       },
     };
   }

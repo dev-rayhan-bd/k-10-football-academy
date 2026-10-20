@@ -68,13 +68,14 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
  */
 export const getCoachPendingReports = catchAsync(async (req: Request, res: Response) => {
   const coachEmail = req.user!.email;
-  const reports = await gameReportService.getCoachPendingReports(coachEmail);
+  const { meta, result } = await gameReportService.getCoachPendingReports(coachEmail, req.query);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
     message: 'Pending coach evaluation reports retrieved successfully',
-    data: reports,
+    meta,
+    data: result,
   });
 });
 
@@ -114,6 +115,37 @@ export const verifyGameReportPayment = catchAsync(async (req: Request, res: Resp
     message: result.success
       ? 'Payment verified successfully and coach notified'
       : (result as any).message || 'Payment verification failed or pending',
+    data: result,
+  });
+});
+
+/**
+ * 7. Get Player's Game Reports (Summary stats, filter tabs ALL/PAID/PENDING, pagination)
+ */
+export const getPlayerGameReports = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId || (req.user as any)?._id || req.params.playerId || req.params.id;
+  const result = await gameReportService.getPlayerGameReports(userId, req.query);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Player game reports retrieved successfully',
+    data: result,
+  });
+});
+
+/**
+ * 8. Get Specific Game Report Details for Side Drawer
+ */
+export const getGameReportDetails = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId || (req.user as any)?._id || req.params.playerId || req.params.id;
+  const reportId = req.params.reportId || req.params.id;
+  const result = await gameReportService.getGameReportDetails(userId, reportId);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Game report details retrieved successfully',
     data: result,
   });
 });

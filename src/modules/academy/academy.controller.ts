@@ -76,11 +76,12 @@ export const createGameReport = catchAsync(async (req: Request, res: Response) =
 });
 
 export const getGameReports = catchAsync(async (req: Request, res: Response) => {
-  const result = await academyService.getGameReports(req.params.academyId);
+  const { meta, result } = await academyService.getGameReports(req.params.academyId, req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Game reports fetched successfully',
+    meta,
     data: result,
   });
 });

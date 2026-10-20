@@ -3,6 +3,7 @@ import { PlayerProfile, PlayerMedia } from '../player.model';
 import { videoQueue } from '@/jobs/queues/video.queue';
 import { playerCacheService } from './player-cache.service';
 import { playerStatsService } from './player-stats.service';
+import QueryBuilder from '@/builder/QueryBuilder';
 
 export class PlayerMediaService {
   async uploadHighlightVideo(
@@ -100,33 +101,51 @@ export class PlayerMediaService {
     return newMedia;
   }
 
-  async getMediaGallery(playerId: string, page = 1, limit = 10, mediaType?: string) {
+  async getMediaGallery(
+    playerId: string,
+    queryOrPage: any = {},
+    limit?: number,
+    mediaType?: string,
+  ) {
     const profile = await PlayerProfile.findOne({
       $or: [{ _id: playerId }, { userId: playerId }],
     });
     const targetId = profile ? profile._id : playerId;
 
-    const skip = (page - 1) * limit;
+    const normalizedQuery: Record<string, unknown> =
+      typeof queryOrPage === 'object' && queryOrPage !== null
+        ? { ...queryOrPage }
+        : {
+            page: queryOrPage || 1,
+            limit: limit || 10,
+            ...(mediaType ? { mediaType } : {}),
+          };
 
+    const targetType = (normalizedQuery.mediaType || normalizedQuery.type) as string;
     const filter: Record<string, unknown> = { playerId: targetId };
-    if (mediaType) {
-      const normalizedType = mediaType.trim().toUpperCase();
-      if (normalizedType === 'IMAGE' || normalizedType === 'VIDEO') {
-        filter.mediaType = normalizedType;
+    if (targetType && targetType !== 'ALL') {
+      const upper = targetType.trim().toUpperCase();
+      if (upper === 'IMAGE' || upper === 'VIDEO') {
+        filter.mediaType = upper;
       }
     }
 
-    const media = await PlayerMedia.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
+    const mediaQuery = new QueryBuilder(PlayerMedia.find(filter), normalizedQuery)
+      .search(['title', 'description'])
+      .filter()
+      .sort()
+      .paginate();
 
-    const total = await PlayerMedia.countDocuments(filter);
+    const media = await mediaQuery.modelQuery;
+    const pagination = await mediaQuery.countTotal();
 
     return {
       media,
       meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        total: pagination.total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: pagination.totalPage,
       },
     };
   }

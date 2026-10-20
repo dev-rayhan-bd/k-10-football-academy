@@ -1,6 +1,7 @@
 import { AppError } from '@/utils/AppError';
 import { IAcademyInvoice } from './invoice.interface';
 import { AcademyInvoice } from './invoice.model';
+import QueryBuilder from '@/builder/QueryBuilder';
 
 export class InvoiceService {
   async createInvoice(payload: Partial<IAcademyInvoice>) {
@@ -20,10 +21,23 @@ export class InvoiceService {
     return invoice;
   }
 
-  async getInvoicesByAcademy(academyId: string) {
-    return AcademyInvoice.find({ academyId })
-      .populate('childPlayerId', 'fullName position')
-      .sort({ createdAt: -1 });
+  async getInvoicesByAcademy(academyId: string, query: Record<string, unknown> = {}) {
+    const invoiceQuery = new QueryBuilder(
+      AcademyInvoice.find({ academyId }).populate('childPlayerId', 'fullName position'),
+      query,
+    )
+      .search(['invoiceNumber', 'status'])
+      .filter()
+      .sort()
+      .paginate();
+
+    const result = await invoiceQuery.modelQuery;
+    const meta = await invoiceQuery.countTotal();
+
+    return {
+      meta,
+      result,
+    };
   }
 
   async updateInvoiceStatus(id: string, status: 'UNPAID' | 'PAID' | 'OVERDUE') {

@@ -35,6 +35,9 @@ import {
   deletePlayerDocument,
   getPlayerDocuments,
   updatePlayerDocument,
+  getPlayerAnalytics,
+  updatePlayerPotential,
+  updatePlayerMental,
 } from './player.controller';
 import {
   createSelfGameReport,
@@ -42,6 +45,8 @@ import {
   getCoachPendingReports,
   completeCoachGameReport,
   verifyGameReportPayment,
+  getPlayerGameReports,
+  getGameReportDetails,
 } from './game-report.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -58,6 +63,9 @@ router.post(
 router.get('/', getAllPlayerProfiles);
 router.get('/me', auth(), getPlayerProfile);
 router.get('/me/cv', auth(), getPlayerCV);
+router.get('/me/analytics', auth(), getPlayerAnalytics);
+router.patch('/me/analytics/potential', auth(), updatePlayerPotential);
+router.patch('/me/analytics/mental', auth(), updatePlayerMental);
 router.patch(
   '/me',
   auth(),
@@ -106,7 +114,9 @@ router.post(
   validateRequest(requestCoachGameReportZodSchema),
   requestCoachGameReport,
 );
+router.get('/me/game-reports', auth(), getPlayerGameReports);
 router.get('/me/game-reports/verify-payment', optionalAuth(), verifyGameReportPayment);
+router.get('/me/game-reports/:reportId', auth(), getGameReportDetails);
 router.get('/coach/game-reports/pending', auth('SUPER_ADMIN', 'COACH'), getCoachPendingReports);
 router.patch(
   '/coach/game-reports/:reportId/complete',
@@ -221,6 +231,21 @@ router.delete(
   '/:playerId/documents/:documentId',
   auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
   deletePlayerDocument,
+);
+
+router.get('/:playerId/game-reports', auth(), getPlayerGameReports);
+router.get('/:playerId/game-reports/:reportId', auth(), getGameReportDetails);
+
+router.get('/:playerId/analytics', optionalAuth(), getPlayerAnalytics);
+router.patch(
+  '/:playerId/analytics/potential',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  updatePlayerPotential,
+);
+router.patch(
+  '/:playerId/analytics/mental',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  updatePlayerMental,
 );
 
 export const PlayerRoutes = router;

@@ -73,10 +73,25 @@ export class AcademyService {
     return GameReport.create({ ...payload, academyId });
   }
 
-  async getGameReports(academyId: string) {
-    return GameReport.find({ academyId })
-      .populate('playerId', 'fullName position overallRating')
-      .populate('coachId', 'fullName title');
+  async getGameReports(academyId: string, query: Record<string, unknown> = {}) {
+    const reportQuery = new QueryBuilder(
+      GameReport.find({ academyId })
+        .populate('playerId', 'fullName position overallRating')
+        .populate('coachId', 'fullName title'),
+      query,
+    )
+      .search(['matchTitle', 'opponent'])
+      .filter()
+      .sort()
+      .paginate();
+
+    const result = await reportQuery.modelQuery;
+    const meta = await reportQuery.countTotal();
+
+    return {
+      meta,
+      result,
+    };
   }
 
   async createPlayerEvaluation(academyId: string, payload: Partial<IPlayerEvaluation>) {

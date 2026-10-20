@@ -7,6 +7,7 @@ import { UserModel } from '@/modules/user/user.model';
 import { PlayerProfile } from '@/modules/player/player.model';
 import { IParentProfile, IParentMatchReport } from './parent.interface';
 import { ParentProfile, ParentChild, ParentMatchReport } from './parent.model';
+import QueryBuilder from '@/builder/QueryBuilder';
 
 export class ParentService {
   async switchProfile(parentId: string, childUserId: string) {
@@ -364,8 +365,23 @@ export class ParentService {
     });
   }
 
-  async getMatchReports(parentId: string) {
-    return ParentMatchReport.find({ parentId }).populate('childPlayerId', 'fullName position');
+  async getMatchReports(parentId: string, query: Record<string, unknown> = {}) {
+    const reportQuery = new QueryBuilder(
+      ParentMatchReport.find({ parentId }).populate('childPlayerId', 'fullName position'),
+      query,
+    )
+      .search(['gameType', 'scoutName'])
+      .filter()
+      .sort()
+      .paginate();
+
+    const result = await reportQuery.modelQuery;
+    const meta = await reportQuery.countTotal();
+
+    return {
+      meta,
+      result,
+    };
   }
 }
 

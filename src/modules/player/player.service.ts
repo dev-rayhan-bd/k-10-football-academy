@@ -17,6 +17,7 @@ import { playerAttributeService } from './services/player-attribute.service';
 import { playerMatchService } from './services/player-match.service';
 import { playerCareerService } from './services/player-career.service';
 import { playerMediaService } from './services/player-media.service';
+import { playerAnalyticsService } from './services/player-analytics.service';
 import { videoQueue } from '@/jobs/queues/video.queue';
 import { calculateMetricGrade } from '@/utils/ratingCalculator';
 
@@ -746,8 +747,8 @@ export class PlayerService {
     return playerMatchService.addMatchRecord(payload);
   }
 
-  async getMatchRecordsByPlayerId(playerId: string) {
-    return playerMatchService.getMatchRecordsByPlayerId(playerId);
+  async getMatchRecordsByPlayerId(playerId: string, query: Record<string, unknown> = {}) {
+    return playerMatchService.getMatchRecordsByPlayerId(playerId, query);
   }
 
   async addClubInterest(playerId: string, data: { clubName: string; logoUrl?: string }) {
@@ -773,8 +774,21 @@ export class PlayerService {
     return playerMediaService.uploadMediaGallery(playerId, mediaUrl, thumbnailUrl, title);
   }
 
-  async getMediaGallery(playerId: string, page = 1, limit = 10, mediaType?: string) {
-    return playerMediaService.getMediaGallery(playerId, page, limit, mediaType);
+  async getMediaGallery(playerId: string, queryOrPage: any = 1, limit = 10, mediaType?: string) {
+    return playerMediaService.getMediaGallery(playerId, queryOrPage, limit, mediaType);
+  }
+
+  // 8. Player Analytics Dashboard
+  async getPlayerAnalytics(userIdOrPlayerId: string, query: Record<string, unknown> = {}) {
+    return playerAnalyticsService.getPlayerAnalytics(userIdOrPlayerId, query);
+  }
+
+  async updateFullPotential(userIdOrPlayerId: string, payload: Record<string, any>) {
+    return playerAnalyticsService.updateFullPotential(userIdOrPlayerId, payload);
+  }
+
+  async updateMentalAnalysis(userIdOrPlayerId: string, payload: Record<string, any>) {
+    return playerAnalyticsService.updateMentalAnalysis(userIdOrPlayerId, payload);
   }
 }
 

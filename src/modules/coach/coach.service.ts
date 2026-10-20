@@ -3,6 +3,7 @@ import { AppError } from '@/utils/AppError';
 import { UserModel } from '@/modules/user/user.model';
 import { ICoachProfile, ITacticalFormation, ICoachTestimonial } from './coach.interface';
 import { CoachProfile, TacticalFormation, CoachTestimonial } from './coach.model';
+import QueryBuilder from '@/builder/QueryBuilder';
 
 export class CoachService {
   async createProfile(payload: Partial<ICoachProfile>) {
@@ -59,8 +60,23 @@ export class CoachService {
     return profile;
   }
 
-  async getAllProfiles(filter: Record<string, unknown> = {}) {
-    return CoachProfile.find(filter).populate('userId', 'name email avatar');
+  async getAllProfiles(query: Record<string, unknown> = {}) {
+    const coachQuery = new QueryBuilder(
+      CoachProfile.find().populate('userId', 'name email avatar'),
+      query,
+    )
+      .search(['fullName', 'club', 'coachingStyle', 'primaryRole', 'nationality'])
+      .filter()
+      .sort()
+      .paginate();
+
+    const result = await coachQuery.modelQuery;
+    const meta = await coachQuery.countTotal();
+
+    return {
+      meta,
+      result,
+    };
   }
 
   async updateProfile(id: string, payload: Partial<ICoachProfile>) {

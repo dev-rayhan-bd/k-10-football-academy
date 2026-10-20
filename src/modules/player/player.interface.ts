@@ -373,6 +373,8 @@ export interface IMatchRecord {
   categoryRatings?: Record<string, number>;
   plottedEventsJson?: string;
   reportPdfUrl?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface IMatchRecordDocument extends IMatchRecord, Document {}

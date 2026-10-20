@@ -89,12 +89,11 @@ export const createMatchReport = catchAsync(async (req: Request, res: Response) 
 });
 
 export const getMatchReports = catchAsync(async (req: Request, res: Response) => {
-  const { meta, result } = await parentService.getMatchReports(req.params.parentId, req.query);
+  const result = await parentService.getMatchReports(req.params.parentId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Match reports fetched successfully',
-    meta,
     data: result,
   });
 });

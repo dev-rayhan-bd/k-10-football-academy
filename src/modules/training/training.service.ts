@@ -1,29 +1,16 @@
 import { ITrainingSession, ITrainingAttendance } from './training.interface';
 import { TrainingSession, TrainingAttendance } from './training.model';
-import QueryBuilder from '@/builder/QueryBuilder';
 
 export class TrainingService {
   async createSession(payload: Partial<ITrainingSession>) {
     return TrainingSession.create(payload);
   }
 
-  async getSessionsByAcademy(academyId: string, query: Record<string, unknown> = {}) {
-    const sessionQuery = new QueryBuilder(
-      TrainingSession.find({ academyId }).populate('teamId').populate('coachId'),
-      query,
-    )
-      .search(['topic', 'location'])
-      .filter()
-      .sort()
-      .paginate();
-
-    const result = await sessionQuery.modelQuery;
-    const meta = await sessionQuery.countTotal();
-
-    return {
-      meta,
-      result,
-    };
+  async getSessionsByAcademy(academyId: string) {
+    return TrainingSession.find({ academyId })
+      .populate('teamId')
+      .populate('coachId')
+      .sort({ sessionDate: -1 });
   }
 
   async markAttendance(sessionId: string, payload: Partial<ITrainingAttendance>) {

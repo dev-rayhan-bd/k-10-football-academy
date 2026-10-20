@@ -5,7 +5,6 @@ import { IMatchRecord } from '../player.interface';
 import { PlayerProfile, MatchRecord } from '../player.model';
 import { playerStatsService } from './player-stats.service';
 import { parseTimerInput } from './game-report.service';
-import QueryBuilder from '@/builder/QueryBuilder';
 
 export class PlayerMatchService {
   async addMatchRecord(payload: Partial<IMatchRecord>) {
@@ -102,30 +101,13 @@ export class PlayerMatchService {
     return record;
   }
 
-  async getMatchRecordsByPlayerId(playerId: string, query: Record<string, unknown> = {}) {
+  async getMatchRecordsByPlayerId(playerId: string) {
     const profile = await PlayerProfile.findOne({
       $or: [{ _id: playerId }, { userId: playerId }],
     });
     const targetPlayerId = profile ? profile._id : playerId;
 
-    const matchQuery = new QueryBuilder(MatchRecord.find({ playerId: targetPlayerId }), query)
-      .search(['awayTeam', 'homeTeam', 'gameType', 'leagueType', 'scoutName'])
-      .filter()
-      .sort()
-      .paginate();
-
-    const matches = await matchQuery.modelQuery;
-    const pagination = await matchQuery.countTotal();
-
-    return {
-      matches,
-      meta: {
-        total: pagination.total,
-        page: pagination.page,
-        limit: pagination.limit,
-        totalPages: pagination.totalPage,
-      },
-    };
+    return MatchRecord.find({ playerId: targetPlayerId }).sort({ matchDate: -1 });
   }
 }
 

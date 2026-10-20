@@ -1,7 +1,6 @@
 import { AppError } from '@/utils/AppError';
 import { IAgentProfile, IVerificationDocument, ISuccessStory } from './agent.interface';
 import { AgentProfile, VerificationDocument, SuccessStory } from './agent.model';
-import QueryBuilder from '@/builder/QueryBuilder';
 
 export class AgentService {
   async createProfile(payload: Partial<IAgentProfile>) {
@@ -32,23 +31,8 @@ export class AgentService {
     return SuccessStory.create({ ...payload, creatorId });
   }
 
-  async getSuccessStories(query: Record<string, unknown> = {}) {
-    const storyQuery = new QueryBuilder(
-      SuccessStory.find().populate('creatorId', 'name email avatar'),
-      query,
-    )
-      .search(['title', 'description', 'playerName'])
-      .filter()
-      .sort()
-      .paginate();
-
-    const result = await storyQuery.modelQuery;
-    const meta = await storyQuery.countTotal();
-
-    return {
-      meta,
-      result,
-    };
+  async getSuccessStories(filter: Record<string, unknown> = {}) {
+    return SuccessStory.find(filter).populate('creatorId', 'name email avatar');
   }
 }
 

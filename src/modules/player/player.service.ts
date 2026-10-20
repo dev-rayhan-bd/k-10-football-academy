@@ -747,8 +747,8 @@ export class PlayerService {
     return playerMatchService.addMatchRecord(payload);
   }
 
-  async getMatchRecordsByPlayerId(playerId: string, query: Record<string, unknown> = {}) {
-    return playerMatchService.getMatchRecordsByPlayerId(playerId, query);
+  async getMatchRecordsByPlayerId(playerId: string) {
+    return playerMatchService.getMatchRecordsByPlayerId(playerId);
   }
 
   async addClubInterest(playerId: string, data: { clubName: string; logoUrl?: string }) {
@@ -774,8 +774,8 @@ export class PlayerService {
     return playerMediaService.uploadMediaGallery(playerId, mediaUrl, thumbnailUrl, title);
   }
 
-  async getMediaGallery(playerId: string, queryOrPage: any = 1, limit = 10, mediaType?: string) {
-    return playerMediaService.getMediaGallery(playerId, queryOrPage, limit, mediaType);
+  async getMediaGallery(playerId: string, page = 1, limit = 10, mediaType?: string) {
+    return playerMediaService.getMediaGallery(playerId, page, limit, mediaType);
   }
 
   // 8. Player Analytics Dashboard

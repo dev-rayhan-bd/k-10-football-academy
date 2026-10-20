@@ -392,13 +392,12 @@ export const getMatchRecords = catchAsync(async (req: Request, res: Response) =>
   if (!playerId) {
     throw new AppError(400, 'Player ID is required');
   }
-  const result = await playerService.getMatchRecordsByPlayerId(playerId, req.query);
+  const result = await playerService.getMatchRecordsByPlayerId(playerId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Match records fetched successfully',
-    meta: result.meta,
-    data: result.matches,
+    data: result,
   });
 });
 
@@ -527,18 +526,21 @@ export const uploadMediaGallery = catchAsync(async (req: Request, res: Response)
 });
 
 export const getMediaGallery = catchAsync(async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const mediaType = (req.query.mediaType as string) || (req.query.type as string);
+
   const playerId = resolvePlayerId(req);
   if (!playerId) {
     throw new AppError(400, 'Player ID is required');
   }
 
-  const result = await playerService.getMediaGallery(playerId, req.query);
+  const result = await playerService.getMediaGallery(playerId, page, limit, mediaType);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Media gallery fetched successfully',
-    meta: result.meta,
-    data: result.media,
+    data: result,
   });
 });
 

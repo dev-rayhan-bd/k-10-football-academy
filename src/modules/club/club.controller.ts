@@ -24,12 +24,11 @@ export const getClubProfile = catchAsync(async (req: Request, res: Response) => 
 });
 
 export const getAllClubProfiles = catchAsync(async (req: Request, res: Response) => {
-  const { meta, result } = await clubService.getAllProfiles(req.query);
+  const result = await clubService.getAllProfiles(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Club profiles fetched successfully',
-    meta,
     data: result,
   });
 });

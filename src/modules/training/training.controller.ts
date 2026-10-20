@@ -14,15 +14,11 @@ export const createTrainingSession = catchAsync(async (req: Request, res: Respon
 });
 
 export const getTrainingSessions = catchAsync(async (req: Request, res: Response) => {
-  const { meta, result } = await trainingService.getSessionsByAcademy(
-    req.params.academyId,
-    req.query,
-  );
+  const result = await trainingService.getSessionsByAcademy(req.params.academyId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Training sessions fetched successfully',
-    meta,
     data: result,
   });
 });

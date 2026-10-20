@@ -24,15 +24,11 @@ export const getInvoice = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const getInvoicesByAcademy = catchAsync(async (req: Request, res: Response) => {
-  const { meta, result } = await invoiceService.getInvoicesByAcademy(
-    req.params.academyId,
-    req.query,
-  );
+  const result = await invoiceService.getInvoicesByAcademy(req.params.academyId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Invoices fetched successfully',
-    meta,
     data: result,
   });
 });

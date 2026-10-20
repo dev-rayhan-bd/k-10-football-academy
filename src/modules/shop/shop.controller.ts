@@ -14,12 +14,11 @@ export const createProduct = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const getAllProducts = catchAsync(async (req: Request, res: Response) => {
-  const { meta, result } = await shopService.getAllProducts(req.query);
+  const result = await shopService.getAllProducts(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Products fetched successfully',
-    meta,
     data: result,
   });
 });

@@ -1,7 +1,6 @@
 import { AppError } from '@/utils/AppError';
 import { IClubProfile, IClubAchievement, IClubFavourite } from './club.interface';
 import { ClubProfile, ClubAchievement, ClubFavourite } from './club.model';
-import QueryBuilder from '@/builder/QueryBuilder';
 
 export class ClubService {
   async createProfile(payload: Partial<IClubProfile>) {
@@ -20,23 +19,8 @@ export class ClubService {
     return profile;
   }
 
-  async getAllProfiles(query: Record<string, unknown> = {}) {
-    const clubQuery = new QueryBuilder(
-      ClubProfile.find().populate('userId', 'name email avatar phone'),
-      query,
-    )
-      .search(['name', 'league', 'country', 'city', 'stadium'])
-      .filter()
-      .sort()
-      .paginate();
-
-    const result = await clubQuery.modelQuery;
-    const meta = await clubQuery.countTotal();
-
-    return {
-      meta,
-      result,
-    };
+  async getAllProfiles(filter: Record<string, unknown> = {}) {
+    return ClubProfile.find(filter).populate('userId', 'name email avatar');
   }
 
   async addAchievement(clubId: string, payload: Partial<IClubAchievement>) {

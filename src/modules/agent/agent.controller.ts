@@ -57,12 +57,11 @@ export const createSuccessStory = catchAsync(async (req: Request, res: Response)
 });
 
 export const getSuccessStories = catchAsync(async (req: Request, res: Response) => {
-  const { meta, result } = await agentService.getSuccessStories(req.query);
+  const result = await agentService.getSuccessStories(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Success stories fetched successfully',
-    meta,
     data: result,
   });
 });

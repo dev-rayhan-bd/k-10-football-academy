@@ -397,3 +397,100 @@ export const removeCoachAffiliation = catchAsync(async (req: Request, res: Respo
     data: result.affiliation,
   });
 });
+
+export const getTransferRequestsDashboard = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getTransferRequestsDashboard(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Transfer requests dashboard retrieved successfully',
+    data: result,
+  });
+});
+
+export const getTargetAcademiesForTransfer = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getTargetAcademiesForTransfer(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Target academies for transfer retrieved successfully',
+    data: result,
+  });
+});
+
+export const getMyAcademyPlayersForTransfer = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getMyAcademyPlayersForTransfer(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy athletes for transfer retrieved successfully',
+    data: result,
+  });
+});
+
+export const getTransferRequestById = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const result = await academyService.getTransferRequestById(req.params.id, user);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Transfer request details fetched successfully',
+    data: result,
+  });
+});
+
+export const createTransferRequest = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const result = await academyService.createTransferRequest(user, req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.transfer,
+  });
+});
+
+export const respondToTransferRequest = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { status, responseNote } = req.body || {};
+  const result = await academyService.respondToTransferRequest(id, user, status, responseNote);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.transfer,
+  });
+});
+
+export const approveTransferRequest = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { responseNote } = req.body || {};
+  const result = await academyService.respondToTransferRequest(id, user, 'APPROVED', responseNote);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.transfer,
+  });
+});
+
+export const rejectTransferRequest = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { responseNote } = req.body;
+  const result = await academyService.respondToTransferRequest(id, user, 'REJECTED', responseNote);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.transfer,
+  });
+});

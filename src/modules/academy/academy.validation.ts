@@ -95,3 +95,26 @@ export const respondAffiliationZodSchema = z.object({
     responseNote: z.string().optional(),
   }),
 });
+
+export const createTransferRequestZodSchema = z.object({
+  body: z
+    .object({
+      playerId: z.string({ required_error: 'Player ID from dropdown is required' }),
+      targetAcademyId: z.string({ required_error: 'Target Academy ID from dropdown is required' }),
+      transferType: z.string().default('OUTGOING'),
+      fullName: z.string().optional(),
+      athleteName: z.string().optional(),
+      reason: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const respondTransferRequestZodSchema = z.object({
+  body: z
+    .object({
+      status: z.enum(['APPROVED', 'REJECTED']).optional(),
+      responseNote: z.string().optional(),
+      reason: z.string().optional(),
+    })
+    .optional(),
+});

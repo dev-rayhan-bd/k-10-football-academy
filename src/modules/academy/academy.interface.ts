@@ -142,3 +142,28 @@ export interface IAcademyCoach {
 }
 
 export interface IAcademyCoachDocument extends IAcademyCoach, Document {}
+
+export type TransferType = 'OUTGOING' | 'INCOMING';
+export type TransferStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface ITransferRequest {
+  playerId: Types.ObjectId;
+  fromAcademyId: Types.ObjectId;
+  toAcademyId: Types.ObjectId;
+  fromTeamId?: Types.ObjectId;
+  toTeamId?: Types.ObjectId;
+  transferType: TransferType;
+  requestedByUserId: Types.ObjectId;
+  requestedByCoachId?: Types.ObjectId;
+  requestedByRole: string;
+  requesterName?: string;
+  reason?: string;
+  status: TransferStatus;
+  responseNote?: string;
+  respondedByUserId?: Types.ObjectId;
+  resolvedAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface ITransferRequestDocument extends ITransferRequest, Document {}

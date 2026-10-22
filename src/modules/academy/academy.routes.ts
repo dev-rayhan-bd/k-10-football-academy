@@ -13,6 +13,8 @@ import {
   inviteCoachZodSchema,
   requestCoachAffiliationZodSchema,
   respondAffiliationZodSchema,
+  createTransferRequestZodSchema,
+  respondTransferRequestZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -50,6 +52,14 @@ import {
   getCoachAffiliations,
   respondToCoachAffiliation,
   removeCoachAffiliation,
+  getTransferRequestsDashboard,
+  getTargetAcademiesForTransfer,
+  getMyAcademyPlayersForTransfer,
+  getTransferRequestById,
+  createTransferRequest,
+  respondToTransferRequest,
+  approveTransferRequest,
+  rejectTransferRequest,
 } from './academy.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -241,7 +251,78 @@ router.post(
   validateRequest(createTeamZodSchema),
   createTeam,
 );
-router.get('/:academyId/teams', getTeams);
+// ==========================================
+// TRANSFER REQUESTS (ACROSS TEAMS & ACADEMIES)
+// ==========================================
+router.get(
+  '/transfer-requests/dashboard',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTransferRequestsDashboard,
+);
+router.get(
+  '/transfer-requests',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTransferRequestsDashboard,
+);
+router.get(
+  '/transfer-requests/target-academies',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTargetAcademiesForTransfer,
+);
+router.get(
+  '/transfer-requests/my-players',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getMyAcademyPlayersForTransfer,
+);
+router.get(
+  '/transfer-requests/:id',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTransferRequestById,
+);
+router.post(
+  '/transfer-requests',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(createTransferRequestZodSchema),
+  createTransferRequest,
+);
+router.patch(
+  '/transfer-requests/:id/status',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(respondTransferRequestZodSchema),
+  respondToTransferRequest,
+);
+router.post(
+  '/transfer-requests/:id/approve',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  approveTransferRequest,
+);
+router.post(
+  '/transfer-requests/:id/reject',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  rejectTransferRequest,
+);
+router.post(
+  '/transfer-requests/:id/cancel',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  rejectTransferRequest,
+);
+
+// Route aliases with :academyId in path
+router.get(
+  '/:academyId/transfer-requests',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTransferRequestsDashboard,
+);
+router.get(
+  '/:academyId/transfer-requests/target-academies',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTargetAcademiesForTransfer,
+);
+router.get(
+  '/:academyId/transfer-requests/my-players',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getMyAcademyPlayersForTransfer,
+);
 
 router.get('/:id', getAcademyProfile);
 

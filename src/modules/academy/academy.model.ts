@@ -5,6 +5,7 @@ import {
   IGameReportDocument,
   IPlayerEvaluationDocument,
   IAcademyCoachDocument,
+  ITransferRequestDocument,
 } from './academy.interface';
 
 const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
@@ -159,3 +160,52 @@ AcademyCoachSchema.index({ academyId: 1, status: 1 });
 AcademyCoachSchema.index({ coachId: 1, status: 1 });
 
 export const AcademyCoach = model<IAcademyCoachDocument>('AcademyCoach', AcademyCoachSchema);
+
+const TransferRequestSchema = new Schema<ITransferRequestDocument>(
+  {
+    playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true, index: true },
+    fromAcademyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'AcademyProfile',
+      required: true,
+      index: true,
+    },
+    toAcademyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'AcademyProfile',
+      required: true,
+      index: true,
+    },
+    fromTeamId: { type: Schema.Types.ObjectId, ref: 'Team' },
+    toTeamId: { type: Schema.Types.ObjectId, ref: 'Team' },
+    transferType: {
+      type: String,
+      enum: ['OUTGOING', 'INCOMING'],
+      required: true,
+    },
+    requestedByUserId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    requestedByCoachId: { type: Schema.Types.ObjectId, ref: 'CoachProfile' },
+    requestedByRole: { type: String, default: 'ACADEMY' },
+    requesterName: { type: String },
+    reason: { type: String },
+    status: {
+      type: String,
+      enum: ['PENDING', 'APPROVED', 'REJECTED'],
+      default: 'PENDING',
+      index: true,
+    },
+    responseNote: { type: String },
+    respondedByUserId: { type: Schema.Types.ObjectId, ref: 'User' },
+    resolvedAt: { type: Date },
+  },
+  { timestamps: true },
+);
+
+TransferRequestSchema.index({ fromAcademyId: 1, status: 1 });
+TransferRequestSchema.index({ toAcademyId: 1, status: 1 });
+TransferRequestSchema.index({ playerId: 1, status: 1 });
+
+export const TransferRequest = model<ITransferRequestDocument>(
+  'TransferRequest',
+  TransferRequestSchema,
+);

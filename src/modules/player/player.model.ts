@@ -23,6 +23,7 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     currentClub: { type: String },
     clubLogo: { type: String },
     academy: { type: String },
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', index: true },
     contractUntil: { type: Date },
     marketValue: { type: Number, default: 0 },
     overallRating: { type: Number, default: 50 },

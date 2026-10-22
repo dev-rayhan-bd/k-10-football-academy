@@ -31,3 +31,27 @@ export const createGameReportZodSchema = z.object({
     price: z.number().optional(),
   }),
 });
+
+export const inviteCoachZodSchema = z.object({
+  body: z.object({
+    coachId: z.string().optional(),
+    coachEmail: z.string().email().optional(),
+    role: z.string().optional(),
+    message: z.string().optional(),
+  }),
+});
+
+export const requestCoachAffiliationZodSchema = z.object({
+  body: z.object({
+    academyId: z.string().min(1),
+    role: z.string().optional(),
+    message: z.string().optional(),
+  }),
+});
+
+export const respondAffiliationZodSchema = z.object({
+  body: z.object({
+    action: z.enum(['APPROVE', 'REJECT']),
+    responseNote: z.string().optional(),
+  }),
+});

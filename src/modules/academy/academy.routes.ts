@@ -5,6 +5,9 @@ import {
   createAcademyProfileZodSchema,
   createTeamZodSchema,
   createGameReportZodSchema,
+  inviteCoachZodSchema,
+  requestCoachAffiliationZodSchema,
+  respondAffiliationZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -20,6 +23,12 @@ import {
   sendEvaluationReminder,
   submitPlayerEvaluation,
   getPlayerEvaluations,
+  inviteCoach,
+  requestCoachAffiliation,
+  getAcademyCoaches,
+  getCoachAffiliations,
+  respondToCoachAffiliation,
+  removeCoachAffiliation,
 } from './academy.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -57,6 +66,32 @@ router.post(
   auth('COACH', 'SUPER_ADMIN'),
   submitPlayerEvaluation,
 );
+
+// ==========================================
+// ACADEMY COACH AFFILIATION & APPROVAL FLOW
+// ==========================================
+router.post(
+  '/coaches/invite',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(inviteCoachZodSchema),
+  inviteCoach,
+);
+router.post(
+  '/coaches/request',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(requestCoachAffiliationZodSchema),
+  requestCoachAffiliation,
+);
+router.get('/coaches/my-affiliations', auth('COACH', 'SUPER_ADMIN'), getCoachAffiliations);
+router.get('/coaches', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyCoaches);
+router.get('/:academyId/coaches', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyCoaches);
+router.patch(
+  '/coaches/:affiliationId/respond',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(respondAffiliationZodSchema),
+  respondToCoachAffiliation,
+);
+router.delete('/coaches/:affiliationId', auth('ACADEMY', 'SUPER_ADMIN'), removeCoachAffiliation);
 
 router.get('/:id', getAcademyProfile);
 

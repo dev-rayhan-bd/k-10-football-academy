@@ -40,6 +40,7 @@ export interface IPlayerProfile {
   currentClub?: string;
   clubLogo?: string;
   academy?: string;
+  academyId?: Types.ObjectId;
   contractUntil?: Date;
   marketValue?: number;
   overallRating: number;

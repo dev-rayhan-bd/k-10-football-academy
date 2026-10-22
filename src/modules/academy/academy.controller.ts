@@ -148,3 +148,77 @@ export const getPlayerEvaluations = catchAsync(async (req: Request, res: Respons
     data: result,
   });
 });
+
+export const inviteCoach = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const managerUserId = (req as any).user.userId;
+  const result = await academyService.inviteCoach(academyId, managerUserId, req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Coach invitation sent successfully',
+    data: result,
+  });
+});
+
+export const requestCoachAffiliation = catchAsync(async (req: Request, res: Response) => {
+  const coachUserId = (req as any).user.userId;
+  const result = await academyService.requestCoachAffiliation(coachUserId, req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Affiliation request sent to academy successfully',
+    data: result,
+  });
+});
+
+export const getAcademyCoaches = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const status = req.query.status as string;
+  const result = await academyService.getAcademyCoaches(academyId, status);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy coaches fetched successfully',
+    data: result,
+  });
+});
+
+export const getCoachAffiliations = catchAsync(async (req: Request, res: Response) => {
+  const coachUserId = (req as any).user.userId;
+  const result = await academyService.getCoachAffiliations(coachUserId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Coach affiliations fetched successfully',
+    data: result,
+  });
+});
+
+export const respondToCoachAffiliation = catchAsync(async (req: Request, res: Response) => {
+  const responderUserId = (req as any).user.userId;
+  const { action, responseNote } = req.body;
+  const result = await academyService.respondToCoachAffiliation(
+    req.params.affiliationId,
+    responderUserId,
+    action,
+    responseNote,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: `Affiliation request ${action === 'APPROVE' ? 'approved' : 'rejected'} successfully`,
+    data: result,
+  });
+});
+
+export const removeCoachAffiliation = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.removeCoachAffiliation(academyId, req.params.affiliationId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.affiliation,
+  });
+});

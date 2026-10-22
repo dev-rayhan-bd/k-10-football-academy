@@ -4,6 +4,7 @@ import {
   ITeamDocument,
   IGameReportDocument,
   IPlayerEvaluationDocument,
+  IAcademyCoachDocument,
 } from './academy.interface';
 
 const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
@@ -103,3 +104,34 @@ export const PlayerEvaluation = model<IPlayerEvaluationDocument>(
   'PlayerEvaluation',
   PlayerEvaluationSchema,
 );
+
+const AcademyCoachSchema = new Schema<IAcademyCoachDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    coachId: { type: Schema.Types.ObjectId, ref: 'CoachProfile', required: true, index: true },
+    coachUserId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    role: { type: String, default: 'Youth Coach' },
+    status: {
+      type: String,
+      enum: ['PENDING', 'APPROVED', 'REJECTED', 'REMOVED'],
+      default: 'PENDING',
+      index: true,
+    },
+    requestedBy: {
+      type: String,
+      enum: ['ACADEMY', 'COACH'],
+      required: true,
+    },
+    requestMessage: { type: String },
+    responseNote: { type: String },
+    approvedAt: { type: Date },
+    rejectedAt: { type: Date },
+  },
+  { timestamps: true },
+);
+
+AcademyCoachSchema.index({ academyId: 1, coachId: 1 }, { unique: true });
+AcademyCoachSchema.index({ academyId: 1, status: 1 });
+AcademyCoachSchema.index({ coachId: 1, status: 1 });
+
+export const AcademyCoach = model<IAcademyCoachDocument>('AcademyCoach', AcademyCoachSchema);

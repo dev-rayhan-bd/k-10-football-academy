@@ -124,6 +124,9 @@ export interface ICoachProfile {
   dualNationalityFlag?: string;
   currentClub?: string;
   clubLogo?: string;
+  academyId?: Types.ObjectId;
+  isVerifiedByAcademy?: boolean;
+  academyRole?: string;
   website?: string;
   phone?: string;
   email?: string;

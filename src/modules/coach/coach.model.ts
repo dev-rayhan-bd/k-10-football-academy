@@ -147,6 +147,9 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
     dualNationalityFlag: { type: String, default: 'IT' },
     currentClub: { type: String, default: 'Manchester City' },
     clubLogo: { type: String },
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile' },
+    isVerifiedByAcademy: { type: Boolean, default: false },
+    academyRole: { type: String },
     website: { type: String, default: 'www.k10football.com' },
     phone: { type: String },
     email: { type: String },
@@ -191,6 +194,7 @@ CoachProfileSchema.index({ cvTier: 1 });
 CoachProfileSchema.index({ status: 1 });
 CoachProfileSchema.index({ coachType: 1 });
 CoachProfileSchema.index({ overallRatingScore: -1 });
+CoachProfileSchema.index({ academyId: 1 });
 
 const TacticalFormationSchema = new Schema<ITacticalFormationDocument>(
   {

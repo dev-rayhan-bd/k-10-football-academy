@@ -80,3 +80,23 @@ export interface IPlayerEvaluation {
 }
 
 export interface IPlayerEvaluationDocument extends IPlayerEvaluation, Document {}
+
+export type AcademyAffiliationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REMOVED';
+export type AffiliationInitiator = 'ACADEMY' | 'COACH';
+
+export interface IAcademyCoach {
+  academyId: Types.ObjectId;
+  coachId: Types.ObjectId;
+  coachUserId: Types.ObjectId;
+  role: string;
+  status: AcademyAffiliationStatus;
+  requestedBy: AffiliationInitiator;
+  requestMessage?: string;
+  responseNote?: string;
+  approvedAt?: Date;
+  rejectedAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IAcademyCoachDocument extends IAcademyCoach, Document {}

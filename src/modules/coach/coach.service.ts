@@ -226,6 +226,17 @@ export class CoachService {
       }
     }
 
+    // Guard: Switching to CLUB_COACH requires an officially approved Academy affiliation
+    if (payload.coachType === 'CLUB_COACH') {
+      const isAffiliated = profile.isVerifiedByAcademy && profile.academyId;
+      if (!isAffiliated) {
+        throw new AppError(
+          400,
+          'Cannot switch to Club Coach mode without an officially approved affiliation from a registered Club or Academy.',
+        );
+      }
+    }
+
     // 6. Sub-arrays
     if (payload.accomplishments !== undefined) {
       profile.accomplishments = parseIfJson(payload.accomplishments);
@@ -625,18 +636,15 @@ export class CoachService {
       throw new AppError(404, 'Coach profile not found');
     }
 
-    const coachClub =
-      coach.currentClub ||
-      (Array.isArray(coach.clubHistory)
-        ? coach.clubHistory.find((c: any) => c.isCurrent)?.clubName
-        : null);
-
-    if (!coachClub) {
+    // 1. Strict Club/Academy Registration Check: Coach MUST have an officially approved academy affiliation
+    if (!coach.isVerifiedByAcademy || !coach.academyId) {
       throw new AppError(
         403,
-        'Only coaches who are officially registered with a football club or academy are authorised to validate player CVs.',
+        'Only coaches who are officially registered and approved by a football club or academy are authorised to validate player CVs.',
       );
     }
+
+    const coachClub = coach.currentClub || 'Official Academy';
 
     // 2. Check Player existence
     const player = await PlayerProfile.findById(playerId);
@@ -645,16 +653,22 @@ export class CoachService {
     }
 
     // 3. Strict Supervision Check: Coaches cannot validate players from other teams or clubs
+    const isSameAcademy =
+      player.academyId &&
+      coach.academyId &&
+      player.academyId.toString() === coach.academyId.toString();
+
     const playerClub = player.currentClub || player.academy;
     const isSameClub =
       playerClub && coachClub && playerClub.trim().toLowerCase() === coachClub.trim().toLowerCase();
+
     const isDirectlyAssigned =
       player.verifyingCoachId && player.verifyingCoachId.toString() === coach.userId.toString();
 
-    if (!isSameClub && !isDirectlyAssigned) {
+    if (!isSameAcademy && !isSameClub && !isDirectlyAssigned) {
       throw new AppError(
         403,
-        `Coaches are not permitted to validate CVs belonging to players from other teams or clubs. You can only validate players currently registered with ${coachClub}.`,
+        `Coaches are not permitted to validate CVs belonging to players from other teams or clubs. You can only validate players currently registered with your approved academy (${coachClub}).`,
       );
     }
 
@@ -721,6 +735,9 @@ export class CoachService {
       clubManaged: coachClub,
       verifiedAt: new Date(),
     };
+    if (coach.academyId && !player.academyId) {
+      player.academyId = coach.academyId;
+    }
 
     await player.save({ validateModifiedOnly: true });
 

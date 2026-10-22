@@ -44,6 +44,19 @@ export class PlayerService {
     if (existing) {
       throw new AppError(400, 'Player profile already exists for this user');
     }
+    if (payload.dateOfBirth) {
+      const dob = new Date(payload.dateOfBirth);
+      if (!isNaN(dob.getTime())) {
+        payload.dateOfBirth = dob;
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          calculatedAge--;
+        }
+        payload.age = Math.max(0, calculatedAge);
+      }
+    }
     payload.profileCompletion = computeProfileCompletion(payload, false);
     const profile = await PlayerProfile.create(payload);
 
@@ -159,9 +172,24 @@ export class PlayerService {
       const dob = new Date(payload.dateOfBirth);
       if (!isNaN(dob.getTime())) {
         payload.dateOfBirth = dob;
-        if (payload.age === undefined || payload.age === '') {
-          payload.age = new Date().getFullYear() - dob.getFullYear();
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          calculatedAge--;
         }
+        payload.age = Math.max(0, calculatedAge);
+      }
+    } else if (existing.dateOfBirth && (payload.age === undefined || payload.age === '')) {
+      const dob = new Date(existing.dateOfBirth);
+      if (!isNaN(dob.getTime())) {
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          calculatedAge--;
+        }
+        payload.age = Math.max(0, calculatedAge);
       }
     }
     if (payload.academy && !payload.currentClub) {
@@ -186,7 +214,9 @@ export class PlayerService {
       payload.weight = Number(payload.weight);
     }
     if (payload.age !== undefined && payload.age !== '') {
-      payload.age = Number(payload.age);
+      if (!payload.dateOfBirth) {
+        payload.age = Number(payload.age);
+      }
     }
     if (payload.marketValue !== undefined && payload.marketValue !== '') {
       payload.marketValue = Number(payload.marketValue);

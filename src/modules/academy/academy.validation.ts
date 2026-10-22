@@ -14,8 +14,28 @@ export const createAcademyProfileZodSchema = z.object({
 
 export const createTeamZodSchema = z.object({
   body: z.object({
-    teamName: z.string().min(2),
-    ageGroup: z.string().min(2),
+    teamName: z.string().min(2, 'Team name must have at least 2 characters'),
+    ageGroup: z.string().min(2, 'Age group is required (e.g., U17, Santos U17)'),
+    status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+    coachIds: z.array(z.string()).optional(),
+    playerIds: z.array(z.string()).optional(),
+  }),
+});
+
+export const updateTeamZodSchema = z.object({
+  body: z.object({
+    teamName: z.string().min(2).optional(),
+    ageGroup: z.string().min(2).optional(),
+    status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+    coachIds: z.array(z.string()).optional(),
+    playerIds: z.array(z.string()).optional(),
+  }),
+});
+
+export const upgradePlanZodSchema = z.object({
+  body: z.object({
+    plan: z.enum(['FREE', 'BASIC', 'PRO', 'PREMIUM']),
+    maxTeams: z.number().min(1).optional(),
   }),
 });
 

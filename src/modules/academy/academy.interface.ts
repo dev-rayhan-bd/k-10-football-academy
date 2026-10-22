@@ -19,6 +19,8 @@ export interface IAcademyProfile {
   description?: string;
   visionAndMission?: string;
   trainingPhilosophy?: string;
+  currentPlan?: 'FREE' | 'BASIC' | 'PRO' | 'PREMIUM';
+  maxTeams?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -28,9 +30,12 @@ export interface IAcademyProfileDocument extends IAcademyProfile, Document {}
 export interface ITeam {
   academyId: Types.ObjectId;
   teamName: string;
-  ageGroup: string; // e.g. "UNDER_15", "UNDER_17"
+  ageGroup: string; // e.g. "UNDER_15", "UNDER_17", "Santos U17"
   coachesCount: number;
   playersCount: number;
+  totalMembers?: number;
+  coachIds?: Types.ObjectId[];
+  playerIds?: Types.ObjectId[];
   status: 'ACTIVE' | 'INACTIVE';
   createdAt?: Date;
   updatedAt?: Date;

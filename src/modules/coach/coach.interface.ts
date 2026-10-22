@@ -171,6 +171,7 @@ export interface ICoachProfile {
   currentClub?: string;
   clubLogo?: string;
   academyId?: Types.ObjectId;
+  teamIds?: Types.ObjectId[];
   isVerifiedByAcademy?: boolean;
   academyRole?: string;
   website?: string;

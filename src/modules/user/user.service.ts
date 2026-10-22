@@ -500,12 +500,12 @@ export class UserService {
   async loginUser(email: string, candidatePassword: string): Promise<ILoginResponse> {
     const user = await this.userRepo.findByEmail(email, true);
     if (!user) {
-      throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid credentials');
+      throw new AppError(StatusCodes.UNPROCESSABLE_ENTITY, 'Invalid email or password');
     }
 
     const isMatch = await user.comparePassword(candidatePassword);
     if (!isMatch) {
-      throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid credentials');
+      throw new AppError(StatusCodes.UNPROCESSABLE_ENTITY, 'Invalid email or password');
     }
 
     if (!user.isEmailVerified) {

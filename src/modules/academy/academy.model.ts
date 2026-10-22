@@ -23,17 +23,26 @@ const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
     description: { type: String },
     visionAndMission: { type: String },
     trainingPhilosophy: { type: String },
+    currentPlan: {
+      type: String,
+      enum: ['FREE', 'BASIC', 'PRO', 'PREMIUM'],
+      default: 'FREE',
+    },
+    maxTeams: { type: Number, default: 1 },
   },
   { timestamps: true },
 );
 
 const TeamSchema = new Schema<ITeamDocument>(
   {
-    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true },
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
     teamName: { type: String, required: true },
     ageGroup: { type: String, required: true },
     coachesCount: { type: Number, default: 0 },
     playersCount: { type: Number, default: 0 },
+    totalMembers: { type: Number, default: 0 },
+    coachIds: [{ type: Schema.Types.ObjectId, ref: 'CoachProfile' }],
+    playerIds: [{ type: Schema.Types.ObjectId, ref: 'PlayerProfile' }],
     status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
   },
   { timestamps: true },

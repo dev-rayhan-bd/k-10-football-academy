@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { IAcademyProfile, ITeam, IGameReport, IPlayerEvaluation } from './academy.interface';
 import { AcademyProfile, Team, GameReport, PlayerEvaluation, AcademyCoach } from './academy.model';
@@ -68,12 +69,421 @@ export class AcademyService {
     return { meta, result };
   }
 
-  async createTeam(academyId: string, payload: Partial<ITeam>) {
-    return Team.create({ ...payload, academyId });
+  async resolveAcademyProfile(identifier: string) {
+    if (!identifier) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Academy identifier is required');
+    }
+    let academy = null;
+    if (Types.ObjectId.isValid(identifier)) {
+      academy = await AcademyProfile.findOne({
+        $or: [{ _id: identifier }, { userId: identifier }],
+      });
+    }
+    if (!academy) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy profile not found');
+    }
+    return academy;
   }
 
-  async getTeams(academyId: string) {
-    return Team.find({ academyId });
+  // ==========================================
+  // COACH AND PLAYERS DASHBOARD & TEAM ROSTER
+  // ==========================================
+  async getCoachAndPlayersDashboard(academyIdentifier: string) {
+    const academy = await this.resolveAcademyProfile(academyIdentifier);
+
+    // 1. Fetch Teams with populated coaches and players
+    const teams = await Team.find({ academyId: academy._id })
+      .populate(
+        'coachIds',
+        'fullName title profileImage licenseStatus cvTier yearsExperience phone email',
+      )
+      .populate('playerIds', 'fullName position profileImage overallRating age cvTier dateOfBirth')
+      .sort({ createdAt: -1 });
+
+    const formattedTeams = teams.map((team) => {
+      const cCount = team.coachIds ? team.coachIds.length : team.coachesCount || 0;
+      const pCount = team.playerIds ? team.playerIds.length : team.playersCount || 0;
+      const tMembers = cCount + pCount;
+      return {
+        _id: team._id,
+        academyId: team.academyId,
+        teamName: team.teamName,
+        ageGroup: team.ageGroup,
+        coachesCount: cCount,
+        playersCount: pCount,
+        totalMembers: tMembers,
+        status: team.status || 'ACTIVE',
+        coachIds: team.coachIds,
+        playerIds: team.playerIds,
+        createdAt: team.createdAt,
+        updatedAt: team.updatedAt,
+      };
+    });
+
+    // 2. Total Teams count
+    const totalTeams = teams.length;
+
+    // 3. Total Coaches count in academy
+    const approvedCoachAffiliationIds = await AcademyCoach.find({
+      academyId: academy._id,
+      status: 'APPROVED',
+    }).distinct('coachId');
+
+    const directCoachIds = await CoachProfile.find({
+      academyId: academy._id,
+    }).distinct('_id');
+
+    const uniqueCoachIdStrings = new Set([
+      ...approvedCoachAffiliationIds.map((id) => id.toString()),
+      ...directCoachIds.map((id) => id.toString()),
+    ]);
+    const totalCoaches = uniqueCoachIdStrings.size;
+
+    // 4. Total Players count in academy
+    const totalPlayers = await PlayerProfile.countDocuments({
+      $or: [{ academyId: academy._id }, { academy: academy.name }],
+    });
+
+    // 5. Total Roster Members (Coaches + Players)
+    const totalRosterMembers = totalCoaches + totalPlayers;
+
+    // 6. Plan & Team Capacity details
+    const currentPlan = academy.currentPlan || 'FREE';
+    const planLimits: Record<string, number> = {
+      FREE: 1,
+      BASIC: 3,
+      PRO: 5,
+      PREMIUM: 15,
+    };
+    const maxTeams =
+      academy.maxTeams && academy.maxTeams > 0 ? academy.maxTeams : planLimits[currentPlan] || 1;
+
+    const usedTeams = totalTeams;
+    const capacityDisplay = `${usedTeams}/${maxTeams}`;
+    const usagePercentage = Math.min(100, Math.round((usedTeams / maxTeams) * 100));
+    const isLimitReached = usedTeams >= maxTeams;
+
+    const message = isLimitReached
+      ? `You are using ${usedTeams} out of ${maxTeams} available team slot. Upgrade your plan for more.`
+      : `You are using ${usedTeams} out of ${maxTeams} available team slots. You have ${maxTeams - usedTeams} slot(s) remaining.`;
+
+    return {
+      summary: {
+        totalTeams,
+        totalCoaches,
+        totalPlayers,
+        totalRosterMembers,
+      },
+      teamCapacity: {
+        currentPlan,
+        usedTeams,
+        maxTeams,
+        capacityDisplay,
+        usagePercentage,
+        isLimitReached,
+        upgradeRequired: isLimitReached,
+        message,
+      },
+      teams: formattedTeams,
+    };
+  }
+
+  async getAvailableMembers(academyIdentifier: string) {
+    const academy = await this.resolveAcademyProfile(academyIdentifier);
+
+    // Fetch all approved coach affiliations
+    const approvedAffiliations = await AcademyCoach.find({
+      academyId: academy._id,
+      status: 'APPROVED',
+    }).populate(
+      'coachId',
+      'fullName title profileImage licenseStatus cvTier yearsExperience phone email',
+    );
+
+    // Fetch direct coaches
+    const directCoaches = await CoachProfile.find({
+      academyId: academy._id,
+    }).select('fullName title profileImage licenseStatus cvTier yearsExperience phone email');
+
+    const coachMap = new Map();
+    approvedAffiliations.forEach((aff: any) => {
+      if (aff.coachId && aff.coachId._id) {
+        coachMap.set(aff.coachId._id.toString(), aff.coachId);
+      }
+    });
+    directCoaches.forEach((c: any) => {
+      coachMap.set(c._id.toString(), c);
+    });
+
+    const allTeams = await Team.find({ academyId: academy._id }).select(
+      'teamName coachIds playerIds',
+    );
+
+    const coaches = Array.from(coachMap.values()).map((coach: any) => {
+      const assignedTeam = allTeams.find(
+        (t) => t.coachIds && t.coachIds.some((id: any) => id.toString() === coach._id.toString()),
+      );
+      return {
+        _id: coach._id,
+        fullName: coach.fullName,
+        title: coach.title || 'Coach',
+        profileImage: coach.profileImage,
+        licenseStatus: coach.licenseStatus,
+        cvTier: coach.cvTier,
+        yearsExperience: coach.yearsExperience,
+        assignedTeamId: assignedTeam ? assignedTeam._id : null,
+        assignedTeamName: assignedTeam ? assignedTeam.teamName : null,
+      };
+    });
+
+    // Players list
+    const playersList = await PlayerProfile.find({
+      $or: [{ academyId: academy._id }, { academy: academy.name }],
+    }).select('fullName position age overallRating profileImage cvTier teamId');
+
+    const players = playersList.map((player: any) => {
+      const assignedTeam = allTeams.find(
+        (t) =>
+          (player.teamId && player.teamId.toString() === t._id.toString()) ||
+          (t.playerIds && t.playerIds.some((id: any) => id.toString() === player._id.toString())),
+      );
+      return {
+        _id: player._id,
+        fullName: player.fullName,
+        position: player.position,
+        age: player.age,
+        overallRating: player.overallRating,
+        profileImage: player.profileImage,
+        cvTier: player.cvTier,
+        assignedTeamId: assignedTeam ? assignedTeam._id : null,
+        assignedTeamName: assignedTeam ? assignedTeam.teamName : null,
+      };
+    });
+
+    return { coaches, players };
+  }
+
+  async createTeam(
+    academyIdentifier: string,
+    payload: Partial<ITeam> & { coachIds?: string[]; playerIds?: string[] },
+  ) {
+    const academy = await this.resolveAcademyProfile(academyIdentifier);
+
+    // Plan capacity check
+    const existingTeamsCount = await Team.countDocuments({ academyId: academy._id });
+    const currentPlan = academy.currentPlan || 'FREE';
+    const planLimits: Record<string, number> = {
+      FREE: 1,
+      BASIC: 3,
+      PRO: 5,
+      PREMIUM: 15,
+    };
+    const maxTeams =
+      academy.maxTeams && academy.maxTeams > 0 ? academy.maxTeams : planLimits[currentPlan] || 1;
+
+    if (existingTeamsCount >= maxTeams) {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        `Team capacity limit reached for your ${currentPlan} plan (${existingTeamsCount}/${maxTeams}). Upgrade your plan to add more teams.`,
+      );
+    }
+
+    const coachIds = (payload.coachIds || []).map((id) => new Types.ObjectId(id));
+    const playerIds = (payload.playerIds || []).map((id) => new Types.ObjectId(id));
+    const coachesCount = coachIds.length;
+    const playersCount = playerIds.length;
+    const totalMembers = coachesCount + playersCount;
+
+    const newTeam = await Team.create({
+      academyId: academy._id,
+      teamName: payload.teamName,
+      ageGroup: payload.ageGroup,
+      status: payload.status || 'ACTIVE',
+      coachIds,
+      playerIds,
+      coachesCount,
+      playersCount,
+      totalMembers,
+    });
+
+    // Update assigned players
+    if (playerIds.length > 0) {
+      await PlayerProfile.updateMany(
+        { _id: { $in: playerIds } },
+        { $set: { teamId: newTeam._id, academyId: academy._id } },
+      );
+    }
+
+    // Update assigned coaches
+    if (coachIds.length > 0) {
+      await CoachProfile.updateMany(
+        { _id: { $in: coachIds } },
+        { $addToSet: { teamIds: newTeam._id }, $set: { academyId: academy._id } },
+      );
+    }
+
+    return Team.findById(newTeam._id)
+      .populate(
+        'coachIds',
+        'fullName title profileImage licenseStatus cvTier yearsExperience phone email',
+      )
+      .populate('playerIds', 'fullName position profileImage overallRating age cvTier dateOfBirth');
+  }
+
+  async getTeams(academyIdentifier: string) {
+    const academy = await this.resolveAcademyProfile(academyIdentifier);
+    return Team.find({ academyId: academy._id })
+      .populate(
+        'coachIds',
+        'fullName title profileImage licenseStatus cvTier yearsExperience phone email',
+      )
+      .populate('playerIds', 'fullName position profileImage overallRating age cvTier dateOfBirth')
+      .sort({ createdAt: -1 });
+  }
+
+  async getTeamById(teamId: string) {
+    if (!Types.ObjectId.isValid(teamId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid team ID');
+    }
+    const team = await Team.findById(teamId)
+      .populate(
+        'coachIds',
+        'fullName title profileImage licenseStatus cvTier yearsExperience phone email',
+      )
+      .populate(
+        'playerIds',
+        'fullName position profileImage overallRating age cvTier dateOfBirth marketValue',
+      )
+      .populate('academyId', 'name logo city country currentPlan maxTeams');
+
+    if (!team) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Team not found');
+    }
+    return team;
+  }
+
+  async updateTeam(
+    teamId: string,
+    payload: Partial<ITeam> & { coachIds?: string[]; playerIds?: string[] },
+  ) {
+    if (!Types.ObjectId.isValid(teamId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid team ID');
+    }
+    const team = await Team.findById(teamId);
+    if (!team) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Team not found');
+    }
+
+    if (payload.teamName !== undefined) team.teamName = payload.teamName;
+    if (payload.ageGroup !== undefined) team.ageGroup = payload.ageGroup;
+    if (payload.status !== undefined) team.status = payload.status;
+
+    if (payload.coachIds !== undefined) {
+      const newCoachIds = payload.coachIds.map((id) => new Types.ObjectId(id));
+      const previousCoachIds = (team.coachIds || []).map((id) => id.toString());
+      const newCoachIdStrings = newCoachIds.map((id) => id.toString());
+
+      const removedCoachIds = previousCoachIds.filter((id) => !newCoachIdStrings.includes(id));
+      if (removedCoachIds.length > 0) {
+        await CoachProfile.updateMany(
+          { _id: { $in: removedCoachIds } },
+          { $pull: { teamIds: team._id } },
+        );
+      }
+      if (newCoachIds.length > 0) {
+        await CoachProfile.updateMany(
+          { _id: { $in: newCoachIds } },
+          { $addToSet: { teamIds: team._id }, $set: { academyId: team.academyId } },
+        );
+      }
+
+      team.coachIds = newCoachIds;
+      team.coachesCount = newCoachIds.length;
+    }
+
+    if (payload.playerIds !== undefined) {
+      const newPlayerIds = payload.playerIds.map((id) => new Types.ObjectId(id));
+      const previousPlayerIds = (team.playerIds || []).map((id) => id.toString());
+      const newPlayerIdStrings = newPlayerIds.map((id) => id.toString());
+
+      const removedPlayerIds = previousPlayerIds.filter((id) => !newPlayerIdStrings.includes(id));
+      if (removedPlayerIds.length > 0) {
+        await PlayerProfile.updateMany(
+          { _id: { $in: removedPlayerIds }, teamId: team._id },
+          { $unset: { teamId: 1 } },
+        );
+      }
+      if (newPlayerIds.length > 0) {
+        await PlayerProfile.updateMany(
+          { _id: { $in: newPlayerIds } },
+          { $set: { teamId: team._id, academyId: team.academyId } },
+        );
+      }
+
+      team.playerIds = newPlayerIds;
+      team.playersCount = newPlayerIds.length;
+    }
+
+    team.totalMembers = (team.coachesCount || 0) + (team.playersCount || 0);
+    await team.save();
+
+    return Team.findById(team._id)
+      .populate(
+        'coachIds',
+        'fullName title profileImage licenseStatus cvTier yearsExperience phone email',
+      )
+      .populate(
+        'playerIds',
+        'fullName position profileImage overallRating age cvTier dateOfBirth marketValue',
+      );
+  }
+
+  async deleteTeam(teamId: string) {
+    if (!Types.ObjectId.isValid(teamId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid team ID');
+    }
+    const team = await Team.findById(teamId);
+    if (!team) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Team not found');
+    }
+
+    // Unassign teamId from players
+    await PlayerProfile.updateMany({ teamId: team._id }, { $unset: { teamId: 1 } });
+    // Remove team reference from coaches
+    await CoachProfile.updateMany({ teamIds: team._id }, { $pull: { teamIds: team._id } });
+
+    await Team.findByIdAndDelete(teamId);
+    return { message: 'Team deleted successfully', teamId };
+  }
+
+  async upgradePlan(
+    academyIdentifier: string,
+    plan: 'FREE' | 'BASIC' | 'PRO' | 'PREMIUM',
+    customMaxTeams?: number,
+  ) {
+    const academy = await this.resolveAcademyProfile(academyIdentifier);
+    const planLimits: Record<string, number> = {
+      FREE: 1,
+      BASIC: 3,
+      PRO: 5,
+      PREMIUM: 15,
+    };
+    const newMaxTeams =
+      customMaxTeams && customMaxTeams > 0 ? customMaxTeams : planLimits[plan] || 1;
+
+    academy.currentPlan = plan;
+    academy.maxTeams = newMaxTeams;
+    await academy.save();
+
+    const usedTeams = await Team.countDocuments({ academyId: academy._id });
+
+    return {
+      message: `Plan updated successfully to ${plan}`,
+      currentPlan: academy.currentPlan,
+      usedTeams,
+      maxTeams: academy.maxTeams,
+      capacityDisplay: `${usedTeams}/${academy.maxTeams}`,
+    };
   }
 
   async createGameReport(academyId: string, payload: Partial<IGameReport>) {

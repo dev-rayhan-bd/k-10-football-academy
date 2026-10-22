@@ -147,6 +147,7 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
     currentClub: { type: String },
     clubLogo: { type: String },
     academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile' },
+    teamIds: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
     isVerifiedByAcademy: { type: Boolean, default: false },
     academyRole: { type: String },
     website: { type: String },

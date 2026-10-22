@@ -45,8 +45,31 @@ export const getAllAcademyProfiles = catchAsync(async (req: Request, res: Respon
   });
 });
 
+export const getCoachAndPlayersDashboard = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.getCoachAndPlayersDashboard(academyId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Coach and players dashboard data fetched successfully',
+    data: result,
+  });
+});
+
+export const getAvailableMembers = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.getAvailableMembers(academyId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Available coaches and players fetched successfully',
+    data: result,
+  });
+});
+
 export const createTeam = catchAsync(async (req: Request, res: Response) => {
-  const result = await academyService.createTeam(req.params.academyId, req.body);
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.createTeam(academyId, req.body);
   sendResponse(res, {
     statusCode: 201,
     success: true,
@@ -56,11 +79,54 @@ export const createTeam = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const getTeams = catchAsync(async (req: Request, res: Response) => {
-  const result = await academyService.getTeams(req.params.academyId);
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.getTeams(academyId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Teams fetched successfully',
+    data: result,
+  });
+});
+
+export const getTeamById = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.getTeamById(req.params.teamId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Team fetched successfully',
+    data: result,
+  });
+});
+
+export const updateTeam = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.updateTeam(req.params.teamId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Team updated successfully',
+    data: result,
+  });
+});
+
+export const deleteTeam = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.deleteTeam(req.params.teamId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const upgradePlan = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const { plan, maxTeams } = req.body;
+  const result = await academyService.upgradePlan(academyId, plan, maxTeams);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
     data: result,
   });
 });

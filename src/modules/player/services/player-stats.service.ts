@@ -211,9 +211,17 @@ export class PlayerStatsService {
         profile.dateOfBirth = userDoc.dateOfBirth;
       }
     }
-    if (!profile.age && profile.dateOfBirth) {
-      const birthYear = new Date(profile.dateOfBirth).getFullYear();
-      profile.age = new Date().getFullYear() - birthYear;
+    if (profile.dateOfBirth) {
+      const birthDate = new Date(profile.dateOfBirth);
+      if (!isNaN(birthDate.getTime())) {
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+          calculatedAge--;
+        }
+        profile.age = Math.max(0, calculatedAge);
+      }
     }
 
     await profile.save({ validateModifiedOnly: true });

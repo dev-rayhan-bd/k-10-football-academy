@@ -4,6 +4,8 @@ import { auth } from '@/middlewares/auth.middleware';
 import {
   createAcademyProfileZodSchema,
   createTeamZodSchema,
+  updateTeamZodSchema,
+  upgradePlanZodSchema,
   createGameReportZodSchema,
   inviteCoachZodSchema,
   requestCoachAffiliationZodSchema,
@@ -14,8 +16,14 @@ import {
   getAcademyProfile,
   getMyAcademyProfile,
   getAllAcademyProfiles,
+  getCoachAndPlayersDashboard,
+  getAvailableMembers,
   createTeam,
   getTeams,
+  getTeamById,
+  updateTeam,
+  deleteTeam,
+  upgradePlan,
   createGameReport,
   getGameReports,
   getEvaluationDashboard,
@@ -93,7 +101,51 @@ router.patch(
 );
 router.delete('/coaches/:affiliationId', auth('ACADEMY', 'SUPER_ADMIN'), removeCoachAffiliation);
 
-router.get('/:id', getAcademyProfile);
+// ==========================================
+// COACH AND PLAYERS DASHBOARD & TEAM ROSTER
+// ==========================================
+router.get('/coach-and-players', auth('ACADEMY', 'SUPER_ADMIN'), getCoachAndPlayersDashboard);
+router.get(
+  '/:academyId/coach-and-players',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'ADMIN'),
+  getCoachAndPlayersDashboard,
+);
+
+router.get('/teams/available-members', auth('ACADEMY', 'SUPER_ADMIN'), getAvailableMembers);
+router.get(
+  '/:academyId/teams/available-members',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  getAvailableMembers,
+);
+
+router.post(
+  '/teams',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createTeamZodSchema),
+  createTeam,
+);
+router.get('/teams', auth('ACADEMY', 'SUPER_ADMIN'), getTeams);
+router.get('/teams/:teamId', auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'ADMIN'), getTeamById);
+router.patch(
+  '/teams/:teamId',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateTeamZodSchema),
+  updateTeam,
+);
+router.delete('/teams/:teamId', auth('ACADEMY', 'SUPER_ADMIN'), deleteTeam);
+
+router.patch(
+  '/plan/upgrade',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(upgradePlanZodSchema),
+  upgradePlan,
+);
+router.patch(
+  '/:academyId/plan/upgrade',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(upgradePlanZodSchema),
+  upgradePlan,
+);
 
 router.post(
   '/:academyId/teams',
@@ -102,6 +154,8 @@ router.post(
   createTeam,
 );
 router.get('/:academyId/teams', getTeams);
+
+router.get('/:id', getAcademyProfile);
 
 router.post(
   '/:academyId/reports',

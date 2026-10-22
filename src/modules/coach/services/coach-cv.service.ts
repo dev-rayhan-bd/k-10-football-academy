@@ -4,6 +4,7 @@ import { redisCache } from '@/utils/redisCache.util';
 import { CoachProfile, TacticalFormation } from '../coach.model';
 import { UserModel } from '@/modules/user/user.model';
 import { Media } from '@/modules/media/media.model';
+import { calculateAgeFromDob } from '@/utils/ratingCalculator';
 
 export const DEFAULT_COACH_SKILLS = [
   { name: 'Goal setting and performance monitoring', icon: 'trending-up' },
@@ -150,7 +151,11 @@ export const computeCoachProfileCompletion = (
   picsCount?: number,
   vidsCount?: number,
   hasFormations?: boolean,
-): { completionPercentage: number; autoTier: 'BRONZE' | 'SILVER' | 'GOLD' } => {
+): {
+  completionPercentage: number;
+  autoTier: 'BRONZE' | 'SILVER' | 'GOLD';
+  tierChecklist: Record<string, any>;
+} => {
   let score = 0;
   const totalChecks = 7;
   if (doc.fullName) score++;
@@ -171,38 +176,63 @@ export const computeCoachProfileCompletion = (
   const picturesCount = Number(picsCount ?? doc.picturesCount ?? 0);
   const videosCount = Number(vidsCount ?? doc.videosCount ?? 0);
 
-  let autoTier: 'BRONZE' | 'SILVER' | 'GOLD';
-
   // 🥇 GOLD COACH CARD: 100% complete, >=5 pics, >=5 vids, UEFA/CONMEBOL/AFC A or Pro, >=2 courses, >3 yrs youth, >6 yrs overall
-  if (
+  const isGoldEligible =
     is100 &&
     (license === 'PRO' || license === 'A') &&
     coursesCount >= 2 &&
     overallYears > 6 &&
     youthYears > 3 &&
     picturesCount >= 5 &&
-    videosCount >= 5
-  ) {
-    autoTier = 'GOLD';
-  }
+    videosCount >= 5;
+
   // 🥈 SILVER COACH CARD: 100% complete, >=5 pics, >=5 vids, UEFA/CONMEBOL/AFC B, >=2 courses, >3 yrs youth, >6 yrs overall
-  else if (
+  const isSilverEligible =
     is100 &&
     (license === 'PRO' || license === 'A' || license === 'B') &&
     coursesCount >= 2 &&
     overallYears > 6 &&
     youthYears > 3 &&
     picturesCount >= 5 &&
-    videosCount >= 5
-  ) {
+    videosCount >= 5;
+
+  // 🥉 BRONZE COACH CARD: 100% complete, >=5 pics, >=5 vids, UEFA/CONMEBOL/AFC C, >=2 courses, >1 yr youth, >6 yrs overall
+  const isBronzeEligible =
+    is100 &&
+    (license === 'PRO' || license === 'A' || license === 'B' || license === 'C') &&
+    coursesCount >= 2 &&
+    overallYears > 6 &&
+    youthYears > 1 &&
+    picturesCount >= 5 &&
+    videosCount >= 5;
+
+  let autoTier: 'BRONZE' | 'SILVER' | 'GOLD';
+
+  if (isGoldEligible) {
+    autoTier = 'GOLD';
+  } else if (isSilverEligible) {
     autoTier = 'SILVER';
-  }
-  // 🥉 Base tier is strictly BRONZE if higher conditions are not met
-  else {
+  } else if (isBronzeEligible) {
+    autoTier = 'BRONZE';
+  } else {
     autoTier = 'BRONZE';
   }
 
-  return { completionPercentage, autoTier };
+  const tierChecklist = {
+    is100Complete: is100,
+    picturesCount,
+    videosCount,
+    coursesCount,
+    overallYears,
+    youthYears,
+    license,
+    isBronzeEligible,
+    isSilverEligible,
+    isGoldEligible,
+    unlockedTier: autoTier,
+  };
+
+  return { completionPercentage, autoTier, tierChecklist };
 };
 
 export class CoachCvService {
@@ -475,7 +505,7 @@ export class CoachCvService {
     });
 
     // Calculate Section Completion Percentage & Auto-Tier strictly from database
-    const { completionPercentage, autoTier } = computeCoachProfileCompletion(
+    const { completionPercentage, autoTier, tierChecklist } = computeCoachProfileCompletion(
       doc,
       user.avatar,
       picturesCount,
@@ -483,14 +513,24 @@ export class CoachCvService {
       hasFormations || (Array.isArray(doc.formations) && doc.formations.length > 0),
     );
 
+    const accurateCoachAge = doc.dateOfBirth
+      ? calculateAgeFromDob(doc.dateOfBirth)
+      : doc.age || null;
+
     // Persist to database immediately if changed
+    const updatesToPersist: Record<string, any> = {};
     if (doc.cvTier !== autoTier || doc.profileCompletion !== completionPercentage) {
+      updatesToPersist.cvTier = autoTier;
+      updatesToPersist.profileCompletion = completionPercentage;
       doc.cvTier = autoTier;
       doc.profileCompletion = completionPercentage;
-      CoachProfile.updateOne(
-        { _id: doc._id },
-        { cvTier: autoTier, profileCompletion: completionPercentage },
-      )
+    }
+    if (doc.dateOfBirth && accurateCoachAge !== null && doc.age !== accurateCoachAge) {
+      updatesToPersist.age = accurateCoachAge;
+      doc.age = accurateCoachAge;
+    }
+    if (Object.keys(updatesToPersist).length > 0) {
+      CoachProfile.updateOne({ _id: doc._id }, updatesToPersist)
         .exec()
         .catch(() => {});
     }
@@ -521,10 +561,15 @@ export class CoachCvService {
         currentTier: autoTier,
         profileCompletion: completionPercentage,
         completionPercentage,
+        checklist: tierChecklist,
         label:
           autoTier === 'GOLD'
             ? 'GOLD TIER UNLOCKED — ALL SECTIONS VERIFIED'
-            : 'COMPLETE ALL SECTIONS TO UNLOCK GOLD TIER STATUS',
+            : autoTier === 'SILVER'
+              ? 'SILVER TIER UNLOCKED — COMPLETE ALL SECTIONS TO UNLOCK GOLD'
+              : tierChecklist.isBronzeEligible
+                ? 'BRONZE TIER UNLOCKED'
+                : 'COMPLETE ALL MANDATORY SECTIONS TO UNLOCK TIER STATUS',
         canRequestRevalidation: autoTier !== 'GOLD' && !doc.revalidationRequested,
       },
 
@@ -532,7 +577,7 @@ export class CoachCvService {
       personalInformation: {
         fullName: doc.fullName || user.name || '',
         dateOfBirth: doc.dateOfBirth || null,
-        age: doc.age || null,
+        age: accurateCoachAge,
         birthCountry: doc.birthCountry || '',
         birthCountryFlag: doc.birthCountryFlag || '',
         dualNationality: doc.dualNationality || '',

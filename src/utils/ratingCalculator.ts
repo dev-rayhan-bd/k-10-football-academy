@@ -761,3 +761,19 @@ export const calculateMetricGrade = (score: number | string): 'EXCELLENT' | 'GOO
   if (num >= 60) return 'GOOD';
   return 'AVERAGE';
 };
+
+/**
+ * Accurately calculate age from date of birth, respecting month and day boundaries
+ */
+export const calculateAgeFromDob = (dob: Date | string | null | undefined): number => {
+  if (!dob) return 18;
+  const birthDate = new Date(dob);
+  if (isNaN(birthDate.getTime())) return 18;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return Math.max(0, age);
+};

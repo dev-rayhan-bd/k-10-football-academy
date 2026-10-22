@@ -16,7 +16,7 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     fullName: { type: String, required: true },
     position: { type: String, required: true },
     secondaryPositions: [{ type: String }],
-    age: { type: Number, default: 18 },
+    age: { type: Number },
     dateOfBirth: { type: Date },
     country: { type: String, default: 'Bangladesh' },
     dualNationality: { type: String },
@@ -24,6 +24,7 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     clubLogo: { type: String },
     academy: { type: String },
     academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', index: true },
+    teamId: { type: Schema.Types.ObjectId, ref: 'Team', index: true },
     fitnessStatus: { type: String, enum: ['ACTIVE', 'INJURED'], default: 'ACTIVE' },
     contractUntil: { type: Date },
     marketValue: { type: Number, default: 0 },
@@ -196,6 +197,24 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
   },
   { timestamps: true },
 );
+
+PlayerProfileSchema.pre('save', function (next) {
+  if (this.dateOfBirth) {
+    const dob = new Date(this.dateOfBirth);
+    if (!isNaN(dob.getTime())) {
+      const today = new Date();
+      let calculatedAge = today.getFullYear() - dob.getFullYear();
+      const m = today.getMonth() - dob.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+        calculatedAge--;
+      }
+      this.age = Math.max(0, calculatedAge);
+    }
+  } else if (!this.age) {
+    this.age = 18;
+  }
+  next();
+});
 
 PlayerProfileSchema.index({ overallRating: -1 });
 PlayerProfileSchema.index({ cvTier: 1 });

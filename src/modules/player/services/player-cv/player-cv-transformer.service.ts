@@ -721,14 +721,34 @@ export class PlayerCvTransformerService {
       isCoachValidated,
     });
 
+    // 9b. Calculate accurate age from dateOfBirth if available
+    let accurateAge = aggregatedProfile.age;
+    if (aggregatedProfile.dateOfBirth) {
+      const dobDate = new Date(aggregatedProfile.dateOfBirth);
+      if (!isNaN(dobDate.getTime())) {
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - dobDate.getFullYear();
+        const m = today.getMonth() - dobDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+          calculatedAge--;
+        }
+        accurateAge = Math.max(0, calculatedAge);
+      }
+    }
+
+    const updatesToPersist: Record<string, any> = {};
     if (
       aggregatedProfile.cvTier !== autoTier ||
       aggregatedProfile.profileCompletion !== completionPercentage
     ) {
-      PlayerProfile.updateOne(
-        { _id: aggregatedProfile._id },
-        { cvTier: autoTier, profileCompletion: completionPercentage },
-      )
+      updatesToPersist.cvTier = autoTier;
+      updatesToPersist.profileCompletion = completionPercentage;
+    }
+    if (aggregatedProfile.dateOfBirth && aggregatedProfile.age !== accurateAge) {
+      updatesToPersist.age = accurateAge;
+    }
+    if (Object.keys(updatesToPersist).length > 0) {
+      PlayerProfile.updateOne({ _id: aggregatedProfile._id }, updatesToPersist)
         .exec()
         .catch(() => {});
     }
@@ -737,6 +757,7 @@ export class PlayerCvTransformerService {
     const finalProfile = {
       ...profileObj,
       playerId: aggregatedProfile._id,
+      age: accurateAge,
       cvTier: autoTier,
       profileCompletion: completionPercentage,
       completionPercentage,
@@ -935,7 +956,7 @@ export class PlayerCvTransformerService {
         },
       },
       recentMatches,
-      newGameReports,
+      newGameReports: newGameReports.slice(0, 4),
       professionalReports: allProfessionalReports,
       certificates: aggregatedProfile.documents || [],
     };

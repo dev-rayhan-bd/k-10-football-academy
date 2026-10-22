@@ -131,6 +131,115 @@ export const upgradePlan = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+export const purchasePremiumPlan = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.purchasePremiumPlan(academyId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const createPlanCheckoutSession = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.createPlanCheckoutSession(academyId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Stripe checkout session created successfully',
+    data: result,
+  });
+});
+
+export const verifyStripePayment = catchAsync(async (req: Request, res: Response) => {
+  const sessionId = req.body.sessionId || (req.query.sessionId as string);
+  const result = await academyService.verifyStripePayment(sessionId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: result.success,
+    message: result.message,
+    data: result.data || result,
+  });
+});
+
+export const getTeamRoster = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.getTeamRoster(req.params.teamId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Team roster fetched successfully',
+    data: result,
+  });
+});
+
+export const getAvailableCoachesForTeam = catchAsync(async (req: Request, res: Response) => {
+  const targetId = req.params.teamId || (req.query.teamId as string) || (req as any).user.userId;
+  const search = req.query.search as string;
+  const result = await academyService.getAvailableCoachesForTeam(targetId, search);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Available coaches fetched successfully',
+    data: result,
+  });
+});
+
+export const assignCoachToTeam = catchAsync(async (req: Request, res: Response) => {
+  const { coachId, role } = req.body;
+  const result = await academyService.assignCoachToTeam(req.params.teamId, coachId, role);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const removeCoachFromTeam = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.removeCoachFromTeam(req.params.teamId, req.params.coachId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getAvailablePlayersForTeam = catchAsync(async (req: Request, res: Response) => {
+  const targetId = req.params.teamId || (req.query.teamId as string) || (req as any).user.userId;
+  const search = req.query.search as string;
+  const result = await academyService.getAvailablePlayersForTeam(targetId, search);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Available players fetched successfully',
+    data: result,
+  });
+});
+
+export const assignPlayerToTeam = catchAsync(async (req: Request, res: Response) => {
+  const { playerId } = req.body;
+  const result = await academyService.assignPlayerToTeam(req.params.teamId, playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const removePlayerFromTeam = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.removePlayerFromTeam(req.params.teamId, req.params.playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
 export const createGameReport = catchAsync(async (req: Request, res: Response) => {
   const result = await academyService.createGameReport(req.params.academyId, req.body);
   sendResponse(res, {

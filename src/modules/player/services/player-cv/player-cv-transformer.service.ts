@@ -563,6 +563,39 @@ export class PlayerCvTransformerService {
     delete profileObj.matchRecords;
     delete profileObj.professionalReports;
 
+    const academyName =
+      aggregatedProfile.academyDoc?.name ||
+      aggregatedProfile.academy ||
+      aggregatedProfile.academyName ||
+      '';
+    const academyId =
+      aggregatedProfile.academyId ||
+      aggregatedProfile.academyDoc?._id ||
+      aggregatedProfile.teamDoc?.academyId ||
+      null;
+    const academyLogo = aggregatedProfile.academyDoc?.logo || '';
+    const hasAcademy = Boolean(academyName && academyName.trim());
+
+    const coachEvaluationsList = (aggregatedProfile.coachEvaluations || []).map((ev: any) => ({
+      _id: ev._id,
+      evaluationDate: ev.evaluationDate || ev.createdAt,
+      status: ev.status || 'EVALUATED',
+      overallRating: ev.overallRating || 0,
+      technicalScore: ev.technicalScore || 0,
+      physicalScore: ev.physicalScore || 0,
+      mentalScore: ev.mentalScore || 0,
+      techniques:
+        ev.techniques instanceof Map ? Object.fromEntries(ev.techniques) : ev.techniques || {},
+      characteristics:
+        ev.characteristics instanceof Map
+          ? Object.fromEntries(ev.characteristics)
+          : ev.characteristics || {},
+      physical: ev.physical instanceof Map ? Object.fromEntries(ev.physical) : ev.physical || {},
+      coachFeedback: ev.coachFeedback || ev.notes || '',
+      nextEvaluationDue: ev.nextEvaluationDue || null,
+    }));
+    const latestCoachEvaluation = coachEvaluationsList[0] || null;
+
     const rawAgentStatus =
       aggregatedProfile.agentStatus ||
       aggregatedProfile.playerEvaluation?.agentStatus ||
@@ -573,12 +606,15 @@ export class PlayerCvTransformerService {
     const rawClubStatus =
       aggregatedProfile.clubStatus ||
       aggregatedProfile.playerEvaluation?.clubStatus ||
-      'WITHOUT_CLUB';
+      (hasAcademy ? 'SIGNED' : 'WITHOUT_CLUB');
     const normClub = String(rawClubStatus).toUpperCase();
     const hasClub =
       (normClub.includes('SIGNED') ||
-        Boolean(aggregatedProfile.currentClub && aggregatedProfile.currentClub.trim())) &&
+        Boolean(aggregatedProfile.currentClub && aggregatedProfile.currentClub.trim()) ||
+        hasAcademy) &&
       !normClub.includes('WITHOUT');
+
+    const currentClub = aggregatedProfile.currentClub || (hasAcademy ? academyName : '');
 
     const canSpecifyMarketValue = hasAgent || hasClub;
     const marketValNumber = canSpecifyMarketValue ? Number(aggregatedProfile.marketValue ?? 0) : 0;
@@ -592,13 +628,25 @@ export class PlayerCvTransformerService {
       agencyName:
         aggregatedProfile.agencyName || aggregatedProfile.playerEvaluation?.agencyName || '',
       clubStatus: hasClub ? 'SIGNED' : 'WITHOUT_CLUB',
-      clubStatusLabel: hasClub ? 'Signed to a club' : 'Without a club',
+      clubStatusLabel: hasClub
+        ? hasAcademy
+          ? `Registered with ${academyName}`
+          : 'Signed to a club'
+        : 'Without a club',
       hasClub,
-      currentClub: aggregatedProfile.currentClub || '',
+      currentClub,
+      academy: academyName,
+      academyId,
       contractUntil: aggregatedProfile.contractUntil || null,
       marketValue: marketValNumber,
       marketValueFormatted: mvObj.formatted,
       canSpecifyMarketValue,
+      overallRating: latestCoachEvaluation?.overallRating || overallRating || 0,
+      lastEvaluationDate:
+        latestCoachEvaluation?.evaluationDate ||
+        (aggregatedProfile.playerEvaluation as any)?.lastEvaluationDate ||
+        null,
+      latestEvaluation: latestCoachEvaluation,
     };
 
     // 9. FIFA Card Face Stats and Strength
@@ -775,6 +823,28 @@ export class PlayerCvTransformerService {
       agentStatus: playerEvaluation.agentStatus,
       clubStatus: playerEvaluation.clubStatus,
       playerEvaluation,
+      academy: academyName,
+      academyId,
+      academyDetails: hasAcademy
+        ? {
+            _id: academyId,
+            name: academyName,
+            logo: academyLogo,
+            city: aggregatedProfile.academyDoc?.city || '',
+            country: aggregatedProfile.academyDoc?.country || '',
+          }
+        : null,
+      team: aggregatedProfile.teamDoc
+        ? {
+            _id: aggregatedProfile.teamDoc._id,
+            teamName: aggregatedProfile.teamDoc.teamName,
+            ageGroup: aggregatedProfile.teamDoc.ageGroup || '',
+          }
+        : null,
+      teamId: aggregatedProfile.teamId || aggregatedProfile.teamDoc?._id || null,
+      teamName: aggregatedProfile.teamDoc?.teamName || '',
+      coachEvaluations: coachEvaluationsList,
+      latestCoachEvaluation,
       marketValue: marketValNumber,
       marketValueFormatted: mvObj.formatted,
       phone: userPhone,

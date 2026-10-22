@@ -545,3 +545,16 @@ export const submitPlayerEvaluation = catchAsync(async (req: Request, res: Respo
     data: result,
   });
 });
+
+export const getPlayerEvaluationPdfData = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.userId;
+  const { id, evaluationId } = req.params;
+  const targetId = id || evaluationId;
+  const result = await coachService.getPlayerEvaluationProgressPdfData(userId, targetId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Evaluation progress data for download retrieved successfully',
+    data: result,
+  });
+});

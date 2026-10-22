@@ -5,7 +5,10 @@ import {
   createAcademyProfileZodSchema,
   createTeamZodSchema,
   updateTeamZodSchema,
+  assignCoachZodSchema,
+  assignPlayerZodSchema,
   upgradePlanZodSchema,
+  purchasePlanZodSchema,
   createGameReportZodSchema,
   inviteCoachZodSchema,
   requestCoachAffiliationZodSchema,
@@ -21,9 +24,19 @@ import {
   createTeam,
   getTeams,
   getTeamById,
+  getTeamRoster,
+  getAvailableCoachesForTeam,
+  assignCoachToTeam,
+  removeCoachFromTeam,
+  getAvailablePlayersForTeam,
+  assignPlayerToTeam,
+  removePlayerFromTeam,
   updateTeam,
   deleteTeam,
   upgradePlan,
+  purchasePremiumPlan,
+  createPlanCheckoutSession,
+  verifyStripePayment,
   createGameReport,
   getGameReports,
   getEvaluationDashboard,
@@ -126,6 +139,50 @@ router.post(
 );
 router.get('/teams', auth('ACADEMY', 'SUPER_ADMIN'), getTeams);
 router.get('/teams/:teamId', auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'ADMIN'), getTeamById);
+
+// Team Roster & Members Assignment (Screenshots 3, 4, 5)
+router.get(
+  '/teams/:teamId/roster',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'ADMIN'),
+  getTeamRoster,
+);
+
+// Coach Assignment for Team
+router.get(
+  '/teams/:teamId/available-coaches',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  getAvailableCoachesForTeam,
+);
+router.post(
+  '/teams/:teamId/coaches',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(assignCoachZodSchema),
+  assignCoachToTeam,
+);
+router.delete(
+  '/teams/:teamId/coaches/:coachId',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  removeCoachFromTeam,
+);
+
+// Player Assignment for Team
+router.get(
+  '/teams/:teamId/available-players',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  getAvailablePlayersForTeam,
+);
+router.post(
+  '/teams/:teamId/players',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(assignPlayerZodSchema),
+  assignPlayerToTeam,
+);
+router.delete(
+  '/teams/:teamId/players/:playerId',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  removePlayerFromTeam,
+);
+
 router.patch(
   '/teams/:teamId',
   auth('ACADEMY', 'SUPER_ADMIN'),
@@ -134,6 +191,37 @@ router.patch(
 );
 router.delete('/teams/:teamId', auth('ACADEMY', 'SUPER_ADMIN'), deleteTeam);
 
+// Available Coaches & Players (Without requiring teamId)
+router.get('/available-coaches', auth('ACADEMY', 'SUPER_ADMIN'), getAvailableCoachesForTeam);
+router.get('/available-players', auth('ACADEMY', 'SUPER_ADMIN'), getAvailablePlayersForTeam);
+
+// Plan Purchase & Upgrade (Direct & Stripe Checkout)
+router.post(
+  '/plan/create-checkout-session',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  createPlanCheckoutSession,
+);
+router.post(
+  '/:academyId/plan/create-checkout-session',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  createPlanCheckoutSession,
+);
+
+router.post('/plan/verify-payment', auth('ACADEMY', 'SUPER_ADMIN'), verifyStripePayment);
+router.post('/:academyId/plan/verify-payment', auth('ACADEMY', 'SUPER_ADMIN'), verifyStripePayment);
+
+router.post(
+  '/plan/purchase',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(purchasePlanZodSchema),
+  purchasePremiumPlan,
+);
+router.post(
+  '/:academyId/plan/purchase',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(purchasePlanZodSchema),
+  purchasePremiumPlan,
+);
 router.patch(
   '/plan/upgrade',
   auth('ACADEMY', 'SUPER_ADMIN'),

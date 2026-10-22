@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { gameReportService } from './services/game-report.service';
+import { academyService } from '@/modules/academy/academy.service';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 
@@ -58,7 +59,15 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
     event = req.body;
   }
 
-  await gameReportService.handleStripeWebhook(event);
+  const obj = event.data?.object || {};
+  if (
+    obj.metadata?.paymentType === 'ACADEMY_PREMIUM_PLAN' ||
+    obj.metadata?.type === 'ACADEMY_PREMIUM_PLAN'
+  ) {
+    await academyService.handleAcademyPlanStripeWebhook(obj);
+  } else {
+    await gameReportService.handleStripeWebhook(event);
+  }
 
   res.status(StatusCodes.OK).json({ received: true });
 });

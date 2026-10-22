@@ -39,6 +39,7 @@ import {
   getPlayerEvaluationsDashboard,
   getPlayerEvaluationDetails,
   submitPlayerEvaluation,
+  getPlayerEvaluationPdfData,
 } from './coach.controller';
 import { getCoachAllGameReports } from '@/modules/player/game-report.controller';
 
@@ -74,6 +75,16 @@ router.post('/validate-player-cv', auth('COACH', 'SUPER_ADMIN'), validatePlayerC
 router.get('/me/player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
 router.get('/my-player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
 router.get('/me/player-evaluations/:id', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationDetails);
+router.get(
+  '/me/player-evaluations/:id/pdf',
+  auth('COACH', 'SUPER_ADMIN', 'PLAYER'),
+  getPlayerEvaluationPdfData,
+);
+router.get(
+  '/player-evaluations/:id/pdf',
+  auth('COACH', 'SUPER_ADMIN', 'PLAYER'),
+  getPlayerEvaluationPdfData,
+);
 router.post(
   '/me/player-evaluations/:id/submit',
   auth('COACH', 'SUPER_ADMIN'),

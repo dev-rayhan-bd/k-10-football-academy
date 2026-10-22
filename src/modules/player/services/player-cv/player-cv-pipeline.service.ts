@@ -104,6 +104,86 @@ export class PlayerCvPipelineService {
           as: 'professionalReports',
         },
       },
+      // 6. $lookup team info (via teamId or player membership in team)
+      {
+        $lookup: {
+          from: 'teams',
+          let: { pId: '$_id', currentTeamId: '$teamId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ['$_id', '$$currentTeamId'] },
+                    { $in: ['$$pId', { $ifNull: ['$playerIds', []] }] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+            { $project: { teamName: 1, ageGroup: 1, gender: 1, academyId: 1 } },
+          ],
+          as: 'teamDoc',
+        },
+      },
+      {
+        $unwind: {
+          path: '$teamDoc',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // 7. $lookup academy profile (via player.academyId, team.academyId, or academy name)
+      {
+        $lookup: {
+          from: 'academyprofiles',
+          let: {
+            pAcadId: '$academyId',
+            tAcadId: '$teamDoc.academyId',
+            pAcadName: '$academy',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $and: [{ $ne: ['$$pAcadId', null] }, { $eq: ['$_id', '$$pAcadId'] }] },
+                    { $and: [{ $ne: ['$$tAcadId', null] }, { $eq: ['$_id', '$$tAcadId'] }] },
+                    {
+                      $and: [
+                        { $ne: ['$$pAcadName', null] },
+                        { $ne: ['$$pAcadName', ''] },
+                        { $eq: ['$name', '$$pAcadName'] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+            { $project: { name: 1, logo: 1, city: 1, country: 1, email: 1, phone: 1 } },
+          ],
+          as: 'academyDoc',
+        },
+      },
+      {
+        $unwind: {
+          path: '$academyDoc',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // 8. $lookup player coach evaluations
+      {
+        $lookup: {
+          from: 'playerevaluations',
+          let: { pId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$playerId', '$$pId'] } } },
+            { $sort: { evaluationDate: -1, createdAt: -1 } },
+            { $limit: 10 },
+          ],
+          as: 'coachEvaluations',
+        },
+      },
     ]);
 
     return aggregatedProfile;

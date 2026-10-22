@@ -15,20 +15,33 @@ export const createAcademyProfileZodSchema = z.object({
 export const createTeamZodSchema = z.object({
   body: z.object({
     teamName: z.string().min(2, 'Team name must have at least 2 characters'),
-    ageGroup: z.string().min(2, 'Age group is required (e.g., U17, Santos U17)'),
+    ageGroup: z.string().optional(),
     status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-    coachIds: z.array(z.string()).optional(),
-    playerIds: z.array(z.string()).optional(),
+    coachIds: z.array(z.string()).max(2, 'Maximum 2 coaches allowed per team').optional(),
+    playerIds: z.array(z.string()).max(18, 'Maximum 18 players allowed per team').optional(),
   }),
 });
 
 export const updateTeamZodSchema = z.object({
   body: z.object({
     teamName: z.string().min(2).optional(),
-    ageGroup: z.string().min(2).optional(),
+    ageGroup: z.string().optional(),
     status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-    coachIds: z.array(z.string()).optional(),
-    playerIds: z.array(z.string()).optional(),
+    coachIds: z.array(z.string()).max(2, 'Maximum 2 coaches allowed per team').optional(),
+    playerIds: z.array(z.string()).max(18, 'Maximum 18 players allowed per team').optional(),
+  }),
+});
+
+export const assignCoachZodSchema = z.object({
+  body: z.object({
+    coachId: z.string().min(1, 'Coach ID is required'),
+    role: z.string().optional(),
+  }),
+});
+
+export const assignPlayerZodSchema = z.object({
+  body: z.object({
+    playerId: z.string().min(1, 'Player ID is required'),
   }),
 });
 
@@ -36,6 +49,14 @@ export const upgradePlanZodSchema = z.object({
   body: z.object({
     plan: z.enum(['FREE', 'BASIC', 'PRO', 'PREMIUM']),
     maxTeams: z.number().min(1).optional(),
+  }),
+});
+
+export const purchasePlanZodSchema = z.object({
+  body: z.object({
+    plan: z.enum(['FREE', 'BASIC', 'PRO', 'PREMIUM']).default('PREMIUM'),
+    paymentMethod: z.string().optional(),
+    price: z.number().optional(),
   }),
 });
 

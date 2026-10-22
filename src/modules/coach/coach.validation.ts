@@ -84,3 +84,21 @@ export const updateCoachTestimonialZodSchema = z.object({
     comment: z.string().optional(),
   }),
 });
+
+export const submitPlayerEvaluationZodSchema = z.object({
+  body: z
+    .object({
+      playerId: z.string().optional(),
+      evaluationId: z.string().optional(),
+      overallRating: z.number().min(0).max(100).optional(),
+      technicalScore: z.number().min(0).max(100).optional(),
+      physicalScore: z.number().min(0).max(100).optional(),
+      mentalScore: z.number().min(0).max(100).optional(),
+      techniques: z.record(z.any()).optional(),
+      characteristics: z.record(z.any()).optional(),
+      physical: z.record(z.any()).optional(),
+      notes: z.string().optional(),
+      coachFeedback: z.string().optional(),
+    })
+    .passthrough(),
+});

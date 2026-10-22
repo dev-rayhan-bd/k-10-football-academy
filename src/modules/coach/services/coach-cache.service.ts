@@ -22,6 +22,9 @@ export class CoachCacheService {
     if (coachId) {
       await redisCache.delByPattern(`CACHE:COACH:*:${coachId.toString()}*`).catch(() => {});
     }
+    if (userId) {
+      await redisCache.delByPattern(`CACHE:COACH:*:${userId.toString()}*`).catch(() => {});
+    }
   }
 }
 

@@ -703,3 +703,14 @@ export const updatePlayerMental = catchAsync(async (req: Request, res: Response)
     data: result,
   });
 });
+
+export const getMyPlayerEvaluations = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await playerService.getMyEvaluations(userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluations fetched successfully',
+    data: result,
+  });
+});

@@ -461,6 +461,8 @@ export class AcademyService {
       coachId: coach._id,
     });
 
+    const defaultRole = coach.title || 'Coach';
+
     if (existingAffiliation) {
       if (existingAffiliation.status === 'APPROVED') {
         throw new AppError(400, 'You are already an approved coach in this academy');
@@ -471,7 +473,7 @@ export class AcademyService {
 
       existingAffiliation.status = 'PENDING';
       existingAffiliation.requestedBy = 'COACH';
-      existingAffiliation.role = payload.role || existingAffiliation.role || 'Youth Coach';
+      existingAffiliation.role = defaultRole;
       existingAffiliation.requestMessage =
         payload.message || `Coach ${coach.fullName} requested to join ${academy.name}.`;
       existingAffiliation.responseNote = undefined;
@@ -483,7 +485,7 @@ export class AcademyService {
         recipientId: academy.userId,
         recipientRole: 'ACADEMY',
         title: 'Coach Affiliation Request',
-        message: `Coach ${coach.fullName} has requested to join your academy as ${existingAffiliation.role}.`,
+        message: `Coach ${coach.fullName} has requested to join your academy.`,
         type: 'COACH_AFFILIATION_REQUEST',
         data: { affiliationId: existingAffiliation._id, coachId: coach._id },
       });
@@ -495,7 +497,7 @@ export class AcademyService {
       academyId: academy._id,
       coachId: coach._id,
       coachUserId: coach.userId,
-      role: payload.role || 'Youth Coach',
+      role: defaultRole,
       status: 'PENDING',
       requestedBy: 'COACH',
       requestMessage:
@@ -506,7 +508,7 @@ export class AcademyService {
       recipientId: academy.userId,
       recipientRole: 'ACADEMY',
       title: 'Coach Affiliation Request',
-      message: `Coach ${coach.fullName} has requested to join your academy as ${affiliation.role}.`,
+      message: `Coach ${coach.fullName} has requested to join your academy.`,
       type: 'COACH_AFFILIATION_REQUEST',
       data: { affiliationId: affiliation._id, coachId: coach._id },
     });

@@ -1,8 +1,9 @@
 import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { redisCache } from '@/utils/redisCache.util';
-import { CoachProfile } from '../coach.model';
+import { CoachProfile, TacticalFormation } from '../coach.model';
 import { UserModel } from '@/modules/user/user.model';
+import { Media } from '@/modules/media/media.model';
 
 export const DEFAULT_COACH_SKILLS = [
   { name: 'Goal setting and performance monitoring', icon: 'trending-up' },
@@ -146,13 +147,16 @@ export const normalizeCoachLicense = (lic: string = ''): 'PRO' | 'A' | 'B' | 'C'
 export const computeCoachProfileCompletion = (
   doc: any,
   userAvatar?: string,
+  picsCount?: number,
+  vidsCount?: number,
+  hasFormations?: boolean,
 ): { completionPercentage: number; autoTier: 'BRONZE' | 'SILVER' | 'GOLD' } => {
   let score = 0;
   const totalChecks = 7;
   if (doc.fullName) score++;
   if (doc.profileImage || userAvatar) score++;
   if (doc.clubHistory && doc.clubHistory.length > 0) score++;
-  if (doc.formations && doc.formations.length > 0) score++;
+  if ((doc.formations && doc.formations.length > 0) || hasFormations) score++;
   if (doc.courses && doc.courses.length > 0) score++;
   if (doc.keySkills && doc.keySkills.length > 0) score++;
   if (doc.documents && doc.documents.length > 0) score++;
@@ -160,14 +164,12 @@ export const computeCoachProfileCompletion = (
   const completionPercentage = Math.min(100, Math.round((score / totalChecks) * 100));
 
   const is100 = completionPercentage >= 100;
-  const license = normalizeCoachLicense(doc.licenseStatus || 'UEFA Pro Licence');
+  const license = normalizeCoachLicense(doc.licenseStatus || '');
   const coursesCount = Array.isArray(doc.courses) ? doc.courses.length : 0;
-  const overallYears = Number(doc.yearsExperience ?? 15);
-  const youthYears = Number(
-    doc.youthYearsExperience ?? doc.youthExperience ?? (overallYears > 3 ? 4 : 0),
-  );
-  const picturesCount = doc.picturesCount !== undefined ? doc.picturesCount : 5;
-  const videosCount = doc.videosCount !== undefined ? doc.videosCount : 5;
+  const overallYears = Number(doc.yearsExperience ?? 0);
+  const youthYears = Number(doc.youthYearsExperience ?? doc.youthExperience ?? 0);
+  const picturesCount = Number(picsCount ?? doc.picturesCount ?? 0);
+  const videosCount = Number(vidsCount ?? doc.videosCount ?? 0);
 
   let autoTier: 'BRONZE' | 'SILVER' | 'GOLD';
 
@@ -195,24 +197,8 @@ export const computeCoachProfileCompletion = (
   ) {
     autoTier = 'SILVER';
   }
-  // 🥉 BRONZE COACH CARD: 100% complete, >=5 pics, >=5 vids, UEFA/CONMEBOL/AFC C, >=2 courses, >1 yr youth, >6 yrs overall
-  else if (
-    is100 &&
-    (license === 'PRO' || license === 'A' || license === 'B' || license === 'C') &&
-    coursesCount >= 2 &&
-    overallYears > 6 &&
-    youthYears > 1 &&
-    picturesCount >= 5 &&
-    videosCount >= 5
-  ) {
-    autoTier = 'BRONZE';
-  }
-  // Fallback for completion-based progression
-  else if (completionPercentage >= 100) {
-    autoTier = 'GOLD';
-  } else if (completionPercentage >= 60) {
-    autoTier = 'SILVER';
-  } else {
+  // 🥉 Base tier is strictly BRONZE if higher conditions are not met
+  else {
     autoTier = 'BRONZE';
   }
 
@@ -344,8 +330,12 @@ export class CoachCvService {
   async getCoachCV(id: string, viewer?: { userId?: string; role?: string }): Promise<any> {
     const { matchStage, cacheKey } = this.resolveMatchStage(id, viewer);
 
-    // Try Redis cache if available
-    if (cacheKey) {
+    // Bypass cache when viewing own profile so user always gets real fresh DB data
+    const isSelfView =
+      id === 'me' || id === 'my-cv' || id === 'my-profile' || Boolean(viewer?.userId);
+
+    // Try Redis cache if available for public viewers
+    if (cacheKey && !isSelfView) {
       const cached = await redisCache.get<any>(cacheKey);
       if (cached) {
         return cached;
@@ -361,35 +351,30 @@ export class CoachCvService {
         await CoachProfile.create({
           userId: user._id,
           fullName: user.name,
-          title: 'Head Coach',
+          title: '',
           coachType: 'INDIVIDUAL_COACH',
           yearsExperience: 0,
-          overallRatingScore: 88,
-          licenseStatus: 'UEFA Pro Licence',
-          speciality: 'Tactical Coaching',
+          overallRatingScore: 0,
+          licenseStatus: '',
+          speciality: '',
           cvTier: 'BRONZE',
           status: 'ACTIVE',
-          birthCountry: 'France',
-          birthCountryFlag: 'FR',
-          dualNationality: 'Italy',
-          dualNationalityFlag: 'IT',
-          currentClub: 'Manchester City',
-          website: 'www.k10football.com',
-          matchesCoached: 32,
-          totalWins: 21,
-          losses: 7,
-          draws: 4,
-          coachStyles: ['TIKI-TAKA', 'MOTIVATOR', 'YOUTH DEVELOPMENT'],
-          keySkills: DEFAULT_COACH_SKILLS,
-          associations: DEFAULT_ASSOCIATIONS,
-          courses: DEFAULT_COURSES,
+          birthCountry: '',
+          birthCountryFlag: '',
+          dualNationality: '',
+          dualNationalityFlag: '',
+          currentClub: '',
+          website: '',
+          matchesCoached: 0,
+          totalWins: 0,
+          losses: 0,
+          draws: 0,
+          coachStyles: [],
+          keySkills: [],
+          associations: [],
+          courses: [],
           transferStatus: {
             footballAgentContract: 'No',
-            contractUntil: 'June, 2026',
-            agent: 'John Morris...',
-            agency: 'Elite Sports...',
-            salary: '$ 20,000.00',
-            statusBadge: 'Active',
           },
         });
 
@@ -401,11 +386,21 @@ export class CoachCvService {
       throw new AppError(404, 'Coach profile not found');
     }
 
-    // Format & transform payload matching frontend UI screenshots
-    const transformed = this.transformCoachCV(raw);
+    // Query real media counts and tactical formations from database
+    const [picturesCount, videosCount, formationCount] = await Promise.all([
+      Media.countDocuments({ coachId: raw._id, mediaType: 'IMAGE' }).catch(() => 0),
+      Media.countDocuments({ coachId: raw._id, mediaType: 'VIDEO' }).catch(() => 0),
+      TacticalFormation.countDocuments({ coachId: raw._id }).catch(() => 0),
+    ]);
 
-    // Cache result with 300s TTL
-    if (cacheKey) {
+    const hasFormations =
+      formationCount > 0 || (Array.isArray(raw.formations) && raw.formations.length > 0);
+
+    // Format & transform payload strictly from real database values
+    const transformed = this.transformCoachCV(raw, picturesCount, videosCount, hasFormations);
+
+    // Cache result with 300s TTL for public viewers
+    if (cacheKey && !isSelfView) {
       await redisCache.set(cacheKey, transformed, 300);
     }
 
@@ -413,9 +408,9 @@ export class CoachCvService {
   }
 
   /**
-   * Transform raw aggregated document to rich CV payload matching 10 screenshots
+   * Transform raw aggregated document to rich CV payload strictly from real DB records
    */
-  transformCoachCV(doc: any): any {
+  transformCoachCV(doc: any, picturesCount = 0, videosCount = 0, hasFormations = false): any {
     const user = doc.user || {};
     const matchesCoached = doc.matchesCoached || 0;
     const totalWins = doc.totalWins || 0;
@@ -423,21 +418,10 @@ export class CoachCvService {
     const draws = doc.draws || 0;
     const winRate = matchesCoached > 0 ? Math.round((totalWins / matchesCoached) * 100) : 0;
 
-    // Default skills if empty
-    const keySkills =
-      Array.isArray(doc.keySkills) && doc.keySkills.length > 0
-        ? doc.keySkills
-        : DEFAULT_COACH_SKILLS;
-
-    // Default associations if empty
-    const associations =
-      Array.isArray(doc.associations) && doc.associations.length > 0
-        ? doc.associations
-        : DEFAULT_ASSOCIATIONS;
-
-    // Default courses if empty
-    const courses =
-      Array.isArray(doc.courses) && doc.courses.length > 0 ? doc.courses : DEFAULT_COURSES;
+    // Real database skills, associations, and courses (no mock fallbacks)
+    const keySkills = Array.isArray(doc.keySkills) ? doc.keySkills : [];
+    const associations = Array.isArray(doc.associations) ? doc.associations : [];
+    const courses = Array.isArray(doc.courses) ? doc.courses : [];
 
     // Formations (ensure 3 slots representation)
     const formationsMap: Record<number, any> = {};
@@ -461,7 +445,7 @@ export class CoachCvService {
       return {
         _id: item?._id,
         formationSlot: slot,
-        formationName: `FORMATION ${slot}`,
+        formationName: item?.formationName || `FORMATION ${slot}`,
         positions,
         coachId: doc._id,
       };
@@ -479,22 +463,30 @@ export class CoachCvService {
 
       return {
         _id: ar._id,
-        playerName: player.fullName || 'Player',
-        playerPosition: player.position || 'DEFENDER',
+        playerName: player.fullName || '',
+        playerPosition: player.position || '',
         playerAvatar: player.profileImage || player.avatar || null,
-        rating: ar.playerRating || 52,
-        status, // 'REQUESTED' | 'EXPIRED' | 'COMPLETED'
+        rating: ar.playerRating || 0,
+        status,
         matchDate: ar.matchDate,
-        amount: ar.coachReview?.paymentAmount ? `$${ar.coachReview.paymentAmount}` : '$30',
+        amount: ar.coachReview?.paymentAmount ? `$${ar.coachReview.paymentAmount}` : '',
         action: 'REVIEW',
       };
     });
 
-    // Calculate Section Completion Percentage & Auto-Tier
-    const { completionPercentage, autoTier } = computeCoachProfileCompletion(doc, user.avatar);
+    // Calculate Section Completion Percentage & Auto-Tier strictly from database
+    const { completionPercentage, autoTier } = computeCoachProfileCompletion(
+      doc,
+      user.avatar,
+      picturesCount,
+      videosCount,
+      hasFormations || (Array.isArray(doc.formations) && doc.formations.length > 0),
+    );
 
-    // Persist to database asynchronously if changed
+    // Persist to database immediately if changed
     if (doc.cvTier !== autoTier || doc.profileCompletion !== completionPercentage) {
+      doc.cvTier = autoTier;
+      doc.profileCompletion = completionPercentage;
       CoachProfile.updateOne(
         { _id: doc._id },
         { cvTier: autoTier, profileCompletion: completionPercentage },
@@ -506,22 +498,22 @@ export class CoachCvService {
     return {
       _id: doc._id,
       userId: doc.userId,
-      overallRatingScore: doc.overallRatingScore ?? 88,
+      overallRatingScore: doc.overallRatingScore ?? 0,
       status: doc.status || 'ACTIVE',
       coachType: doc.coachType || 'INDIVIDUAL_COACH',
-      fullName: doc.fullName || user.name || 'Marcus Silva',
-      title: doc.title || 'Head Coach',
+      fullName: doc.fullName || user.name || '',
+      title: doc.title || '',
       yearsExperience: doc.yearsExperience || 0,
       cvTier: autoTier,
       profileCompletion: completionPercentage,
       completionPercentage,
-      speciality: doc.speciality || 'Tactical Coaching',
-      licenseStatus: doc.licenseStatus || 'UEFA Pro Licence',
-      currentClub: doc.currentClub || 'Manchester City',
+      speciality: doc.speciality || '',
+      licenseStatus: doc.licenseStatus || '',
+      currentClub: doc.currentClub || '',
       clubLogo: doc.clubLogo,
       profileImage: doc.profileImage || user.avatar,
       coverImage: doc.coverImage,
-      validationStatus: doc.validationStatus || '15 days until re-validation',
+      validationStatus: doc.validationStatus || '',
       revalidationRequested: Boolean(doc.revalidationRequested),
 
       // Tier & Completion Progress
@@ -538,21 +530,21 @@ export class CoachCvService {
 
       // Personal Information
       personalInformation: {
-        fullName: doc.fullName || user.name,
-        dateOfBirth: doc.dateOfBirth || '15/03/1996',
-        age: doc.age || 24,
-        birthCountry: doc.birthCountry || 'France',
-        birthCountryFlag: doc.birthCountryFlag || 'FR',
-        dualNationality: doc.dualNationality || 'Italy',
-        dualNationalityFlag: doc.dualNationalityFlag || 'IT',
+        fullName: doc.fullName || user.name || '',
+        dateOfBirth: doc.dateOfBirth || null,
+        age: doc.age || null,
+        birthCountry: doc.birthCountry || '',
+        birthCountryFlag: doc.birthCountryFlag || '',
+        dualNationality: doc.dualNationality || '',
+        dualNationalityFlag: doc.dualNationalityFlag || '',
       },
 
       // Contact Information
       contact: {
-        email: doc.email || user.email || 'marcus.silva@email.com',
-        phone: doc.phone || user.phone || '+351 912 345 678',
-        location: doc.location || doc.birthCountry || 'France',
-        website: doc.website || 'www.k10football.com',
+        email: doc.email || user.email || '',
+        phone: doc.phone || user.phone || '',
+        location: doc.location || doc.birthCountry || '',
+        website: doc.website || '',
       },
 
       // Current Season Stats
@@ -568,16 +560,16 @@ export class CoachCvService {
       // Transfer Status
       transferStatus: {
         footballAgentContract: doc.transferStatus?.footballAgentContract || 'No',
-        contractUntil: doc.transferStatus?.contractUntil || 'June, 2026',
-        agent: doc.transferStatus?.agent || 'John Morris...',
-        agency: doc.transferStatus?.agency || 'Elite Sports...',
-        salary: doc.transferStatus?.salary || '$ 20,000.00',
-        statusBadge: doc.transferStatus?.statusBadge || 'Active',
+        contractUntil: doc.transferStatus?.contractUntil || null,
+        agent: doc.transferStatus?.agent || '',
+        agency: doc.transferStatus?.agency || '',
+        salary: doc.transferStatus?.salary || '',
+        statusBadge: doc.transferStatus?.statusBadge || doc.status || 'Active',
       },
 
       // Sub-sections
       accomplishments: doc.accomplishments || [],
-      coachStyles: doc.coachStyles || ['TIKI-TAKA', 'MOTIVATOR', 'YOUTH DEVELOPMENT'],
+      coachStyles: doc.coachStyles || [],
       languages: doc.languages || [],
       majorTrophies: doc.majorTrophies || [],
       cupsPlayed: doc.cupsPlayed || [],

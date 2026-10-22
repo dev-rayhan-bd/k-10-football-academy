@@ -7,6 +7,7 @@ import {
   updateCoachProfileZodSchema,
   createCoachTestimonialZodSchema,
   updateCoachTestimonialZodSchema,
+  submitPlayerEvaluationZodSchema,
 } from './coach.validation';
 import {
   getMyCoachCV,
@@ -30,7 +31,16 @@ import {
   getTestimonials,
   addTestimonial,
   validatePlayerCV,
+  getMyCoachAnalytics,
+  getCoachAnalytics,
+  getMyTeamsSquad,
+  updatePlayerFitnessStatus,
+  getPlayerCvValidationsDashboard,
+  getPlayerEvaluationsDashboard,
+  getPlayerEvaluationDetails,
+  submitPlayerEvaluation,
 } from './coach.controller';
+import { getCoachAllGameReports } from '@/modules/player/game-report.controller';
 
 const router = Router();
 
@@ -49,16 +59,62 @@ router.get('/', getAllCoachProfiles);
 // ==========================================
 // PLAYER CV VALIDATION BY REGISTERED COACH
 // ==========================================
+router.get(
+  '/me/player-cv-validations',
+  auth('COACH', 'SUPER_ADMIN'),
+  getPlayerCvValidationsDashboard,
+);
+router.get('/my-cv-validations', auth('COACH', 'SUPER_ADMIN'), getPlayerCvValidationsDashboard);
 router.post('/players/:playerId/validate-cv', auth('COACH', 'SUPER_ADMIN'), validatePlayerCV);
 router.post('/validate-player-cv', auth('COACH', 'SUPER_ADMIN'), validatePlayerCV);
+
+// ==========================================
+// PLAYER EVALUATION (DEVELOPMENT PROGRAMME)
+// ==========================================
+router.get('/me/player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
+router.get('/my-player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
+router.get('/me/player-evaluations/:id', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationDetails);
+router.post(
+  '/me/player-evaluations/:id/submit',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(submitPlayerEvaluationZodSchema),
+  submitPlayerEvaluation,
+);
+router.post(
+  '/me/player-evaluations/submit',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(submitPlayerEvaluationZodSchema),
+  submitPlayerEvaluation,
+);
+router.post(
+  '/players/:playerId/evaluate',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(submitPlayerEvaluationZodSchema),
+  submitPlayerEvaluation,
+);
 
 // ==========================================
 // 2. COACH CV & UNIFIED PROFILE (LIKE PLAYER CV)
 // ==========================================
 router.get('/me/cv', auth(), getMyCoachCV);
 router.get('/my-cv', auth(), getMyCoachCV);
+router.get('/me/analytics', auth(), getMyCoachAnalytics);
+router.get('/my-analytics', auth(), getMyCoachAnalytics);
 router.get('/my-profile', auth('COACH', 'SUPER_ADMIN'), getMyCoachProfile);
 router.get('/me', auth(), getMyCoachProfile);
+
+// ==========================================
+// MY TEAMS & SQUAD MANAGEMENT
+// ==========================================
+router.get('/me/teams', auth('COACH', 'SUPER_ADMIN'), getMyTeamsSquad);
+router.get('/my-teams', auth('COACH', 'SUPER_ADMIN'), getMyTeamsSquad);
+router.get('/me/game-reports', auth('COACH', 'SUPER_ADMIN'), getCoachAllGameReports);
+router.get('/my-game-reports', auth('COACH', 'SUPER_ADMIN'), getCoachAllGameReports);
+router.patch(
+  '/me/players/:playerId/fitness-status',
+  auth('COACH', 'SUPER_ADMIN'),
+  updatePlayerFitnessStatus,
+);
 
 // Unified PATCH for profile & CV sections
 router.patch(
@@ -105,6 +161,7 @@ router.delete('/me/testimonials/:testimonialId', auth(), deleteMyTestimonial);
 // 5. PUBLIC / ID-BASED ROUTES
 // ==========================================
 router.get('/:id/cv', optionalAuth(), getCoachCV);
+router.get('/:id/analytics', optionalAuth(), getCoachAnalytics);
 router.get('/:id', optionalAuth(), getCoachProfile);
 router.patch(
   '/:id',

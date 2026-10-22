@@ -98,6 +98,52 @@ export interface ICoachDocument {
   uploadedAt?: Date;
 }
 
+export interface ICoachProfileAnalysis {
+  tactics: number;
+  leadership: number;
+  communication: number;
+  adaptability: number;
+  discipline: number;
+  development: number;
+  overall?: number;
+}
+
+export interface ICoachTournamentStats {
+  win: number;
+  loss: number;
+  draw: number;
+  runnerUp: number;
+  champion: number;
+  totalMatches?: number;
+  percentages?: {
+    win: number;
+    loss: number;
+    draw: number;
+    runnerUp: number;
+    champion: number;
+  };
+}
+
+export interface ICoachTrophyDetail {
+  _id?: Types.ObjectId;
+  trophyName: string;
+  number: number;
+  win: number;
+  loss: number;
+  draw: number;
+  runnerUp: number;
+  champion: number;
+}
+
+export interface ICoachAnalyticsResponse {
+  coachType: CoachType;
+  cvTier: CvTier;
+  coachProfileAnalysis: ICoachProfileAnalysis | null;
+  tournamentStats: ICoachTournamentStats | null;
+  majorTrophies: Array<{ name: string; value: number }>;
+  trophiesTable: ICoachTrophyDetail[];
+}
+
 export interface ICoachProfile {
   userId: Types.ObjectId;
   coachType: CoachType;
@@ -158,6 +204,11 @@ export interface ICoachProfile {
   associations?: ICoachAssociation[];
   courses?: ICoachCourse[];
   documents?: ICoachDocument[];
+
+  // Analytics fields
+  coachProfileAnalysis?: ICoachProfileAnalysis;
+  tournamentStats?: ICoachTournamentStats;
+  trophiesTable?: ICoachTrophyDetail[];
 
   createdAt?: Date;
   updatedAt?: Date;

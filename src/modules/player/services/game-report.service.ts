@@ -63,6 +63,16 @@ export class GameReportService {
   }
 
   /**
+   * Get Coach Game Reports Dashboard (Screen: Game Reports with 4 Cards & Table)
+   */
+  async getCoachAllGameReports(
+    coachUser: { userId: string; email: string },
+    query: Record<string, unknown> = {},
+  ) {
+    return gameReportCoachService.getCoachAllGameReports(coachUser, query);
+  }
+
+  /**
    * Get Player's Game Reports with Stats Cards, Filtering (ALL, PAID, PENDING), and Pagination
    */
   async getPlayerGameReports(

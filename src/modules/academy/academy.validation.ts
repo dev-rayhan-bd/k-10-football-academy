@@ -44,7 +44,6 @@ export const inviteCoachZodSchema = z.object({
 export const requestCoachAffiliationZodSchema = z.object({
   body: z.object({
     academyId: z.string().min(1),
-    role: z.string().optional(),
     message: z.string().optional(),
   }),
 });

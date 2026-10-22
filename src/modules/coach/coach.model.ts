@@ -119,16 +119,15 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
       default: 'INDIVIDUAL_COACH',
     },
     fullName: { type: String, required: true },
-    title: { type: String, default: 'Head Coach' },
+    title: { type: String },
     yearsExperience: { type: Number, default: 0 },
-    overallRatingScore: { type: Number, default: 88 },
+    overallRatingScore: { type: Number, default: 0 },
     licenseStatus: {
       type: String,
-      default: 'UEFA Pro Licence',
     },
     cvTier: { type: String, enum: ['BRONZE', 'SILVER', 'GOLD'], default: 'BRONZE' },
     profileCompletion: { type: Number, default: 0 },
-    speciality: { type: String, default: 'Tactical Coaching' },
+    speciality: { type: String },
     status: {
       type: String,
       enum: ['AVAILABLE', 'CONTRACTED', 'ACTIVE', 'INACTIVE'],
@@ -140,31 +139,31 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
     profileImage: { type: String },
     coverImage: { type: String },
     dateOfBirth: { type: Schema.Types.Mixed },
-    age: { type: Number, default: 24 },
-    birthCountry: { type: String, default: 'France' },
-    birthCountryFlag: { type: String, default: 'FR' },
-    dualNationality: { type: String, default: 'Italy' },
-    dualNationalityFlag: { type: String, default: 'IT' },
-    currentClub: { type: String, default: 'Manchester City' },
+    age: { type: Number },
+    birthCountry: { type: String },
+    birthCountryFlag: { type: String },
+    dualNationality: { type: String },
+    dualNationalityFlag: { type: String },
+    currentClub: { type: String },
     clubLogo: { type: String },
     academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile' },
     isVerifiedByAcademy: { type: Boolean, default: false },
     academyRole: { type: String },
-    website: { type: String, default: 'www.k10football.com' },
+    website: { type: String },
     phone: { type: String },
     email: { type: String },
     location: { type: String },
 
     // Validation Status
-    validationStatus: { type: String, default: '15 days until re-validation' },
+    validationStatus: { type: String },
     revalidationRequested: { type: Boolean, default: false },
     revalidationRequestedAt: { type: Date },
 
     // Season Stats
-    matchesCoached: { type: Number, default: 32 },
-    totalWins: { type: Number, default: 21 },
-    losses: { type: Number, default: 7 },
-    draws: { type: Number, default: 4 },
+    matchesCoached: { type: Number, default: 0 },
+    totalWins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    draws: { type: Number, default: 0 },
     cleanSheets: { type: Number, default: 0 },
 
     // Transfer Status
@@ -174,7 +173,7 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
     accomplishments: { type: [AccomplishmentSchema], default: [] },
     coachStyles: {
       type: [String],
-      default: ['TIKI-TAKA', 'MOTIVATOR', 'YOUTH DEVELOPMENT'],
+      default: [],
     },
     languages: { type: [LanguageSchema], default: [] },
     majorTrophies: { type: [TrophySchema], default: [] },
@@ -184,6 +183,17 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
     associations: { type: [AssociationSchema], default: [] },
     courses: { type: [CourseSchema], default: [] },
     documents: { type: [DocumentSchema], default: [] },
+
+    // Analytics fields (strictly database-driven, no mock defaults)
+    coachProfileAnalysis: {
+      type: Schema.Types.Mixed,
+      default: undefined,
+    },
+    tournamentStats: {
+      type: Schema.Types.Mixed,
+      default: undefined,
+    },
+    trophiesTable: { type: [Schema.Types.Mixed], default: [] },
   },
   { timestamps: true },
 );

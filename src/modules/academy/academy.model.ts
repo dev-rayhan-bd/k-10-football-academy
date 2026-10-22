@@ -68,7 +68,7 @@ const GameReportSchema = new Schema<IGameReportDocument>(
 
 const PlayerEvaluationSchema = new Schema<IPlayerEvaluationDocument>(
   {
-    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: false, index: true },
     playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true, index: true },
     coachId: { type: Schema.Types.ObjectId, ref: 'CoachProfile', required: true, index: true },
     evaluationDate: { type: Date, default: Date.now },
@@ -76,6 +76,21 @@ const PlayerEvaluationSchema = new Schema<IPlayerEvaluationDocument>(
     technicalScore: { type: Number },
     physicalScore: { type: Number },
     mentalScore: { type: Number },
+    techniques: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+    characteristics: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+    physical: {
+      type: Map,
+      of: String,
+      default: {},
+    },
     improvementDelta: { type: Number, default: 0 },
     status: {
       type: String,

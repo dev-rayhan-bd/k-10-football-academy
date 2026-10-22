@@ -119,19 +119,10 @@ export const computePlayerCardTier = (params: {
     };
   }
 
-  // Fallback if full media quotas not yet uploaded
-  let fallbackTier: 'GOLD' | 'SILVER' | 'BRONZE';
-  if ((overallRating >= 81 || isCoachValidated) && (is100 || matchCount >= 5)) {
-    fallbackTier = overallRating >= 81 && is100 ? 'GOLD' : 'SILVER';
-  } else if (overallRating >= 65 || matchCount >= 3 || completion >= 60) {
-    fallbackTier = 'SILVER';
-  } else {
-    fallbackTier = 'BRONZE';
-  }
-
+  // Base tier is strictly BRONZE if conditions are not fulfilled
   return {
-    cvTier: fallbackTier,
-    tierChecklist: { ...params, is100Complete: is100, unlockedTier: fallbackTier },
+    cvTier: 'BRONZE',
+    tierChecklist: { ...params, is100Complete: is100, unlockedTier: 'BRONZE' },
   };
 };
 
@@ -214,17 +205,15 @@ export class PlayerStatsService {
       profile.overallRating * 2000 + totalGoals * 5000 + totalAssists * 3000 + ageBonus,
     );
 
-    // Fallback for legacy records missing DOB or age
     if (!profile.dateOfBirth) {
       const userDoc = await UserModel.findById(profile.userId).select('dateOfBirth');
-      profile.dateOfBirth = userDoc?.dateOfBirth || new Date('2006-01-01');
+      if (userDoc?.dateOfBirth) {
+        profile.dateOfBirth = userDoc.dateOfBirth;
+      }
     }
-    if (!profile.age) {
-      const birthYear = profile.dateOfBirth ? new Date(profile.dateOfBirth).getFullYear() : 2006;
-      profile.age = new Date().getFullYear() - birthYear || 18;
-    }
-    if (!profile.country) {
-      profile.country = 'Bangladesh';
+    if (!profile.age && profile.dateOfBirth) {
+      const birthYear = new Date(profile.dateOfBirth).getFullYear();
+      profile.age = new Date().getFullYear() - birthYear;
     }
 
     await profile.save({ validateModifiedOnly: true });

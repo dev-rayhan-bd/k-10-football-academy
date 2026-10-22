@@ -450,3 +450,98 @@ export const validatePlayerCV = catchAsync(async (req: Request, res: Response) =
     data: result,
   });
 });
+
+export const getMyCoachAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await coachService.getCoachAnalytics(userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Coach analytics retrieved successfully',
+    data: result,
+  });
+});
+
+export const getCoachAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const coachId = req.params.id || req.params.coachId;
+  const result = await coachService.getCoachAnalytics(coachId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Coach analytics retrieved successfully',
+    data: result,
+  });
+});
+
+export const getMyTeamsSquad = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await coachService.getMyTeamsSquad(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'My teams squad fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
+export const updatePlayerFitnessStatus = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const { playerId } = req.params;
+  const { status } = req.body;
+  const result = await coachService.updatePlayerFitnessStatus(userId, playerId, status);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player fitness status updated successfully',
+    data: result,
+  });
+});
+
+export const getPlayerCvValidationsDashboard = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await coachService.getPlayerCvValidationsDashboard(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player CV validations dashboard fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
+export const getPlayerEvaluationsDashboard = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await coachService.getPlayerEvaluationsDashboard(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluations fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
+export const getPlayerEvaluationDetails = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const { id } = req.params;
+  const result = await coachService.getPlayerEvaluationDetails(userId, id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluation details fetched successfully',
+    data: result,
+  });
+});
+
+export const submitPlayerEvaluation = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const { id } = req.params;
+  const result = await coachService.submitPlayerEvaluation(userId, id, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluation submitted successfully',
+    data: result,
+  });
+});

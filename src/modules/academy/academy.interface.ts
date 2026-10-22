@@ -57,8 +57,42 @@ export interface IGameReport {
 
 export interface IGameReportDocument extends IGameReport, Document {}
 
+export interface IPlayerEvaluationTechniques {
+  dribbling?: string;
+  ballMastery?: string;
+  runningWithBall?: string;
+  rangeOfPassing?: string;
+  strikingFinishing?: string;
+  defending?: string;
+  firstTouch?: string;
+  nonDominantFoot?: string;
+  [key: string]: string | undefined;
+}
+
+export interface IPlayerEvaluationCharacteristics {
+  gameAwareness?: string;
+  gamesUnderstanding?: string;
+  decisionMaking?: string;
+  concentration?: string;
+  leadership?: string;
+  desire?: string;
+  maturity?: string;
+  [key: string]: string | undefined;
+}
+
+export interface IPlayerEvaluationPhysical {
+  speedAcceleration?: string;
+  movement?: string;
+  balance?: string;
+  power?: string;
+  strength?: string;
+  agility?: string;
+  coordination?: string;
+  [key: string]: string | undefined;
+}
+
 export interface IPlayerEvaluation {
-  academyId: Types.ObjectId;
+  academyId?: Types.ObjectId;
   playerId: Types.ObjectId;
   coachId: Types.ObjectId;
   evaluationDate?: Date;
@@ -66,6 +100,9 @@ export interface IPlayerEvaluation {
   technicalScore?: number;
   physicalScore?: number;
   mentalScore?: number;
+  techniques?: IPlayerEvaluationTechniques;
+  characteristics?: IPlayerEvaluationCharacteristics;
+  physical?: IPlayerEvaluationPhysical;
   improvementDelta?: number;
   status: EvaluationStatus;
   nextEvaluationDue?: Date;

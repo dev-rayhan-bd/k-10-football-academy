@@ -38,11 +38,13 @@ import {
   getPlayerAnalytics,
   updatePlayerPotential,
   updatePlayerMental,
+  getMyPlayerEvaluations,
 } from './player.controller';
 import {
   createSelfGameReport,
   requestCoachGameReport,
   getCoachPendingReports,
+  getCoachAllGameReports,
   completeCoachGameReport,
   verifyGameReportPayment,
   getPlayerGameReports,
@@ -117,6 +119,8 @@ router.post(
 router.get('/me/game-reports', auth(), getPlayerGameReports);
 router.get('/me/game-reports/verify-payment', optionalAuth(), verifyGameReportPayment);
 router.get('/me/game-reports/:reportId', auth(), getGameReportDetails);
+router.get('/me/evaluations', auth('PLAYER', 'SUPER_ADMIN'), getMyPlayerEvaluations);
+router.get('/coach/game-reports', auth('SUPER_ADMIN', 'COACH'), getCoachAllGameReports);
 router.get('/coach/game-reports/pending', auth('SUPER_ADMIN', 'COACH'), getCoachPendingReports);
 router.patch(
   '/coach/game-reports/:reportId/complete',

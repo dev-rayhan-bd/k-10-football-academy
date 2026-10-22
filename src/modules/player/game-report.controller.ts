@@ -80,6 +80,28 @@ export const getCoachPendingReports = catchAsync(async (req: Request, res: Respo
 });
 
 /**
+ * 4b. Coach Flow - Get All Game Reports Dashboard (Screen 2: 4 Cards & Table)
+ */
+export const getCoachAllGameReports = catchAsync(async (req: Request, res: Response) => {
+  const coachUser = {
+    userId: req.user?.userId || (req.user as any)?._id,
+    email: req.user?.email || '',
+  };
+  const result = await gameReportService.getCoachAllGameReports(coachUser, req.query);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Coach game reports dashboard retrieved successfully',
+    meta: result.meta,
+    data: {
+      summary: result.summary,
+      reports: result.reports,
+    },
+  });
+});
+
+/**
  * 5. Coach Flow - Step 2: Coach completes Match Report (Screen 3, 4, 5)
  */
 export const completeCoachGameReport = catchAsync(async (req: Request, res: Response) => {

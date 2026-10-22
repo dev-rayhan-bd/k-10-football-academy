@@ -197,6 +197,150 @@ export class GameReportCoachService {
       result,
     };
   }
+
+  /**
+   * Get Coach Game Reports Dashboard (Screen: Game Reports)
+   * 4 Cards (TOTAL REPORTS, COMPLETED, PENDING, THIS MONTH) + Table (Completed & Pending)
+   */
+  async getCoachAllGameReports(
+    coachUser: { userId: string; email: string },
+    query: Record<string, unknown> = {},
+  ) {
+    const coachEmail = (coachUser.email || '').toLowerCase().trim();
+    const coachUserId = coachUser.userId;
+
+    const baseFilter: any = {
+      $or: [{ 'coachReview.coachEmail': coachEmail }, { 'coachReview.coachId': coachUserId }],
+      'coachReview.status': { $in: ['PENDING', 'COMPLETED'] },
+    };
+
+    // Calculate Summary Stats Cards across all reports assigned to coach
+    const allReports = await MatchRecord.find(baseFilter).sort({ createdAt: -1 });
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let completedCount = 0;
+    let pendingCount = 0;
+    let thisMonthCount = 0;
+    let paidCount = 0;
+    let unpaidCount = 0;
+
+    allReports.forEach((m) => {
+      const status = m.coachReview?.status;
+      if (status === 'COMPLETED') completedCount++;
+      if (status === 'PENDING') pendingCount++;
+
+      const pStatus = m.coachReview?.paymentStatus;
+      if (pStatus === 'PAID') {
+        paidCount++;
+      } else {
+        unpaidCount++;
+      }
+
+      const reportDate = new Date(m.createdAt || m.matchDate || 0);
+      if (reportDate >= startOfMonth) {
+        thisMonthCount++;
+      }
+    });
+
+    const summary = {
+      totalReports: allReports.length,
+      completed: completedCount,
+      pending: pendingCount,
+      thisMonth: thisMonthCount,
+      paidReports: paidCount,
+      unpaidReports: unpaidCount,
+    };
+
+    // Filter by query status if provided (?status=COMPLETED or ?status=PENDING)
+    const filterStatus = String(query.status || 'ALL')
+      .toUpperCase()
+      .trim();
+    const listFilter: any = { ...baseFilter };
+    if (filterStatus === 'COMPLETED') {
+      listFilter['coachReview.status'] = 'COMPLETED';
+    } else if (filterStatus === 'PENDING') {
+      listFilter['coachReview.status'] = 'PENDING';
+    }
+
+    // Filter by payment status if provided (?paymentStatus=PAID or ?paymentStatus=UNPAID)
+    if (query.paymentStatus && typeof query.paymentStatus === 'string') {
+      listFilter['coachReview.paymentStatus'] = query.paymentStatus.toUpperCase().trim();
+    }
+
+    // Clean query object so QueryBuilder doesn't attempt to filter on non-existent top-level fields
+    const queryForBuilder = { ...query };
+    delete queryForBuilder.status;
+    delete queryForBuilder.paymentStatus;
+
+    const reportQuery = new QueryBuilder(
+      MatchRecord.find(listFilter).populate(
+        'playerId',
+        'fullName position profileImage currentClub',
+      ),
+      queryForBuilder,
+    )
+      .search(['awayTeam', 'homeTeam', 'opponentTeam', 'ownTeam', 'gameType', 'matchResult'])
+      .filter()
+      .sort()
+      .paginate();
+
+    const reports = await reportQuery.modelQuery.lean();
+    const meta = await reportQuery.countTotal();
+
+    const formattedReports = reports.map((r: any) => {
+      const player = r.playerId || {};
+      const status = r.coachReview?.status || 'PENDING';
+      const rating =
+        status === 'PENDING' ? 'PENDING' : (r.playerRating ?? r.coachReview?.coachRating ?? null);
+
+      const home = r.homeTeam || r.ownTeam || 'Team';
+      const away = r.awayTeam || r.opponentTeam || 'Opponent';
+      const matchLabel = r.matchResult || `${home} vs ${away}`;
+
+      const goals = r.goals ?? r.stats?.goalScored ?? (status === 'PENDING' ? null : 0);
+      const assists = r.assists ?? r.stats?.assists ?? (status === 'PENDING' ? null : 0);
+      const date = r.matchDate
+        ? new Date(r.matchDate).toISOString().split('T')[0]
+        : r.gameDate || '';
+
+      const amount = r.coachReview?.paymentAmount
+        ? `$ ${Number(r.coachReview.paymentAmount).toFixed(2)}`
+        : '$ 6.99';
+
+      const paymentStatus = (r.coachReview?.paymentStatus || 'UNPAID') as
+        'PAID' | 'UNPAID' | 'FREE';
+      const isPaid = paymentStatus === 'PAID';
+
+      return {
+        _id: r._id,
+        player: {
+          _id: player._id || null,
+          name: player.fullName || r.playerInfo?.playerName || 'Player',
+          position: player.position || r.playerInfo?.position || 'PLAYER',
+          avatar: player.profileImage || '',
+        },
+        rating,
+        matches: matchLabel,
+        goals,
+        assists,
+        date,
+        amount,
+        paymentStatus,
+        isPaid,
+        transactionId: r.coachReview?.transactionId || null,
+        status,
+        createdAt: r.createdAt,
+      };
+    });
+
+    return {
+      summary,
+      meta,
+      reports: formattedReports,
+    };
+  }
 }
 
 export const gameReportCoachService = new GameReportCoachService();

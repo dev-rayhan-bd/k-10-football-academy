@@ -980,7 +980,18 @@ export class UserService {
       const coachUpdate: any = {};
       if (updateData.name) coachUpdate.fullName = updateData.name;
       if (updateData.title) coachUpdate.title = updateData.title;
-      if (updateData.coachType) coachUpdate.coachType = updateData.coachType;
+      if (updateData.coachType) {
+        if (updateData.coachType === 'CLUB_COACH') {
+          const currentCoach = await CoachProfile.findOne({ userId });
+          if (!currentCoach?.isVerifiedByAcademy || !currentCoach?.academyId) {
+            throw new AppError(
+              400,
+              'Cannot switch to Club Coach mode without an officially approved affiliation from a registered Club or Academy.',
+            );
+          }
+        }
+        coachUpdate.coachType = updateData.coachType;
+      }
       if (updateData.yearsExperience !== undefined && updateData.yearsExperience !== '')
         coachUpdate.yearsExperience = Number(updateData.yearsExperience);
       if (updateData.licenseStatus || updateData.coachingLicenseLevel) {

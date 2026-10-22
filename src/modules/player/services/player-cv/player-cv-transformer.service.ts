@@ -603,62 +603,63 @@ export class PlayerCvTransformerService {
 
     // 9. FIFA Card Face Stats and Strength
     const fifaDoc = aggregatedProfile.fifaCardDoc || {};
+    const defaultStat = overallRating || 0;
     const pacScore =
       fifaDoc.pac ??
       (rawAttrDoc.acceleration !== undefined || rawAttrDoc.sprintSpeed !== undefined
         ? Math.round(
-            (Number(rawAttrDoc.acceleration ?? 88) + Number(rawAttrDoc.sprintSpeed ?? 88)) / 2,
+            (Number(rawAttrDoc.acceleration ?? 0) + Number(rawAttrDoc.sprintSpeed ?? 0)) / 2,
           )
-        : 93);
+        : defaultStat);
     const shoScore =
       fifaDoc.sho ??
       (rawAttrDoc.finishing !== undefined ||
       rawAttrDoc.shotPower !== undefined ||
       rawAttrDoc.longShots !== undefined
         ? Math.round(
-            Number(rawAttrDoc.finishing ?? 88) * 0.4 +
-              Number(rawAttrDoc.shotPower ?? 88) * 0.3 +
-              Number(rawAttrDoc.longShots ?? 88) * 0.3,
+            Number(rawAttrDoc.finishing ?? 0) * 0.4 +
+              Number(rawAttrDoc.shotPower ?? 0) * 0.3 +
+              Number(rawAttrDoc.longShots ?? 0) * 0.3,
           )
-        : 85);
+        : defaultStat);
     const pasScore =
       fifaDoc.pas ??
       (rawAttrDoc.shortPassing !== undefined || rawAttrDoc.vision !== undefined
         ? Math.round(
-            Number(rawAttrDoc.shortPassing ?? 88) * 0.4 +
-              Number(rawAttrDoc.vision ?? 88) * 0.3 +
-              Number(rawAttrDoc.longPassing ?? 88) * 0.2 +
-              Number(rawAttrDoc.crossing ?? 88) * 0.1,
+            Number(rawAttrDoc.shortPassing ?? 0) * 0.4 +
+              Number(rawAttrDoc.vision ?? 0) * 0.3 +
+              Number(rawAttrDoc.longPassing ?? 0) * 0.2 +
+              Number(rawAttrDoc.crossing ?? 0) * 0.1,
           )
-        : 88);
+        : defaultStat);
     const driScore =
       fifaDoc.dri ??
       (rawAttrDoc.dribbling !== undefined || rawAttrDoc.ballControl !== undefined
         ? Math.round(
-            Number(rawAttrDoc.dribbling ?? 88) * 0.5 +
-              Number(rawAttrDoc.ballControl ?? 88) * 0.3 +
-              Number(rawAttrDoc.agility ?? 88) * 0.2,
+            Number(rawAttrDoc.dribbling ?? 0) * 0.5 +
+              Number(rawAttrDoc.ballControl ?? 0) * 0.3 +
+              Number(rawAttrDoc.agility ?? 0) * 0.2,
           )
-        : 90);
+        : defaultStat);
     const defScore =
       fifaDoc.def ??
       (rawAttrDoc.marking !== undefined || rawAttrDoc.standingTackle !== undefined
         ? Math.round(
-            Number(rawAttrDoc.marking ?? 88) * 0.35 +
-              Number(rawAttrDoc.standingTackle ?? 88) * 0.35 +
-              Number(rawAttrDoc.interceptions ?? 88) * 0.3,
+            Number(rawAttrDoc.marking ?? 0) * 0.35 +
+              Number(rawAttrDoc.standingTackle ?? 0) * 0.35 +
+              Number(rawAttrDoc.interceptions ?? 0) * 0.3,
           )
-        : 83);
+        : defaultStat);
     const phyScore =
       fifaDoc.phy ??
       (rawAttrDoc.strength !== undefined || rawAttrDoc.stamina !== undefined
         ? Math.round(
-            Number(rawAttrDoc.strength ?? 88) * 0.5 +
-              Number(rawAttrDoc.stamina ?? 88) * 0.3 +
-              Number(rawAttrDoc.jumping ?? 88) * 0.2,
+            Number(rawAttrDoc.strength ?? 0) * 0.5 +
+              Number(rawAttrDoc.stamina ?? 0) * 0.3 +
+              Number(rawAttrDoc.jumping ?? 0) * 0.2,
           )
-        : 88);
-    const headingScoreVal = headingScore || 88;
+        : defaultStat);
+    const headingScoreVal = headingScore || defaultStat;
 
     const strength = {
       pace: pacScore,
@@ -681,7 +682,7 @@ export class PlayerCvTransformerService {
 
     const fifaCardStats = {
       overallRating,
-      position: aggregatedProfile.position || 'CDM',
+      position: aggregatedProfile.position || '',
       pac: pacScore,
       sho: shoScore,
       pas: pasScore,

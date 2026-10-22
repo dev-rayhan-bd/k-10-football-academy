@@ -8,6 +8,7 @@ import {
   PlayerFullPotential,
   FifaCardStats,
 } from './player.model';
+import { PlayerEvaluation } from '@/modules/academy/academy.model';
 import { UserModel } from '../user/user.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 import { playerCacheService } from './services/player-cache.service';
@@ -789,6 +790,30 @@ export class PlayerService {
 
   async updateMentalAnalysis(userIdOrPlayerId: string, payload: Record<string, any>) {
     return playerAnalyticsService.updateMentalAnalysis(userIdOrPlayerId, payload);
+  }
+
+  // 9. Player Evaluations (Development Programme Progress Reports)
+  async getMyEvaluations(userId: string) {
+    const player = await PlayerProfile.findOne({ userId });
+    if (!player) {
+      throw new AppError(404, 'Player profile not found');
+    }
+    const evaluations = await PlayerEvaluation.find({ playerId: player._id })
+      .populate('coachId', 'fullName title profileImage currentClub')
+      .sort({ createdAt: -1 })
+      .lean();
+    return {
+      player: {
+        _id: player._id,
+        name: player.fullName,
+        age: player.age,
+        avatar: player.profileImage,
+        position: player.position,
+        currentClub: player.currentClub,
+        overallRating: player.overallRating,
+      },
+      evaluations,
+    };
   }
 }
 

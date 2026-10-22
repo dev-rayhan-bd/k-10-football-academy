@@ -84,3 +84,67 @@ export const getGameReports = catchAsync(async (req: Request, res: Response) => 
     data: result,
   });
 });
+
+export const getEvaluationDashboard = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const result = await academyService.getEvaluationDashboard(academyId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy evaluation dashboard fetched successfully',
+    data: result,
+  });
+});
+
+export const requestPlayerEvaluation = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const managerUserId = (req as any).user.userId;
+  const result = await academyService.requestPlayerEvaluation(academyId, managerUserId, req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Player evaluation requested successfully',
+    data: result,
+  });
+});
+
+export const sendEvaluationReminder = catchAsync(async (req: Request, res: Response) => {
+  const managerUserId = (req as any).user.userId;
+  const result = await academyService.sendEvaluationReminder(
+    req.params.evaluationId,
+    managerUserId,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Evaluation reminder sent successfully',
+    data: result,
+  });
+});
+
+export const submitPlayerEvaluation = catchAsync(async (req: Request, res: Response) => {
+  const coachUserId = (req as any).user.userId;
+  const result = await academyService.submitPlayerEvaluation(
+    req.params.evaluationId,
+    coachUserId,
+    req.body,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluation submitted successfully',
+    data: result,
+  });
+});
+
+export const getPlayerEvaluations = catchAsync(async (req: Request, res: Response) => {
+  const academyId = req.params.academyId || (req as any).user.userId;
+  const playerId = req.query.playerId as string;
+  const result = await academyService.getPlayerEvaluations(academyId, playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluations fetched successfully',
+    data: result,
+  });
+});

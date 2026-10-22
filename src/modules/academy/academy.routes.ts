@@ -15,6 +15,11 @@ import {
   getTeams,
   createGameReport,
   getGameReports,
+  getEvaluationDashboard,
+  requestPlayerEvaluation,
+  sendEvaluationReminder,
+  submitPlayerEvaluation,
+  getPlayerEvaluations,
 } from './academy.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -30,6 +35,29 @@ router.post(
 );
 router.get('/', getAllAcademyProfiles);
 router.get('/my-profile', auth('ACADEMY', 'SUPER_ADMIN'), getMyAcademyProfile);
+
+// ==========================================
+// 4-MONTH PLAYER EVALUATION & REMINDER FLOW
+// ==========================================
+router.get('/evaluations/dashboard', auth('ACADEMY', 'SUPER_ADMIN'), getEvaluationDashboard);
+router.get(
+  '/:academyId/evaluations/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  getEvaluationDashboard,
+);
+router.get('/evaluations', auth(), getPlayerEvaluations);
+router.post('/evaluations/request', auth('ACADEMY', 'SUPER_ADMIN'), requestPlayerEvaluation);
+router.post(
+  '/evaluations/:evaluationId/remind',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  sendEvaluationReminder,
+);
+router.post(
+  '/evaluations/:evaluationId/submit',
+  auth('COACH', 'SUPER_ADMIN'),
+  submitPlayerEvaluation,
+);
+
 router.get('/:id', getAcademyProfile);
 
 router.post(

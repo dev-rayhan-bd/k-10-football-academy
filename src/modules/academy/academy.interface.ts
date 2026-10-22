@@ -61,14 +61,22 @@ export interface IPlayerEvaluation {
   academyId: Types.ObjectId;
   playerId: Types.ObjectId;
   coachId: Types.ObjectId;
-  evaluationDate: Date;
-  overallRating: number;
-  technicalScore: number;
-  physicalScore: number;
-  mentalScore: number;
-  improvementDelta: number;
+  evaluationDate?: Date;
+  overallRating?: number;
+  technicalScore?: number;
+  physicalScore?: number;
+  mentalScore?: number;
+  improvementDelta?: number;
   status: EvaluationStatus;
+  nextEvaluationDue?: Date;
+  expiresAt?: Date;
+  requestedByManagerId?: Types.ObjectId;
+  reminderSentAt?: Date;
+  reminderCount?: number;
+  coachFeedback?: string;
+  notes?: string;
   createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface IPlayerEvaluationDocument extends IPlayerEvaluation, Document {}

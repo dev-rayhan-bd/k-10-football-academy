@@ -3,34 +3,66 @@ import { z } from 'zod';
 export const createCoachProfileZodSchema = z.object({
   body: z.object({
     userId: z.string().min(1, 'User ID is required'),
-    coachType: z.enum(['INDIVIDUAL_COACH', 'CLUB_COACH']),
+    coachType: z.enum(['INDIVIDUAL_COACH', 'CLUB_COACH']).optional(),
     fullName: z.string().min(2),
-    title: z.string().min(2),
-    yearsExperience: z.number().min(0),
-    licenseStatus: z.string().min(1),
-    speciality: z.string().min(1),
+    title: z.string().min(2).optional(),
+    yearsExperience: z.number().min(0).optional(),
+    licenseStatus: z.string().optional(),
+    speciality: z.string().optional(),
     additionalNotes: z.string().optional(),
   }),
 });
 
 export const updateCoachProfileZodSchema = z.object({
-  body: z.object({
-    fullName: z.string().optional(),
-    title: z.string().optional(),
-    yearsExperience: z.number().optional(),
-    licenseStatus: z.string().optional(),
-    speciality: z.string().optional(),
-    status: z.enum(['AVAILABLE', 'CONTRACTED', 'ACTIVE', 'INACTIVE']).optional(),
-    additionalNotes: z.string().optional(),
-  }),
-});
+  body: z
+    .object({
+      data: z.string().optional(),
+      coachType: z.enum(['INDIVIDUAL_COACH', 'CLUB_COACH']).optional(),
+      fullName: z.string().optional(),
+      title: z.string().optional(),
+      yearsExperience: z.number().optional(),
+      overallRatingScore: z.number().optional(),
+      licenseStatus: z.string().optional(),
+      speciality: z.string().optional(),
+      status: z.enum(['AVAILABLE', 'CONTRACTED', 'ACTIVE', 'INACTIVE']).optional(),
+      additionalNotes: z.string().optional(),
 
-export const createTacticalFormationZodSchema = z.object({
-  body: z.object({
-    formationSlot: z.number().min(1).max(3),
-    formationName: z.string().min(1),
-    positionsJson: z.string().min(2),
-  }),
+      // Personal info & Hero
+      dateOfBirth: z.any().optional(),
+      age: z.any().optional(),
+      birthCountry: z.string().optional(),
+      birthCountryFlag: z.string().optional(),
+      dualNationality: z.string().optional(),
+      dualNationalityFlag: z.string().optional(),
+      currentClub: z.string().optional(),
+      clubLogo: z.string().optional(),
+      website: z.string().optional(),
+      phone: z.string().optional(),
+      email: z.string().optional(),
+      location: z.string().optional(),
+      validationStatus: z.string().optional(),
+
+      // Nested objects
+      personalInformation: z.any().optional(),
+      contact: z.any().optional(),
+      seasonStats: z.any().optional(),
+      transferStatus: z.any().optional(),
+
+      // Sub-arrays
+      accomplishments: z.any().optional(),
+      coachStyles: z.any().optional(),
+      languages: z.any().optional(),
+      majorTrophies: z.any().optional(),
+      cupsPlayed: z.any().optional(),
+      keySkills: z.any().optional(),
+      clubHistory: z.any().optional(),
+      addClub: z.any().optional(),
+      associations: z.any().optional(),
+      courses: z.any().optional(),
+      formations: z.any().optional(),
+      documents: z.any().optional(),
+    })
+    .passthrough(),
 });
 
 export const createCoachTestimonialZodSchema = z.object({
@@ -39,6 +71,16 @@ export const createCoachTestimonialZodSchema = z.object({
     authorRole: z.string().min(2),
     authorAvatar: z.string().optional(),
     rating: z.number().min(1).max(5),
-    comment: z.string().min(5),
+    comment: z.string().min(3),
+  }),
+});
+
+export const updateCoachTestimonialZodSchema = z.object({
+  body: z.object({
+    authorName: z.string().optional(),
+    authorRole: z.string().optional(),
+    authorAvatar: z.string().optional(),
+    rating: z.number().min(1).max(5).optional(),
+    comment: z.string().optional(),
   }),
 });

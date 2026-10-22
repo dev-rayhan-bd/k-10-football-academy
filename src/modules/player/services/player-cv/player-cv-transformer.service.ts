@@ -7,6 +7,8 @@ import {
   calculateMetricGrade,
 } from '@/utils/ratingCalculator';
 import { playerAttributeService } from './../player-attribute.service';
+import { computeProfileCompletion, computePlayerCardTier } from '../player-stats.service';
+import { PlayerProfile } from '../../player.model';
 
 export class PlayerCvTransformerService {
   /**
@@ -689,10 +691,65 @@ export class PlayerCvTransformerService {
       heading: headingScoreVal,
     };
 
+    const hasAttributes = Boolean(aggregatedProfile.attributesDoc);
+    const completionPercentage =
+      aggregatedProfile.profileCompletion !== undefined && aggregatedProfile.profileCompletion > 0
+        ? aggregatedProfile.profileCompletion
+        : computeProfileCompletion(aggregatedProfile, hasAttributes);
+
+    const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const isUpdatedRecently =
+      !aggregatedProfile.updatedAt || new Date(aggregatedProfile.updatedAt) >= threeMonthsAgo;
+    const isCoachValidated = Boolean(
+      aggregatedProfile.isVerifiedByCoach || aggregatedProfile.coachVerification?.isVerified,
+    );
+    const videoCount =
+      (aggregatedProfile.highlightVideo ? 1 : 0) +
+      (Array.isArray(aggregatedProfile.videos) ? aggregatedProfile.videos.length : 0);
+    const photoCount =
+      (aggregatedProfile.profileImage ? 1 : 0) +
+      (Array.isArray(aggregatedProfile.photos) ? aggregatedProfile.photos.length : 0);
+
+    const { cvTier: autoTier, tierChecklist } = computePlayerCardTier({
+      completion: completionPercentage,
+      overallRating,
+      matchCount: totalMatches,
+      videoCount,
+      photoCount,
+      isUpdatedRecently,
+      isCoachValidated,
+    });
+
+    if (
+      aggregatedProfile.cvTier !== autoTier ||
+      aggregatedProfile.profileCompletion !== completionPercentage
+    ) {
+      PlayerProfile.updateOne(
+        { _id: aggregatedProfile._id },
+        { cvTier: autoTier, profileCompletion: completionPercentage },
+      )
+        .exec()
+        .catch(() => {});
+    }
+
     // 10. Assemble complete final profile
     const finalProfile = {
       ...profileObj,
       playerId: aggregatedProfile._id,
+      cvTier: autoTier,
+      profileCompletion: completionPercentage,
+      completionPercentage,
+      tierStatus: {
+        currentTier: autoTier,
+        profileCompletion: completionPercentage,
+        completionPercentage,
+        checklist: tierChecklist,
+        label:
+          autoTier === 'GOLD'
+            ? 'GOLD TIER UNLOCKED — ALL SECTIONS VERIFIED'
+            : 'COMPLETE ALL SECTIONS TO UNLOCK GOLD TIER STATUS',
+        canRequestRevalidation: autoTier !== 'GOLD',
+      },
       agentStatus: playerEvaluation.agentStatus,
       clubStatus: playerEvaluation.clubStatus,
       playerEvaluation,

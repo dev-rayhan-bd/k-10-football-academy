@@ -9,6 +9,9 @@ import {
   IAcademyFeePaymentDocument,
   IAcademyFinanceTransactionDocument,
   IAcademyMatchDocument,
+  IExtraEventDocument,
+  IExtraEventParticipant,
+  IAcademySponsorDocument,
 } from './academy.interface';
 
 const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
@@ -330,3 +333,216 @@ AcademyMatchSchema.index({ academyId: 1, matchDate: 1 });
 AcademyMatchSchema.index({ ourTeamId: 1, matchDate: 1 });
 
 export const AcademyMatch = model<IAcademyMatchDocument>('AcademyMatch', AcademyMatchSchema);
+
+// ==========================================
+// EXTRA EVENTS SCHEMA & MODEL (SCREENSHOTS)
+// ==========================================
+const ExtraEventParticipantSchema = new Schema<IExtraEventParticipant>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User' },
+    name: { type: String, required: true },
+    email: { type: String },
+    phone: { type: String },
+    teamName: { type: String },
+    registeredAt: { type: Date, default: Date.now },
+    paidAmount: { type: Number, default: 0 },
+    paymentStatus: {
+      type: String,
+      enum: ['PAID', 'PENDING', 'FREE'],
+      default: 'FREE',
+    },
+  },
+  { _id: true },
+);
+
+export const ExtraEventSchema = new Schema<IExtraEventDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    eventName: { type: String, required: true, trim: true },
+    eventType: { type: String, required: true, index: true },
+    group: { type: String, required: true },
+    ageGroup: { type: String, required: true },
+    targetAttendees: { type: String, required: true },
+    eventDate: { type: Date, required: true, index: true },
+    eventEndDate: { type: Date },
+    formattedDateRange: { type: String },
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+    registrationDeadline: { type: Date, required: true },
+    venueName: { type: String, required: true },
+    venueAddress: { type: String, required: true },
+    registrationFee: { type: Number, default: 0 },
+    currency: { type: String, default: '£' },
+    maxCapacity: { type: Number },
+    currentAttendees: { type: Number, default: 0 },
+    description: { type: String, required: true },
+    requirements: { type: String },
+    contactPerson: { type: String, required: true },
+    contactPhone: { type: String, required: true },
+    contactEmail: { type: String, required: true },
+    bannerImage: { type: String },
+    status: {
+      type: String,
+      enum: ['OPEN', 'CLOSING SOON', 'CLOSED'],
+      default: 'OPEN',
+      index: true,
+    },
+    participants: [ExtraEventParticipantSchema],
+  },
+  { timestamps: true },
+);
+
+ExtraEventSchema.pre('save', function (next) {
+  // Format readable date string if not manually set (e.g. 15-20 FEBRUARY 2026 or 5 MARCH 2026)
+  if (!this.formattedDateRange && this.eventDate) {
+    const start = new Date(this.eventDate);
+    const months = [
+      'JANUARY',
+      'FEBRUARY',
+      'MARCH',
+      'APRIL',
+      'MAY',
+      'JUNE',
+      'JULY',
+      'AUGUST',
+      'SEPTEMBER',
+      'OCTOBER',
+      'NOVEMBER',
+      'DECEMBER',
+    ];
+    if (this.eventEndDate) {
+      const end = new Date(this.eventEndDate);
+      if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+        this.formattedDateRange = `${start.getDate()}-${end.getDate()} ${months[start.getMonth()]} ${start.getFullYear()}`;
+      } else {
+        this.formattedDateRange = `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]} ${end.getFullYear()}`;
+      }
+    } else {
+      this.formattedDateRange = `${start.getDate()} ${months[start.getMonth()]} ${start.getFullYear()}`;
+    }
+  }
+
+  // Automatic status calculation
+  const now = new Date();
+  if (this.registrationDeadline && new Date(this.registrationDeadline) < now) {
+    this.status = 'CLOSED';
+  } else if (this.maxCapacity && this.currentAttendees >= this.maxCapacity) {
+    this.status = 'CLOSED';
+  } else if (
+    this.registrationDeadline &&
+    new Date(this.registrationDeadline).getTime() - now.getTime() <= 3 * 24 * 60 * 60 * 1000
+  ) {
+    if (this.status !== 'CLOSED') {
+      this.status = 'CLOSING SOON';
+    }
+  }
+
+  next();
+});
+
+ExtraEventSchema.index({ academyId: 1, eventDate: 1 });
+ExtraEventSchema.index({ academyId: 1, eventType: 1 });
+ExtraEventSchema.index({ academyId: 1, status: 1 });
+
+export const ExtraEvent = model<IExtraEventDocument>('ExtraEvent', ExtraEventSchema);
+
+// ==========================================
+// ACADEMY SPONSORS SCHEMA & MODEL (SCREENSHOTS)
+// ==========================================
+export const AcademySponsorSchema = new Schema<IAcademySponsorDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    companyName: { type: String, required: true, trim: true },
+    contactPerson: { type: String, required: true, trim: true },
+    email: { type: String, required: true, trim: true, lowercase: true },
+    phone: { type: String, required: true, trim: true },
+    fullAddress: { type: String, required: true, trim: true },
+    sponsorshipType: {
+      type: String,
+      required: true,
+      enum: [
+        'EQUIPMENT',
+        'APPAREL',
+        'FINANCIAL',
+        'TECHNOLOGY',
+        'MEDIA',
+        'MEDICAL',
+        'NUTRITION',
+        'OTHER',
+      ],
+      default: 'FINANCIAL',
+      index: true,
+    },
+    sponsorshipStatus: {
+      type: String,
+      required: true,
+      enum: ['ACTIVE', 'EXPIRING SOON', 'EXPIRED', 'PENDING', 'TERMINATED'],
+      default: 'ACTIVE',
+      index: true,
+    },
+    contractValue: { type: Number, required: true, default: 0 },
+    currency: { type: String, default: '$' },
+    paymentStatus: {
+      type: String,
+      required: true,
+      enum: ['PAID', 'PENDING', 'PARTIALLY_PAID', 'OVERDUE'],
+      default: 'PENDING',
+      index: true,
+    },
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    formattedContractPeriod: { type: String },
+    sponsorshipDescription: { type: String, required: true },
+    benefitsAndDeliverables: { type: String },
+    logo: { type: String },
+  },
+  { timestamps: true },
+);
+
+AcademySponsorSchema.pre('save', function (next) {
+  // Format contract period (e.g. "Jan 1, 2026 to Dec 31, 2026")
+  if (!this.formattedContractPeriod && this.startDate && this.endDate) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    const s = new Date(this.startDate);
+    const e = new Date(this.endDate);
+    this.formattedContractPeriod = `${months[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()} to ${months[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+  }
+
+  // Dynamic status evaluation
+  const now = new Date();
+  if (this.endDate) {
+    const end = new Date(this.endDate);
+    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+    if (end.getTime() < now.getTime()) {
+      this.sponsorshipStatus = 'EXPIRED';
+    } else if (end.getTime() - now.getTime() <= thirtyDays) {
+      if (this.sponsorshipStatus === 'ACTIVE') {
+        this.sponsorshipStatus = 'EXPIRING SOON';
+      }
+    }
+  }
+
+  next();
+});
+
+AcademySponsorSchema.index({ academyId: 1, sponsorshipStatus: 1 });
+AcademySponsorSchema.index({ academyId: 1, sponsorshipType: 1 });
+AcademySponsorSchema.index({ academyId: 1, paymentStatus: 1 });
+
+export const AcademySponsor = model<IAcademySponsorDocument>(
+  'AcademySponsor',
+  AcademySponsorSchema,
+);

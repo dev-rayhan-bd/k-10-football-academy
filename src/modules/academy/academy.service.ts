@@ -12,6 +12,8 @@ import {
   AcademyFeePayment,
   AcademyFinanceTransaction,
   AcademyMatch,
+  ExtraEvent,
+  AcademySponsor,
 } from './academy.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 
@@ -4241,6 +4243,734 @@ export class AcademyService {
 
     return {
       message: 'Scheduled match deleted successfully',
+    };
+  }
+
+  // ==========================================
+  // EXTRA EVENTS SERVICES (SCREENSHOTS)
+  // ==========================================
+
+  async getExtraEventsMeta(user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    // Reuse existing academy teams directly without creating any duplicate endpoints
+    const teams = await Team.find({ academyId: academy._id })
+      .select('_id teamName ageGroup gender')
+      .lean();
+
+    return {
+      eventTypes: [
+        'Summer Training Camp',
+        'Tournament Registration',
+        'Skills Workshop',
+        'Friendly Match',
+        'Trial',
+        'Clinic',
+        'Charity Event',
+        'Other',
+      ],
+      groups: ['Academy Members', 'Grassroots Teams', 'Families', 'External Teams', 'All Members'],
+      ageGroups: ['U-7', 'U-9', 'U-11', 'U-13', 'U-15', 'U-17', 'U-19', 'Senior', 'All Age Groups'],
+      targetAttendees: [
+        'Boys',
+        'Girls',
+        'Mixed / Co-Ed',
+        'Goalkeepers',
+        'Elite Players',
+        'Grassroots',
+        'Open to All',
+      ],
+      statusOptions: ['OPEN', 'CLOSING SOON', 'CLOSED'],
+      dateFilters: ['today', 'this_week', 'this_month', 'upcoming', 'past'],
+      teams,
+    };
+  }
+
+  async getExtraEvents(user: any, query: any = {}, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const filter: any = { academyId: academy._id };
+
+    // Filter by Event Type (e.g. Training Camp, Tournament, Workshop)
+    if (query.eventType) {
+      filter.eventType = { $regex: new RegExp(String(query.eventType).trim(), 'i') };
+    }
+
+    // Filter by Status (OPEN, CLOSING SOON, CLOSED)
+    if (
+      query.status &&
+      ['OPEN', 'CLOSING SOON', 'CLOSED'].includes(String(query.status).toUpperCase())
+    ) {
+      filter.status = String(query.status).toUpperCase();
+    }
+
+    // Filter by group, ageGroup, targetAttendees
+    if (query.group) {
+      filter.group = { $regex: new RegExp(String(query.group).trim(), 'i') };
+    }
+    if (query.ageGroup) {
+      filter.ageGroup = { $regex: new RegExp(String(query.ageGroup).trim(), 'i') };
+    }
+    if (query.targetAttendees) {
+      filter.targetAttendees = { $regex: new RegExp(String(query.targetAttendees).trim(), 'i') };
+    }
+
+    // Filter by Date (Date dropdown)
+    if (query.date) {
+      const now = new Date();
+      if (query.date === 'today') {
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59,
+          999,
+        );
+        filter.eventDate = { $gte: startOfDay, $lte: endOfDay };
+      } else if (query.date === 'this_week') {
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 7);
+        filter.eventDate = { $gte: startOfWeek, $lte: endOfWeek };
+      } else if (query.date === 'this_month') {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        filter.eventDate = { $gte: startOfMonth, $lte: endOfMonth };
+      } else if (query.date === 'upcoming') {
+        filter.eventDate = { $gte: new Date() };
+      } else if (query.date === 'past') {
+        filter.eventDate = { $lt: new Date() };
+      } else {
+        const parsed = new Date(query.date);
+        if (!isNaN(parsed.getTime())) {
+          const start = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+          const end = new Date(
+            parsed.getFullYear(),
+            parsed.getMonth(),
+            parsed.getDate(),
+            23,
+            59,
+            59,
+            999,
+          );
+          filter.eventDate = { $gte: start, $lte: end };
+        }
+      }
+    }
+
+    // Search by name, venue, eventType
+    if (query.searchTerm || query.search) {
+      const term = String(query.searchTerm || query.search).trim();
+      const regex = new RegExp(term, 'i');
+      filter.$or = [
+        { eventName: regex },
+        { eventType: regex },
+        { venueName: regex },
+        { venueAddress: regex },
+      ];
+    }
+
+    const page = Math.max(1, parseInt(query.page as string, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit as string, 10) || 10));
+    const skip = (page - 1) * limit;
+
+    const [totalRecords, events] = await Promise.all([
+      ExtraEvent.countDocuments(filter),
+      ExtraEvent.find(filter).sort({ eventDate: 1, createdAt: -1 }).skip(skip).limit(limit).lean(),
+    ]);
+
+    const formattedEvents = events.map((ev: any) => {
+      const currency = ev.currency || '£';
+      const fee = Number(ev.registrationFee) || 0;
+      const maxCap = ev.maxCapacity ? Number(ev.maxCapacity) : null;
+      const attendees =
+        Number(ev.currentAttendees) ||
+        (Array.isArray(ev.participants) ? ev.participants.length : 0);
+
+      // Status badge styling metadata for UI
+      let badgeVariant = 'green';
+      if (ev.status === 'CLOSING SOON') badgeVariant = 'yellow';
+      if (ev.status === 'CLOSED') badgeVariant = 'gray';
+
+      return {
+        _id: ev._id,
+        eventName: ev.eventName,
+        eventType: ev.eventType,
+        group: ev.group,
+        ageGroup: ev.ageGroup,
+        targetAttendees: ev.targetAttendees,
+        status: ev.status,
+        statusBadge: {
+          label: ev.status,
+          variant: badgeVariant,
+        },
+        formattedDate: ev.formattedDateRange || '',
+        eventDate: ev.eventDate,
+        eventEndDate: ev.eventEndDate,
+        startTime: ev.startTime,
+        endTime: ev.endTime,
+        registrationDeadline: ev.registrationDeadline,
+        venueName: ev.venueName,
+        venueAddress: ev.venueAddress,
+        registrationFee: fee,
+        currency,
+        feeFormatted: `${currency} ${fee}`,
+        currentAttendees: attendees,
+        maxCapacity: maxCap,
+        capacityRatio: maxCap ? `${attendees}/${maxCap}` : `${attendees}/∞`,
+        description: ev.description,
+        requirements: ev.requirements || '',
+        contactPerson: ev.contactPerson,
+        contactPhone: ev.contactPhone,
+        contactEmail: ev.contactEmail,
+        bannerImage: ev.bannerImage || '',
+        canRegister: ev.status === 'OPEN' && (!maxCap || attendees < maxCap),
+        shareUrl: `/dashboard/academy/management/extra-events/${ev._id}`,
+        createdAt: ev.createdAt,
+      };
+    });
+
+    return {
+      events: formattedEvents,
+      meta: {
+        page,
+        limit,
+        total: totalRecords,
+        totalPages: Math.ceil(totalRecords / limit) || 1,
+      },
+    };
+  }
+
+  async getExtraEventById(id: string, user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const event = await ExtraEvent.findOne({
+      _id: id,
+      academyId: academy._id,
+    }).lean();
+
+    if (!event) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
+    }
+
+    const ev: any = event;
+    const currency = ev.currency || '£';
+    const fee = Number(ev.registrationFee) || 0;
+    const maxCap = ev.maxCapacity ? Number(ev.maxCapacity) : null;
+    const attendees =
+      Number(ev.currentAttendees) || (Array.isArray(ev.participants) ? ev.participants.length : 0);
+
+    return {
+      _id: ev._id,
+      eventName: ev.eventName,
+      eventType: ev.eventType,
+      group: ev.group,
+      ageGroup: ev.ageGroup,
+      targetAttendees: ev.targetAttendees,
+      status: ev.status,
+      formattedDate: ev.formattedDateRange || '',
+      eventDate: ev.eventDate,
+      eventEndDate: ev.eventEndDate,
+      startTime: ev.startTime,
+      endTime: ev.endTime,
+      registrationDeadline: ev.registrationDeadline,
+      venueName: ev.venueName,
+      venueAddress: ev.venueAddress,
+      registrationFee: fee,
+      currency,
+      feeFormatted: `${currency} ${fee}`,
+      currentAttendees: attendees,
+      maxCapacity: maxCap,
+      capacityRatio: maxCap ? `${attendees}/${maxCap}` : `${attendees}/∞`,
+      description: ev.description,
+      requirements: ev.requirements || '',
+      contactPerson: ev.contactPerson,
+      contactPhone: ev.contactPhone,
+      contactEmail: ev.contactEmail,
+      bannerImage: ev.bannerImage || '',
+      participants: ev.participants || [],
+      canRegister: ev.status === 'OPEN' && (!maxCap || attendees < maxCap),
+      shareUrl: `/dashboard/academy/management/extra-events/${ev._id}`,
+      createdAt: ev.createdAt,
+      updatedAt: ev.updatedAt,
+    };
+  }
+
+  async createExtraEvent(user: any, payload: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const event = new ExtraEvent({
+      academyId: academy._id,
+      eventName: payload.eventName,
+      eventType: payload.eventType,
+      group: payload.group,
+      ageGroup: payload.ageGroup,
+      targetAttendees: payload.targetAttendees,
+      eventDate: new Date(payload.eventDate),
+      eventEndDate: payload.eventEndDate ? new Date(payload.eventEndDate) : undefined,
+      formattedDateRange: payload.formattedDateRange,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      registrationDeadline: new Date(payload.registrationDeadline),
+      venueName: payload.venueName,
+      venueAddress: payload.venueAddress,
+      registrationFee: Number(payload.registrationFee) || 0,
+      currency: payload.currency || '£',
+      maxCapacity: payload.maxCapacity ? Number(payload.maxCapacity) : undefined,
+      currentAttendees: 0,
+      description: payload.description,
+      requirements: payload.requirements,
+      contactPerson: payload.contactPerson,
+      contactPhone: payload.contactPhone,
+      contactEmail: payload.contactEmail,
+      bannerImage: payload.bannerImage || '',
+      status: payload.status || 'OPEN',
+      participants: [],
+    });
+
+    await event.save();
+
+    return {
+      message: 'Extra event created successfully',
+      event,
+    };
+  }
+
+  async updateExtraEvent(id: string, user: any, payload: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const event = await ExtraEvent.findOne({
+      _id: id,
+      academyId: academy._id,
+    });
+
+    if (!event) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
+    }
+
+    if (payload.eventName) event.eventName = payload.eventName;
+    if (payload.eventType) event.eventType = payload.eventType;
+    if (payload.group) event.group = payload.group;
+    if (payload.ageGroup) event.ageGroup = payload.ageGroup;
+    if (payload.targetAttendees) event.targetAttendees = payload.targetAttendees;
+    if (payload.eventDate) event.eventDate = new Date(payload.eventDate);
+    if (payload.eventEndDate !== undefined)
+      event.eventEndDate = payload.eventEndDate ? new Date(payload.eventEndDate) : undefined;
+    if (payload.formattedDateRange !== undefined)
+      event.formattedDateRange = payload.formattedDateRange;
+    if (payload.startTime) event.startTime = payload.startTime;
+    if (payload.endTime) event.endTime = payload.endTime;
+    if (payload.registrationDeadline)
+      event.registrationDeadline = new Date(payload.registrationDeadline);
+    if (payload.venueName) event.venueName = payload.venueName;
+    if (payload.venueAddress) event.venueAddress = payload.venueAddress;
+    if (payload.registrationFee !== undefined)
+      event.registrationFee = Number(payload.registrationFee) || 0;
+    if (payload.currency) event.currency = payload.currency;
+    if (payload.maxCapacity !== undefined)
+      event.maxCapacity = payload.maxCapacity ? Number(payload.maxCapacity) : undefined;
+    if (payload.description) event.description = payload.description;
+    if (payload.requirements !== undefined) event.requirements = payload.requirements;
+    if (payload.contactPerson) event.contactPerson = payload.contactPerson;
+    if (payload.contactPhone) event.contactPhone = payload.contactPhone;
+    if (payload.contactEmail) event.contactEmail = payload.contactEmail;
+    if (payload.bannerImage !== undefined) event.bannerImage = payload.bannerImage;
+    if (payload.status) event.status = payload.status;
+
+    await event.save();
+
+    return {
+      message: 'Extra event updated successfully',
+      event,
+    };
+  }
+
+  async deleteExtraEvent(id: string, user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const event = await ExtraEvent.findOneAndDelete({
+      _id: id,
+      academyId: academy._id,
+    });
+
+    if (!event) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
+    }
+
+    return {
+      message: 'Extra event deleted successfully',
+    };
+  }
+
+  async registerForExtraEvent(
+    id: string,
+    user: any,
+    participantData: any,
+    academyIdentifier?: string,
+  ) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const event = await ExtraEvent.findOne({
+      _id: id,
+      academyId: academy._id,
+    });
+
+    if (!event) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
+    }
+
+    if (event.status === 'CLOSED') {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Registration is closed for this event');
+    }
+
+    if (event.maxCapacity && event.currentAttendees >= event.maxCapacity) {
+      event.status = 'CLOSED';
+      await event.save();
+      throw new AppError(StatusCodes.BAD_REQUEST, 'This event has reached maximum capacity');
+    }
+
+    event.participants = event.participants || [];
+    event.participants.push({
+      userId: user?.userId ? new Types.ObjectId(user.userId) : undefined,
+      name: participantData.name,
+      email: participantData.email,
+      phone: participantData.phone,
+      teamName: participantData.teamName,
+      registeredAt: new Date(),
+      paidAmount: participantData.paidAmount || event.registrationFee || 0,
+      paymentStatus:
+        event.registrationFee && event.registrationFee > 0
+          ? participantData.paymentStatus || 'PAID'
+          : 'FREE',
+    });
+
+    event.currentAttendees = (event.currentAttendees || 0) + 1;
+
+    if (event.maxCapacity && event.currentAttendees >= event.maxCapacity) {
+      event.status = 'CLOSED';
+    }
+
+    await event.save();
+
+    return {
+      message: 'Registration completed successfully',
+      currentAttendees: event.currentAttendees,
+      maxCapacity: event.maxCapacity,
+      status: event.status,
+    };
+  }
+
+  // ==========================================
+  // ACADEMY SPONSORS SERVICES (SCREENSHOTS)
+  // ==========================================
+
+  async getSponsorsMeta(_user: any, _academyIdentifier?: string) {
+    return {
+      sponsorshipTypes: [
+        'EQUIPMENT',
+        'APPAREL',
+        'FINANCIAL',
+        'TECHNOLOGY',
+        'MEDIA',
+        'MEDICAL',
+        'NUTRITION',
+        'OTHER',
+      ],
+      sponsorshipStatuses: ['ACTIVE', 'EXPIRING SOON', 'EXPIRED', 'PENDING', 'TERMINATED'],
+      paymentStatuses: ['PAID', 'PENDING', 'PARTIALLY_PAID', 'OVERDUE'],
+    };
+  }
+
+  async getSponsors(user: any, query: any = {}, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    // 1. Calculate dynamic stats directly from DB (The 4 Top Cards from UI Screenshot 1)
+    const now = new Date();
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const [allActive, activeCount, expiringSoonCount, pendingPayments] = await Promise.all([
+      AcademySponsor.aggregate([
+        { $match: { academyId: academy._id, sponsorshipStatus: 'ACTIVE' } },
+        { $group: { _id: null, total: { $sum: '$contractValue' } } },
+      ]),
+      AcademySponsor.countDocuments({
+        academyId: academy._id,
+        sponsorshipStatus: 'ACTIVE',
+      }),
+      AcademySponsor.countDocuments({
+        academyId: academy._id,
+        $or: [
+          { sponsorshipStatus: 'EXPIRING SOON' },
+          {
+            sponsorshipStatus: 'ACTIVE',
+            endDate: { $gte: now, $lte: thirtyDaysFromNow },
+          },
+        ],
+      }),
+      AcademySponsor.aggregate([
+        {
+          $match: {
+            academyId: academy._id,
+            paymentStatus: { $in: ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'] },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$contractValue' } } },
+      ]),
+    ]);
+
+    const totalContractValueNum = allActive[0]?.total || 0;
+    const pendingPaymentsNum = pendingPayments[0]?.total || 0;
+
+    // Helper format e.g. $185K or $185,000
+    const formatK = (val: number) => {
+      if (val >= 1000) {
+        return `$${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}K`;
+      }
+      return `$${val}`;
+    };
+
+    const stats = {
+      totalContractValue: totalContractValueNum,
+      totalContractValueFormatted: formatK(totalContractValueNum),
+      activeSponsors: activeCount,
+      expiringSoon: expiringSoonCount,
+      pendingPayments: pendingPaymentsNum,
+      pendingPaymentsFormatted: formatK(pendingPaymentsNum),
+    };
+
+    // 2. Build table filters
+    const filter: any = { academyId: academy._id };
+
+    if (query.sponsorshipType) {
+      filter.sponsorshipType = { $regex: new RegExp(String(query.sponsorshipType).trim(), 'i') };
+    }
+
+    if (query.sponsorshipStatus || query.status) {
+      const st = String(query.sponsorshipStatus || query.status).trim();
+      filter.sponsorshipStatus = { $regex: new RegExp(st, 'i') };
+    }
+
+    if (query.paymentStatus) {
+      filter.paymentStatus = String(query.paymentStatus).toUpperCase();
+    }
+
+    if (query.searchTerm || query.search) {
+      const term = String(query.searchTerm || query.search).trim();
+      const regex = new RegExp(term, 'i');
+      filter.$or = [
+        { companyName: regex },
+        { contactPerson: regex },
+        { email: regex },
+        { phone: regex },
+        { sponsorshipType: regex },
+      ];
+    }
+
+    const page = Math.max(1, parseInt(query.page as string, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit as string, 10) || 10));
+    const skip = (page - 1) * limit;
+
+    const [totalRecords, sponsors] = await Promise.all([
+      AcademySponsor.countDocuments(filter),
+      AcademySponsor.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    ]);
+
+    const formattedSponsors = sponsors.map((sp: any) => {
+      const val = Number(sp.contractValue) || 0;
+      const currency = sp.currency || '$';
+
+      // Badge type color matching UI screenshot 1
+      let typeBadgeVariant = 'green';
+      const upperType = String(sp.sponsorshipType).toUpperCase();
+      if (upperType === 'APPAREL') typeBadgeVariant = 'navy';
+      else if (upperType === 'FINANCIAL') typeBadgeVariant = 'yellow';
+      else if (upperType === 'TECHNOLOGY') typeBadgeVariant = 'purple';
+      else if (upperType === 'EQUIPMENT') typeBadgeVariant = 'green';
+
+      return {
+        _id: sp._id,
+        companyName: sp.companyName,
+        contactPerson: sp.contactPerson,
+        email: sp.email,
+        phone: sp.phone,
+        fullAddress: sp.fullAddress,
+        sponsorshipType: sp.sponsorshipType,
+        sponsorshipTypeBadge: {
+          label: sp.sponsorshipType,
+          variant: typeBadgeVariant,
+        },
+        contractValue: val,
+        currency,
+        contractValueFormatted: `${currency} ${val.toLocaleString('en-US')}`,
+        contractPeriod: sp.formattedContractPeriod || '',
+        startDate: sp.startDate,
+        endDate: sp.endDate,
+        status: sp.sponsorshipStatus,
+        statusBadge: {
+          label: sp.sponsorshipStatus,
+          variant:
+            sp.sponsorshipStatus === 'ACTIVE'
+              ? 'green'
+              : sp.sponsorshipStatus === 'EXPIRING SOON'
+                ? 'yellow'
+                : 'gray',
+        },
+        paymentStatus: sp.paymentStatus,
+        paymentBadge: {
+          label: sp.paymentStatus,
+          variant: sp.paymentStatus === 'PAID' ? 'green' : 'red',
+        },
+        sponsorshipDescription: sp.sponsorshipDescription,
+        benefitsAndDeliverables: sp.benefitsAndDeliverables || '',
+        logo: sp.logo || '',
+        createdAt: sp.createdAt,
+      };
+    });
+
+    return {
+      stats,
+      sponsors: formattedSponsors,
+      meta: {
+        page,
+        limit,
+        total: totalRecords,
+        totalPages: Math.ceil(totalRecords / limit) || 1,
+      },
+    };
+  }
+
+  async getSponsorById(id: string, user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const sponsor = await AcademySponsor.findOne({
+      _id: id,
+      academyId: academy._id,
+    }).lean();
+
+    if (!sponsor) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy sponsor not found');
+    }
+
+    const sp: any = sponsor;
+    const val = Number(sp.contractValue) || 0;
+    const currency = sp.currency || '$';
+
+    return {
+      _id: sp._id,
+      companyName: sp.companyName,
+      contactPerson: sp.contactPerson,
+      email: sp.email,
+      phone: sp.phone,
+      fullAddress: sp.fullAddress,
+      sponsorshipType: sp.sponsorshipType,
+      contractValue: val,
+      currency,
+      contractValueFormatted: `${currency} ${val.toLocaleString('en-US')}`,
+      contractPeriod: sp.formattedContractPeriod || '',
+      startDate: sp.startDate,
+      endDate: sp.endDate,
+      sponsorshipStatus: sp.sponsorshipStatus,
+      paymentStatus: sp.paymentStatus,
+      sponsorshipDescription: sp.sponsorshipDescription,
+      benefitsAndDeliverables: sp.benefitsAndDeliverables || '',
+      logo: sp.logo || '',
+      createdAt: sp.createdAt,
+      updatedAt: sp.updatedAt,
+    };
+  }
+
+  async createSponsor(user: any, payload: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const sponsor = new AcademySponsor({
+      academyId: academy._id,
+      companyName: payload.companyName,
+      contactPerson: payload.contactPerson,
+      email: payload.email,
+      phone: payload.phone,
+      fullAddress: payload.fullAddress,
+      sponsorshipType: String(payload.sponsorshipType).toUpperCase(),
+      sponsorshipStatus: payload.sponsorshipStatus || 'ACTIVE',
+      contractValue: Number(payload.contractValue) || 0,
+      currency: payload.currency || '$',
+      paymentStatus: payload.paymentStatus || 'PENDING',
+      startDate: new Date(payload.startDate),
+      endDate: new Date(payload.endDate),
+      formattedContractPeriod: payload.formattedContractPeriod,
+      sponsorshipDescription: payload.sponsorshipDescription,
+      benefitsAndDeliverables: payload.benefitsAndDeliverables,
+      logo: payload.logo,
+    });
+
+    await sponsor.save();
+
+    return {
+      message: 'Sponsor added successfully',
+      sponsor,
+    };
+  }
+
+  async updateSponsor(id: string, user: any, payload: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const sponsor = await AcademySponsor.findOne({
+      _id: id,
+      academyId: academy._id,
+    });
+
+    if (!sponsor) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy sponsor not found');
+    }
+
+    if (payload.companyName) sponsor.companyName = payload.companyName;
+    if (payload.contactPerson) sponsor.contactPerson = payload.contactPerson;
+    if (payload.email) sponsor.email = payload.email;
+    if (payload.phone) sponsor.phone = payload.phone;
+    if (payload.fullAddress) sponsor.fullAddress = payload.fullAddress;
+    if (payload.sponsorshipType)
+      sponsor.sponsorshipType = String(payload.sponsorshipType).toUpperCase();
+    if (payload.sponsorshipStatus) sponsor.sponsorshipStatus = payload.sponsorshipStatus;
+    if (payload.contractValue !== undefined)
+      sponsor.contractValue = Number(payload.contractValue) || 0;
+    if (payload.currency) sponsor.currency = payload.currency;
+    if (payload.paymentStatus) sponsor.paymentStatus = payload.paymentStatus;
+    if (payload.startDate) sponsor.startDate = new Date(payload.startDate);
+    if (payload.endDate) sponsor.endDate = new Date(payload.endDate);
+    if (payload.formattedContractPeriod !== undefined)
+      sponsor.formattedContractPeriod = payload.formattedContractPeriod;
+    if (payload.sponsorshipDescription)
+      sponsor.sponsorshipDescription = payload.sponsorshipDescription;
+    if (payload.benefitsAndDeliverables !== undefined)
+      sponsor.benefitsAndDeliverables = payload.benefitsAndDeliverables;
+    if (payload.logo !== undefined) sponsor.logo = payload.logo;
+
+    await sponsor.save();
+
+    return {
+      message: 'Sponsor updated successfully',
+      sponsor,
+    };
+  }
+
+  async deleteSponsor(id: string, user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const sponsor = await AcademySponsor.findOneAndDelete({
+      _id: id,
+      academyId: academy._id,
+    });
+
+    if (!sponsor) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy sponsor not found');
+    }
+
+    return {
+      message: 'Sponsor deleted successfully',
     };
   }
 }

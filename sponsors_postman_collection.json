@@ -1,0 +1,269 @@
+{
+  "info": {
+    "_postman_id": "k10-academy-sponsors-api-collection",
+    "name": "K10 Academy - Sponsors & Partnerships Management APIs",
+    "description": "Complete enterprise API endpoints for:\n1. Sponsors Page (Top stat cards: TOTAL CONTRACT VALUE [$185K], ACTIVE SPONSORS [12], EXPIRING SOON [3], PENDING PAYMENTS [$35K]; Sponsors table with search & filters by sponsorship type and status; Badges for Equipment, Apparel, Financial, Technology, Status, Payment status)\n2. Add New Sponsor Modal (Company Information, Sponsorship Details, Contract Value, Payment Status, Period, Description, Benefits & Deliverables)\n3. Metadata / Dropdowns (Sponsorship types, statuses, payment statuses)\n\nAuthenticated using Bearer Token with {{token_ACADEMY}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token_ACADEMY}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Dropdowns & Form Metadata",
+      "item": [
+        {
+          "name": "1. Get Sponsors Meta (Dropdown Options)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/sponsors/meta",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "sponsors", "meta"]
+            },
+            "description": "Returns sponsorship types (EQUIPMENT, APPAREL, FINANCIAL, etc.), statuses (ACTIVE, EXPIRING SOON, etc.), and payment statuses (PAID, PENDING, etc.)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Sponsors Management",
+      "item": [
+        {
+          "name": "1. Get Sponsors (Stats & Table List)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/sponsors?page=1&limit=10&searchTerm=&sponsorshipType=&status=&paymentStatus=",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "sponsors"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (default: 10)"
+                },
+                {
+                  "key": "searchTerm",
+                  "value": "",
+                  "description": "Search by company name, contact person, email, or phone"
+                },
+                {
+                  "key": "sponsorshipType",
+                  "value": "",
+                  "description": "Filter by type (Dropdown 1: EQUIPMENT, APPAREL, FINANCIAL, TECHNOLOGY, etc.)"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filter by status (Dropdown 2: ACTIVE, EXPIRING SOON, EXPIRED, PENDING)"
+                },
+                {
+                  "key": "paymentStatus",
+                  "value": "",
+                  "description": "Filter by payment: PAID, PENDING, OVERDUE"
+                }
+              ]
+            },
+            "description": "Returns 4 top stats cards (TOTAL CONTRACT VALUE, ACTIVE SPONSORS, EXPIRING SOON, PENDING PAYMENTS) + table list of sponsors with formatted values and badge metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Create Sponsor (Add New Sponsor Modal)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"Nike Sports\",\n  \"contactPerson\": \"John Anderson\",\n  \"email\": \"john.anderson@nike.com\",\n  \"phone\": \"+1 555-0123\",\n  \"fullAddress\": \"One Bowerman Drive, Beaverton, OR 97005, USA\",\n  \"sponsorshipType\": \"EQUIPMENT\",\n  \"sponsorshipStatus\": \"ACTIVE\",\n  \"contractValue\": 50000,\n  \"currency\": \"$\",\n  \"paymentStatus\": \"PAID\",\n  \"startDate\": \"2026-01-01\",\n  \"endDate\": \"2026-12-31\",\n  \"formattedContractPeriod\": \"Jan 1, 2026 to Dec 31, 2026\",\n  \"sponsorshipDescription\": \"Official match kit and training equipment sponsor for all academy age groups.\",\n  \"benefitsAndDeliverables\": \"Prominent logo placement on academy jerseys, pitch-side banner advertisement, and social media brand mentions.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/sponsors",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "sponsors"]
+            },
+            "description": "Adds a new sponsor to the academy. Automatically evaluates status and formats contract period."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get Sponsor Details by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/sponsors/{{sponsorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "sponsors", "{{sponsorId}}"]
+            },
+            "description": "Fetches full details of an academy sponsor including deliverables and contact details."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Update Sponsor",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contractValue\": 75000,\n  \"paymentStatus\": \"PAID\",\n  \"sponsorshipStatus\": \"ACTIVE\",\n  \"benefitsAndDeliverables\": \"Expanded pitch-side LED boards and digital match program feature.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/sponsors/{{sponsorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "sponsors", "{{sponsorId}}"]
+            },
+            "description": "Updates sponsor contract value, status, payment status, or terms."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Delete Sponsor",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/sponsors/{{sponsorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "sponsors", "{{sponsorId}}"]
+            },
+            "description": "Deletes a sponsor record permanently."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5005/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "token_ACADEMY",
+      "value": "YOUR_ACADEMY_JWT_TOKEN",
+      "type": "string"
+    },
+    {
+      "key": "sponsorId",
+      "value": "SPONSOR_ID_HERE",
+      "type": "string"
+    }
+  ]
+}

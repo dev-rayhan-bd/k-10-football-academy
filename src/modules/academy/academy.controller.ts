@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { academyService } from './academy.service';
+import { uploadToStorage } from '@/utils/fileUpload.utils';
 
 export const createAcademyProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await academyService.createProfile(req.body);
@@ -805,6 +806,245 @@ export const deleteMatch = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
   const academyIdentifier = req.params.academyId;
   const result = await academyService.deleteMatch(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+// ==========================================
+// ACADEMY EXTRA EVENTS CONTROLLERS (SCREENSHOTS)
+// ==========================================
+
+export const getExtraEventsMeta = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getExtraEventsMeta(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Extra events dropdown options & metadata fetched successfully',
+    data: result,
+  });
+});
+
+export const getExtraEvents = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getExtraEvents(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Extra events fetched successfully',
+    data: result,
+  });
+});
+
+export const getExtraEventById = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getExtraEventById(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Extra event details fetched successfully',
+    data: result,
+  });
+});
+
+export const createExtraEvent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore JSON parse error if data is already processed
+    }
+  }
+
+  // 2. Handle image upload from form-data (e.g. bannerImage, banner, or image file)
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const bannerFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'bannerImage' ||
+          f.fieldname === 'banner' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'file',
+      ) || allFiles[0];
+
+    if (bannerFile) {
+      req.body.bannerImage = await uploadToStorage(bannerFile, 'academy_extra_events');
+    }
+  }
+
+  const result = await academyService.createExtraEvent(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.event,
+  });
+});
+
+export const updateExtraEvent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore JSON parse error if data is already processed
+    }
+  }
+
+  // 2. Handle banner image update if file is uploaded
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const bannerFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'bannerImage' ||
+          f.fieldname === 'banner' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'file',
+      ) || allFiles[0];
+
+    if (bannerFile) {
+      req.body.bannerImage = await uploadToStorage(bannerFile, 'academy_extra_events');
+    }
+  }
+
+  const result = await academyService.updateExtraEvent(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.event,
+  });
+});
+
+export const deleteExtraEvent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.deleteExtraEvent(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+export const registerForExtraEvent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.registerForExtraEvent(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+// ==========================================
+// ACADEMY SPONSORS CONTROLLERS (SCREENSHOTS)
+// ==========================================
+
+export const getSponsorsMeta = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getSponsorsMeta(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Sponsors dropdown options & metadata fetched successfully',
+    data: result,
+  });
+});
+
+export const getSponsors = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getSponsors(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy sponsors fetched successfully',
+    data: result,
+  });
+});
+
+export const getSponsorById = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getSponsorById(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Sponsor details fetched successfully',
+    data: result,
+  });
+});
+
+export const createSponsor = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.createSponsor(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.sponsor,
+  });
+});
+
+export const updateSponsor = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.updateSponsor(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.sponsor,
+  });
+});
+
+export const deleteSponsor = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.deleteSponsor(id, user, academyIdentifier);
   sendResponse(res, {
     statusCode: 200,
     success: true,

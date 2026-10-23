@@ -323,3 +323,172 @@ export const updateAcademyMatchZodSchema = z.object({
     })
     .passthrough(),
 });
+
+// ==========================================
+// EXTRA EVENTS VALIDATIONS (SCREENSHOTS)
+// ==========================================
+export const createExtraEventZodSchema = z.object({
+  body: z
+    .object({
+      eventName: z.string({ required_error: 'Event name is required' }).min(2),
+      eventType: z.string({ required_error: 'Event type is required' }).min(2),
+      group: z.string({ required_error: 'Group is required' }).min(2),
+      ageGroup: z.string({ required_error: 'Age group is required' }).min(1),
+      targetAttendees: z
+        .string({ required_error: 'Target attendees / player type is required' })
+        .min(2),
+      eventDate: z.string({ required_error: 'Event date is required' }).or(z.date()),
+      eventEndDate: z.string().or(z.date()).optional(),
+      formattedDateRange: z.string().optional(),
+      startTime: z.string({ required_error: 'Start time is required' }),
+      endTime: z.string({ required_error: 'End time is required' }),
+      registrationDeadline: z
+        .string({ required_error: 'Registration deadline is required' })
+        .or(z.date()),
+      venueName: z.string({ required_error: 'Venue name is required' }).min(2),
+      venueAddress: z.string({ required_error: 'Venue address is required' }).min(2),
+      registrationFee: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional()
+        .default(0),
+      currency: z.string().optional().default('£'),
+      maxCapacity: z.number().or(z.string().regex(/^\d+$/).transform(Number)).optional(),
+      description: z.string({ required_error: 'Event description is required' }).min(5),
+      requirements: z.string().optional(),
+      contactPerson: z.string({ required_error: 'Contact person is required' }).min(2),
+      contactPhone: z.string({ required_error: 'Contact phone is required' }).min(5),
+      contactEmail: z.string({ required_error: 'Contact email is required' }).email(),
+      bannerImage: z.string().optional(),
+      status: z.enum(['OPEN', 'CLOSING SOON', 'CLOSED']).optional().default('OPEN'),
+    })
+    .passthrough(),
+});
+
+export const updateExtraEventZodSchema = z.object({
+  body: z
+    .object({
+      eventName: z.string().min(2).optional(),
+      eventType: z.string().min(2).optional(),
+      group: z.string().min(2).optional(),
+      ageGroup: z.string().min(1).optional(),
+      targetAttendees: z.string().min(2).optional(),
+      eventDate: z.string().or(z.date()).optional(),
+      eventEndDate: z.string().or(z.date()).optional(),
+      formattedDateRange: z.string().optional(),
+      startTime: z.string().optional(),
+      endTime: z.string().optional(),
+      registrationDeadline: z.string().or(z.date()).optional(),
+      venueName: z.string().min(2).optional(),
+      venueAddress: z.string().min(2).optional(),
+      registrationFee: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional(),
+      currency: z.string().optional(),
+      maxCapacity: z.number().or(z.string().regex(/^\d+$/).transform(Number)).optional(),
+      description: z.string().min(5).optional(),
+      requirements: z.string().optional(),
+      contactPerson: z.string().min(2).optional(),
+      contactPhone: z.string().min(5).optional(),
+      contactEmail: z.string().email().optional(),
+      bannerImage: z.string().optional(),
+      status: z.enum(['OPEN', 'CLOSING SOON', 'CLOSED']).optional(),
+    })
+    .passthrough(),
+});
+
+export const registerExtraEventParticipantZodSchema = z.object({
+  body: z
+    .object({
+      name: z.string({ required_error: 'Participant name is required' }).min(2),
+      email: z.string().email().optional(),
+      phone: z.string().optional(),
+      teamName: z.string().optional(),
+      paidAmount: z.number().optional(),
+      paymentStatus: z.enum(['PAID', 'PENDING', 'FREE']).optional(),
+    })
+    .passthrough(),
+});
+
+// ==========================================
+// ACADEMY SPONSORS VALIDATIONS (SCREENSHOTS)
+// ==========================================
+export const createAcademySponsorZodSchema = z.object({
+  body: z
+    .object({
+      companyName: z.string({ required_error: 'Company name is required' }).min(2),
+      contactPerson: z.string({ required_error: 'Contact person is required' }).min(2),
+      email: z.string({ required_error: 'Email is required' }).email(),
+      phone: z.string({ required_error: 'Phone number is required' }).min(5),
+      fullAddress: z.string({ required_error: 'Full address is required' }).min(2),
+      sponsorshipType: z.string({ required_error: 'Sponsorship type is required' }).min(2),
+      sponsorshipStatus: z
+        .enum(['ACTIVE', 'EXPIRING SOON', 'EXPIRED', 'PENDING', 'TERMINATED'])
+        .optional()
+        .default('ACTIVE'),
+      contractValue: z.number({ required_error: 'Contract value is required' }).or(
+        z
+          .string()
+          .regex(/^\d+(\.\d+)?$/)
+          .transform(Number),
+      ),
+      currency: z.string().optional().default('$'),
+      paymentStatus: z
+        .enum(['PAID', 'PENDING', 'PARTIALLY_PAID', 'OVERDUE'])
+        .optional()
+        .default('PENDING'),
+      startDate: z.string({ required_error: 'Start date / time is required' }).or(z.date()),
+      endDate: z.string({ required_error: 'End date / time is required' }).or(z.date()),
+      formattedContractPeriod: z.string().optional(),
+      sponsorshipDescription: z
+        .string({ required_error: 'Sponsorship description is required' })
+        .min(5),
+      benefitsAndDeliverables: z.string().optional(),
+      logo: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const updateAcademySponsorZodSchema = z.object({
+  body: z
+    .object({
+      companyName: z.string().min(2).optional(),
+      contactPerson: z.string().min(2).optional(),
+      email: z.string().email().optional(),
+      phone: z.string().min(5).optional(),
+      fullAddress: z.string().min(2).optional(),
+      sponsorshipType: z.string().min(2).optional(),
+      sponsorshipStatus: z
+        .enum(['ACTIVE', 'EXPIRING SOON', 'EXPIRED', 'PENDING', 'TERMINATED'])
+        .optional(),
+      contractValue: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional(),
+      currency: z.string().optional(),
+      paymentStatus: z.enum(['PAID', 'PENDING', 'PARTIALLY_PAID', 'OVERDUE']).optional(),
+      startDate: z.string().or(z.date()).optional(),
+      endDate: z.string().or(z.date()).optional(),
+      formattedContractPeriod: z.string().optional(),
+      sponsorshipDescription: z.string().min(5).optional(),
+      benefitsAndDeliverables: z.string().optional(),
+      logo: z.string().optional(),
+    })
+    .passthrough(),
+});

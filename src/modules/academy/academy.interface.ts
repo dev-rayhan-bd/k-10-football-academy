@@ -254,3 +254,94 @@ export interface IAcademyMatch {
 }
 
 export interface IAcademyMatchDocument extends IAcademyMatch, Document {}
+
+// ==========================================
+// EXTRA EVENTS INTERFACES (SCREENSHOTS)
+// ==========================================
+export type ExtraEventStatus = 'OPEN' | 'CLOSING SOON' | 'CLOSED';
+
+export interface IExtraEventParticipant {
+  _id?: Types.ObjectId;
+  userId?: Types.ObjectId;
+  name: string;
+  email?: string;
+  phone?: string;
+  teamName?: string;
+  registeredAt: Date;
+  paidAmount?: number;
+  paymentStatus?: 'PAID' | 'PENDING' | 'FREE';
+}
+
+export interface IExtraEvent {
+  academyId: Types.ObjectId;
+  eventName: string;
+  eventType: string;
+  group: string;
+  ageGroup: string;
+  targetAttendees: string;
+  eventDate: Date;
+  eventEndDate?: Date;
+  formattedDateRange?: string;
+  startTime: string;
+  endTime: string;
+  registrationDeadline: Date;
+  venueName: string;
+  venueAddress: string;
+  registrationFee: number;
+  currency?: string;
+  maxCapacity?: number;
+  currentAttendees: number;
+  description: string;
+  requirements?: string;
+  contactPerson: string;
+  contactPhone: string;
+  contactEmail: string;
+  bannerImage?: string;
+  status: ExtraEventStatus;
+  participants?: IExtraEventParticipant[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IExtraEventDocument extends IExtraEvent, Document {}
+
+// ==========================================
+// ACADEMY SPONSORS INTERFACES (SCREENSHOTS)
+// ==========================================
+export type SponsorshipType =
+  | 'EQUIPMENT'
+  | 'APPAREL'
+  | 'FINANCIAL'
+  | 'TECHNOLOGY'
+  | 'MEDIA'
+  | 'MEDICAL'
+  | 'NUTRITION'
+  | 'OTHER';
+
+export type SponsorStatus = 'ACTIVE' | 'EXPIRING SOON' | 'EXPIRED' | 'PENDING' | 'TERMINATED';
+
+export type SponsorPaymentStatus = 'PAID' | 'PENDING' | 'PARTIALLY_PAID' | 'OVERDUE';
+
+export interface IAcademySponsor {
+  academyId: Types.ObjectId;
+  companyName: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  fullAddress: string;
+  sponsorshipType: SponsorshipType | string;
+  sponsorshipStatus: SponsorStatus | string;
+  contractValue: number;
+  currency?: string;
+  paymentStatus: SponsorPaymentStatus | string;
+  startDate: Date;
+  endDate: Date;
+  formattedContractPeriod?: string;
+  sponsorshipDescription: string;
+  benefitsAndDeliverables?: string;
+  logo?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IAcademySponsorDocument extends IAcademySponsor, Document {}

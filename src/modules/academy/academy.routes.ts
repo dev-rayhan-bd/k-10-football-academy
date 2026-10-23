@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { validateRequest } from '@/middlewares/validateRequest';
-import { auth } from '@/middlewares/auth.middleware';
+import { auth, optionalAuth } from '@/middlewares/auth.middleware';
 import {
   createAcademyProfileZodSchema,
   createTeamZodSchema,
@@ -22,6 +22,11 @@ import {
   updateFinanceTransactionStatusZodSchema,
   createAcademyMatchZodSchema,
   updateAcademyMatchZodSchema,
+  createExtraEventZodSchema,
+  updateExtraEventZodSchema,
+  registerExtraEventParticipantZodSchema,
+  createAcademySponsorZodSchema,
+  updateAcademySponsorZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -88,6 +93,19 @@ import {
   createMatch,
   updateMatch,
   deleteMatch,
+  getExtraEventsMeta,
+  getExtraEvents,
+  getExtraEventById,
+  createExtraEvent,
+  updateExtraEvent,
+  deleteExtraEvent,
+  registerForExtraEvent,
+  getSponsorsMeta,
+  getSponsors,
+  getSponsorById,
+  createSponsor,
+  updateSponsor,
+  deleteSponsor,
 } from './academy.controller';
 
 import {
@@ -682,6 +700,113 @@ router.patch(
 
 router.delete('/matches/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteMatch);
 router.delete('/:academyId/matches/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteMatch);
+
+// ==========================================
+// EXTRA EVENTS ROUTES (SCREENSHOTS)
+// ==========================================
+router.get('/extra-events/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getExtraEventsMeta);
+router.get(
+  '/:academyId/extra-events/meta',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getExtraEventsMeta,
+);
+
+router.get('/extra-events', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getExtraEvents);
+router.get('/:academyId/extra-events', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getExtraEvents);
+
+router.post(
+  '/extra-events',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(createExtraEventZodSchema),
+  createExtraEvent,
+);
+router.post(
+  '/:academyId/extra-events',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(createExtraEventZodSchema),
+  createExtraEvent,
+);
+
+router.get('/extra-events/:id', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getExtraEventById);
+router.get(
+  '/:academyId/extra-events/:id',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getExtraEventById,
+);
+
+router.patch(
+  '/extra-events/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(updateExtraEventZodSchema),
+  updateExtraEvent,
+);
+router.patch(
+  '/:academyId/extra-events/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(updateExtraEventZodSchema),
+  updateExtraEvent,
+);
+
+router.delete('/extra-events/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteExtraEvent);
+router.delete('/:academyId/extra-events/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteExtraEvent);
+
+router.post(
+  '/extra-events/:id/register',
+  optionalAuth(),
+  validateRequest(registerExtraEventParticipantZodSchema),
+  registerForExtraEvent,
+);
+router.post(
+  '/:academyId/extra-events/:id/register',
+  optionalAuth(),
+  validateRequest(registerExtraEventParticipantZodSchema),
+  registerForExtraEvent,
+);
+
+// ==========================================
+// ACADEMY SPONSORS ROUTES (SCREENSHOTS)
+// ==========================================
+router.get('/sponsors/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsorsMeta);
+router.get('/:academyId/sponsors/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsorsMeta);
+
+router.get('/sponsors', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsors);
+router.get('/:academyId/sponsors', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsors);
+
+router.post(
+  '/sponsors',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createAcademySponsorZodSchema),
+  createSponsor,
+);
+router.post(
+  '/:academyId/sponsors',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createAcademySponsorZodSchema),
+  createSponsor,
+);
+
+router.get('/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsorById);
+router.get('/:academyId/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsorById);
+
+router.patch(
+  '/sponsors/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateAcademySponsorZodSchema),
+  updateSponsor,
+);
+router.patch(
+  '/:academyId/sponsors/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateAcademySponsorZodSchema),
+  updateSponsor,
+);
+
+router.delete('/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSponsor);
+router.delete('/:academyId/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSponsor);
 
 router.get('/:id', getAcademyProfile);
 

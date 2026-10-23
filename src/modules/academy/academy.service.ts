@@ -11,6 +11,7 @@ import {
   TransferRequest,
   AcademyFeePayment,
   AcademyFinanceTransaction,
+  AcademyMatch,
 } from './academy.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 
@@ -3326,44 +3327,6 @@ export class AcademyService {
   async getFeesPayments(user: any, query: any = {}, academyIdentifier?: string) {
     const academy = await this.resolveUserAcademy(user, academyIdentifier);
 
-    // Auto-sync any paid match evaluation fees for this academy's players
-    const academyPlayers = await PlayerProfile.find({
-      $or: [{ academyId: academy._id }, { academy: academy.name }, { currentClub: academy.name }],
-    }).select('_id fullName position');
-    const academyPlayerIds = academyPlayers.map((p) => p._id);
-
-    if (academyPlayerIds.length > 0) {
-      const paidMatches = await MatchRecord.find({
-        playerId: { $in: academyPlayerIds },
-        'coachReview.paymentStatus': 'PAID',
-      }).lean();
-
-      for (const m of paidMatches) {
-        const cost = m.coachReview?.paymentAmount || 6.99;
-        const txId = m.coachReview?.transactionId || `match-${m._id}`;
-        await AcademyFeePayment.findOneAndUpdate(
-          {
-            $or: [
-              { transactionId: txId },
-              { notes: `Game Report Evaluation fee for report ${m._id}` },
-            ],
-          },
-          {
-            academyId: academy._id,
-            playerId: m.playerId,
-            feeType: 'Validation Fee',
-            amount: cost,
-            paymentDate: m.createdAt || m.matchDate || new Date(),
-            status: 'PAID',
-            paymentMethod: 'STRIPE',
-            transactionId: txId,
-            notes: `Game Report Evaluation fee for report ${m._id}`,
-          },
-          { upsert: true, new: true },
-        );
-      }
-    }
-
     // Filter construction
     const filter: any = { academyId: academy._id };
 
@@ -3647,11 +3610,7 @@ export class AcademyService {
     if (academyPlayerIds.length > 0) {
       const matchReports = await MatchRecord.find({
         playerId: { $in: academyPlayerIds },
-        $or: [
-          { 'coachReview.paymentStatus': 'PAID' },
-          { 'coachReview.paymentAmount': { $gt: 0 } },
-          { 'coachReview.status': { $in: ['PENDING', 'COMPLETED', 'REJECTED'] } },
-        ],
+        'coachReview.paymentStatus': 'PAID',
       }).lean();
 
       for (const m of matchReports) {
@@ -3888,6 +3847,400 @@ export class AcademyService {
     return {
       message: 'Finance transaction status updated successfully',
       transaction,
+    };
+  }
+
+  // ==========================================
+  // ACADEMY MATCHES (SCHEDULE & COSTS)
+  // ==========================================
+
+  async getMatchesMeta(user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    // Reuse existing academy teams directly
+    const teams = await Team.find({ academyId: academy._id })
+      .select('teamName ageGroup playerIds')
+      .sort({ teamName: 1 })
+      .lean();
+
+    const formattedTeams = teams.map((t: any) => ({
+      _id: t._id,
+      id: t._id,
+      teamName: t.teamName,
+      name: t.teamName,
+      ageGroup: t.ageGroup || 'Youth',
+      playerCount: (t.playerIds || []).length,
+    }));
+
+    return {
+      teams: formattedTeams,
+      matchTypes: ['Friendly', 'League', 'Tournament', 'Cup'],
+      venueTypes: ['HOME GROUND', 'AWAY', 'NEUTRAL'],
+      statuses: ['SCHEDULED', 'COMPLETED', 'CANCELLED'],
+    };
+  }
+
+  async getMatches(user: any, query: any = {}, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const filter: any = { academyId: academy._id };
+
+    // Filter by team
+    if (query.teamId && Types.ObjectId.isValid(query.teamId)) {
+      filter.ourTeamId = new Types.ObjectId(query.teamId);
+    }
+
+    // Filter by status (SCHEDULED, COMPLETED, CANCELLED)
+    if (
+      query.status &&
+      ['SCHEDULED', 'COMPLETED', 'CANCELLED'].includes(String(query.status).toUpperCase())
+    ) {
+      filter.status = String(query.status).toUpperCase();
+    }
+
+    // Filter by matchType (Friendly, League, Tournament, Cup)
+    if (query.matchType) {
+      filter.matchType = { $regex: new RegExp(String(query.matchType).trim(), 'i') };
+    }
+
+    // Filter by homeOrAway
+    if (query.homeOrAway) {
+      filter.homeOrAway = { $regex: new RegExp(String(query.homeOrAway).trim(), 'i') };
+    }
+
+    // Filter by date range or specific date
+    if (query.date) {
+      const targetDate = new Date(query.date);
+      if (!isNaN(targetDate.getTime())) {
+        const startOfDay = new Date(
+          targetDate.getFullYear(),
+          targetDate.getMonth(),
+          targetDate.getDate(),
+        );
+        const endOfDay = new Date(
+          targetDate.getFullYear(),
+          targetDate.getMonth(),
+          targetDate.getDate(),
+          23,
+          59,
+          59,
+          999,
+        );
+        filter.matchDate = { $gte: startOfDay, $lte: endOfDay };
+      }
+    } else if (query.startDate || query.endDate) {
+      filter.matchDate = {};
+      if (query.startDate) filter.matchDate.$gte = new Date(query.startDate);
+      if (query.endDate) filter.matchDate.$lte = new Date(query.endDate);
+    }
+
+    // Search by team name, matchTitle, opponentTeam, venue, or competition
+    if (query.search) {
+      const searchRegex = new RegExp(String(query.search).trim(), 'i');
+      filter.$or = [
+        { matchTitle: searchRegex },
+        { opponentTeam: searchRegex },
+        { venueName: searchRegex },
+        { competitionName: searchRegex },
+      ];
+    }
+
+    // Pagination
+    const page = Math.max(1, parseInt(query.page as string, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit as string, 10) || 10));
+    const skip = (page - 1) * limit;
+
+    const [totalRecords, matches] = await Promise.all([
+      AcademyMatch.countDocuments(filter),
+      AcademyMatch.find(filter)
+        .populate('ourTeamId', 'teamName ageGroup')
+        .sort({ matchDate: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
+
+    const monthNames = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+
+    const formattedMatches = matches.map((m: any) => {
+      const mDate = m.matchDate ? new Date(m.matchDate) : new Date();
+      const formattedDate = `${monthNames[mDate.getMonth()]} ${mDate.getDate()}, ${mDate.getFullYear()}`;
+      const ourTeam = m.ourTeamId || {};
+
+      const transport = Number(m.transportCost) || 0;
+      const ground = Number(m.groundCost) || 0;
+      const meals = Number(m.mealsCost) || 0;
+      const other = Number(m.otherCosts) || 0;
+      const total = transport + ground + meals + other;
+
+      return {
+        _id: m._id,
+        id: m._id,
+        matchTitle: m.matchTitle,
+        title: m.matchTitle,
+        ourTeamId: ourTeam._id || m.ourTeamId,
+        ourTeam: {
+          _id: ourTeam._id || null,
+          id: ourTeam._id || null,
+          name: ourTeam.teamName || 'Academy Team',
+          ageGroup: ourTeam.ageGroup || 'Youth',
+        },
+        opponentTeam: m.opponentTeam,
+        matchType: m.matchType || 'Friendly',
+        competitionName: m.competitionName || '',
+        homeOrAway: String(m.homeOrAway || 'HOME GROUND').toUpperCase(),
+        venue: {
+          homeOrAway: String(m.homeOrAway || 'HOME GROUND').toUpperCase(),
+          name: m.venueName,
+          address: m.venueAddress,
+        },
+        venueName: m.venueName,
+        venueAddress: m.venueAddress,
+        matchDate: m.matchDate,
+        date: formattedDate,
+        formattedDate,
+        kickOffTime: m.kickOffTime,
+        time: m.kickOffTime,
+        referees: m.referees || '',
+        travelRequired: Boolean(m.travelRequired),
+        costs: {
+          transport,
+          transportFormatted: `$${transport}`,
+          groundCost: ground,
+          groundCostFormatted: `$${ground}`,
+          mealsCost: meals,
+          mealsCostFormatted: `$${meals}`,
+          otherCosts: other,
+          otherCostsFormatted: `$${other}`,
+          totalCost: total,
+          totalCostFormatted: `$${total}`,
+        },
+        transportCost: transport,
+        groundCost: ground,
+        mealsCost: meals,
+        otherCosts: other,
+        totalCost: total,
+        estimatedTotalCost: total,
+        notes: m.notes || '',
+        status: m.status || 'SCHEDULED',
+        createdAt: m.createdAt,
+      };
+    });
+
+    return {
+      matches: formattedMatches,
+      meta: {
+        page,
+        limit,
+        total: totalRecords,
+        totalPages: Math.ceil(totalRecords / limit) || 1,
+      },
+    };
+  }
+
+  async getMatchById(id: string, user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const match = await AcademyMatch.findOne({
+      _id: id,
+      academyId: academy._id,
+    })
+      .populate('ourTeamId', 'teamName ageGroup')
+      .lean();
+
+    if (!match) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Scheduled match not found');
+    }
+
+    const m: any = match;
+    const mDate = m.matchDate ? new Date(m.matchDate) : new Date();
+    const monthNames = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    const formattedDate = `${monthNames[mDate.getMonth()]} ${mDate.getDate()}, ${mDate.getFullYear()}`;
+    const ourTeam = m.ourTeamId || {};
+
+    const transport = Number(m.transportCost) || 0;
+    const ground = Number(m.groundCost) || 0;
+    const meals = Number(m.mealsCost) || 0;
+    const other = Number(m.otherCosts) || 0;
+    const total = transport + ground + meals + other;
+
+    return {
+      _id: m._id,
+      id: m._id,
+      matchTitle: m.matchTitle,
+      ourTeamId: ourTeam._id || m.ourTeamId,
+      ourTeam: {
+        _id: ourTeam._id || null,
+        id: ourTeam._id || null,
+        name: ourTeam.teamName || 'Academy Team',
+        ageGroup: ourTeam.ageGroup || 'Youth',
+      },
+      opponentTeam: m.opponentTeam,
+      matchType: m.matchType || 'Friendly',
+      competitionName: m.competitionName || '',
+      homeOrAway: String(m.homeOrAway || 'HOME GROUND').toUpperCase(),
+      venueName: m.venueName,
+      venueAddress: m.venueAddress,
+      matchDate: m.matchDate,
+      date: formattedDate,
+      kickOffTime: m.kickOffTime,
+      referees: m.referees || '',
+      travelRequired: Boolean(m.travelRequired),
+      transportCost: transport,
+      groundCost: ground,
+      mealsCost: meals,
+      otherCosts: other,
+      totalCost: total,
+      estimatedTotalCost: total,
+      notes: m.notes || '',
+      status: m.status || 'SCHEDULED',
+      createdAt: m.createdAt,
+    };
+  }
+
+  async createMatch(user: any, payload: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    // Validate our team belongs to this academy
+    const team = await Team.findOne({
+      _id: payload.ourTeamId,
+      academyId: academy._id,
+    });
+    if (!team) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Our team was not found under this academy');
+    }
+
+    const transportCost = Number(payload.transportCost) || 0;
+    const groundCost = Number(payload.groundCost) || 0;
+    const mealsCost = Number(payload.mealsCost) || 0;
+    const otherCosts = Number(payload.otherCosts) || 0;
+    const estimatedTotalCost = transportCost + groundCost + mealsCost + otherCosts;
+
+    const newMatch = await AcademyMatch.create({
+      academyId: academy._id,
+      matchTitle: payload.matchTitle,
+      ourTeamId: team._id,
+      opponentTeam: payload.opponentTeam,
+      matchType: payload.matchType || 'Friendly',
+      competitionName: payload.competitionName || undefined,
+      homeOrAway: String(payload.homeOrAway || 'HOME GROUND').toUpperCase(),
+      venueName: payload.venueName,
+      venueAddress: payload.venueAddress,
+      matchDate: new Date(payload.matchDate),
+      kickOffTime: payload.kickOffTime,
+      referees: payload.referees || undefined,
+      travelRequired: Boolean(payload.travelRequired),
+      transportCost,
+      groundCost,
+      mealsCost,
+      otherCosts,
+      estimatedTotalCost,
+      notes: payload.notes || '',
+      status: payload.status || 'SCHEDULED',
+    });
+
+    return {
+      message: 'Match scheduled successfully',
+      match: newMatch,
+    };
+  }
+
+  async updateMatch(id: string, user: any, payload: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const match = await AcademyMatch.findOne({
+      _id: id,
+      academyId: academy._id,
+    });
+    if (!match) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Scheduled match not found');
+    }
+
+    if (payload.ourTeamId && payload.ourTeamId !== match.ourTeamId.toString()) {
+      const team = await Team.findOne({
+        _id: payload.ourTeamId,
+        academyId: academy._id,
+      });
+      if (!team) {
+        throw new AppError(StatusCodes.NOT_FOUND, 'Selected team not found in this academy');
+      }
+      match.ourTeamId = team._id;
+    }
+
+    if (payload.matchTitle) match.matchTitle = payload.matchTitle;
+    if (payload.opponentTeam) match.opponentTeam = payload.opponentTeam;
+    if (payload.matchType) match.matchType = payload.matchType;
+    if (payload.competitionName !== undefined) match.competitionName = payload.competitionName;
+    if (payload.homeOrAway) match.homeOrAway = String(payload.homeOrAway).toUpperCase();
+    if (payload.venueName) match.venueName = payload.venueName;
+    if (payload.venueAddress) match.venueAddress = payload.venueAddress;
+    if (payload.matchDate) match.matchDate = new Date(payload.matchDate);
+    if (payload.kickOffTime) match.kickOffTime = payload.kickOffTime;
+    if (payload.referees !== undefined) match.referees = payload.referees;
+    if (payload.travelRequired !== undefined)
+      match.travelRequired = Boolean(payload.travelRequired);
+    if (payload.notes !== undefined) match.notes = payload.notes;
+    if (payload.status) match.status = payload.status;
+
+    if (payload.transportCost !== undefined)
+      match.transportCost = Number(payload.transportCost) || 0;
+    if (payload.groundCost !== undefined) match.groundCost = Number(payload.groundCost) || 0;
+    if (payload.mealsCost !== undefined) match.mealsCost = Number(payload.mealsCost) || 0;
+    if (payload.otherCosts !== undefined) match.otherCosts = Number(payload.otherCosts) || 0;
+
+    match.estimatedTotalCost =
+      (match.transportCost || 0) +
+      (match.groundCost || 0) +
+      (match.mealsCost || 0) +
+      (match.otherCosts || 0);
+
+    await match.save();
+
+    return {
+      message: 'Match schedule updated successfully',
+      match,
+    };
+  }
+
+  async deleteMatch(id: string, user: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const match = await AcademyMatch.findOneAndDelete({
+      _id: id,
+      academyId: academy._id,
+    });
+    if (!match) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Scheduled match not found');
+    }
+
+    return {
+      message: 'Scheduled match deleted successfully',
     };
   }
 }

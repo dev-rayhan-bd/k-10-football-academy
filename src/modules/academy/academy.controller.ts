@@ -733,3 +733,82 @@ export const updateFinanceTransactionStatus = catchAsync(async (req: Request, re
     data: result.transaction,
   });
 });
+
+// ==========================================
+// ACADEMY MATCHES CONTROLLERS
+// ==========================================
+
+export const getMatchesMeta = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getMatchesMeta(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Matches dropdown options & metadata fetched successfully',
+    data: result,
+  });
+});
+
+export const getMatches = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getMatches(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Scheduled matches fetched successfully',
+    data: result,
+  });
+});
+
+export const getMatchById = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getMatchById(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Scheduled match details fetched successfully',
+    data: result,
+  });
+});
+
+export const createMatch = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.createMatch(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.match,
+  });
+});
+
+export const updateMatch = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.updateMatch(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.match,
+  });
+});
+
+export const deleteMatch = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.deleteMatch(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});

@@ -20,6 +20,8 @@ import {
   updateFeePaymentStatusZodSchema,
   createFinanceTransactionZodSchema,
   updateFinanceTransactionStatusZodSchema,
+  createAcademyMatchZodSchema,
+  updateAcademyMatchZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -80,6 +82,12 @@ import {
   getFinanceCommittee,
   createFinanceTransaction,
   updateFinanceTransactionStatus,
+  getMatchesMeta,
+  getMatches,
+  getMatchById,
+  createMatch,
+  updateMatch,
+  deleteMatch,
 } from './academy.controller';
 
 import {
@@ -633,6 +641,47 @@ router.patch(
   validateRequest(updateFinanceTransactionStatusZodSchema),
   updateFinanceTransactionStatus,
 );
+
+// ==========================================
+// MATCHES & MATCH SCHEDULE ROUTES (SCREENSHOTS)
+// ==========================================
+router.get('/matches/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatchesMeta);
+router.get('/:academyId/matches/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatchesMeta);
+
+router.get('/matches', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatches);
+router.get('/:academyId/matches', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatches);
+
+router.post(
+  '/matches',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createAcademyMatchZodSchema),
+  createMatch,
+);
+router.post(
+  '/:academyId/matches',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createAcademyMatchZodSchema),
+  createMatch,
+);
+
+router.get('/matches/:id', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatchById);
+router.get('/:academyId/matches/:id', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatchById);
+
+router.patch(
+  '/matches/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateAcademyMatchZodSchema),
+  updateMatch,
+);
+router.patch(
+  '/:academyId/matches/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateAcademyMatchZodSchema),
+  updateMatch,
+);
+
+router.delete('/matches/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteMatch);
+router.delete('/:academyId/matches/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteMatch);
 
 router.get('/:id', getAcademyProfile);
 

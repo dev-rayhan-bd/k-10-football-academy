@@ -205,3 +205,121 @@ export const updateFinanceTransactionStatusZodSchema = z.object({
     })
     .passthrough(),
 });
+
+export const createAcademyMatchZodSchema = z.object({
+  body: z
+    .object({
+      matchTitle: z.string({ required_error: 'Match title is required' }).min(2),
+      ourTeamId: z.string({ required_error: 'Our team ID is required' }),
+      opponentTeam: z.string({ required_error: 'Opponent team name is required' }).min(2),
+      matchType: z.string().optional().default('Friendly'),
+      competitionName: z.string().optional(),
+      homeOrAway: z.string().optional().default('HOME GROUND'),
+      venueName: z.string({ required_error: 'Venue name is required' }).min(2),
+      venueAddress: z.string({ required_error: 'Venue address is required' }).min(2),
+      matchDate: z.string({ required_error: 'Match date is required' }).or(z.date()),
+      kickOffTime: z.string({ required_error: 'Kick-off time is required' }),
+      referees: z.string().optional(),
+      travelRequired: z.boolean().optional().default(false),
+      transportCost: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional()
+        .default(0),
+      groundCost: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional()
+        .default(0),
+      mealsCost: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional()
+        .default(0),
+      otherCosts: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional()
+        .default(0),
+      notes: z.string().optional(),
+      status: z.enum(['SCHEDULED', 'COMPLETED', 'CANCELLED']).optional().default('SCHEDULED'),
+    })
+    .passthrough(),
+});
+
+export const updateAcademyMatchZodSchema = z.object({
+  body: z
+    .object({
+      matchTitle: z.string().min(2).optional(),
+      ourTeamId: z.string().optional(),
+      opponentTeam: z.string().min(2).optional(),
+      matchType: z.string().optional(),
+      competitionName: z.string().optional(),
+      homeOrAway: z.string().optional(),
+      venueName: z.string().min(2).optional(),
+      venueAddress: z.string().min(2).optional(),
+      matchDate: z.string().or(z.date()).optional(),
+      kickOffTime: z.string().optional(),
+      referees: z.string().optional(),
+      travelRequired: z.boolean().optional(),
+      transportCost: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional(),
+      groundCost: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional(),
+      mealsCost: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional(),
+      otherCosts: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional(),
+      notes: z.string().optional(),
+      status: z.enum(['SCHEDULED', 'COMPLETED', 'CANCELLED']).optional(),
+    })
+    .passthrough(),
+});

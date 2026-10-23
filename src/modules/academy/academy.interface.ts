@@ -221,3 +221,36 @@ export interface IAcademyFinanceTransaction {
 }
 
 export interface IAcademyFinanceTransactionDocument extends IAcademyFinanceTransaction, Document {}
+
+// ==========================================
+// ACADEMY MATCHES (SCHEDULE & COSTS)
+// ==========================================
+export type MatchVenueType = 'HOME GROUND' | 'AWAY' | 'NEUTRAL' | string;
+export type MatchScheduleStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+
+export interface IAcademyMatch {
+  academyId: Types.ObjectId;
+  matchTitle: string;
+  ourTeamId: Types.ObjectId;
+  opponentTeam: string;
+  matchType: string;
+  competitionName?: string;
+  homeOrAway: MatchVenueType;
+  venueName: string;
+  venueAddress: string;
+  matchDate: Date;
+  kickOffTime: string;
+  referees?: string;
+  travelRequired?: boolean;
+  transportCost?: number;
+  groundCost?: number;
+  mealsCost?: number;
+  otherCosts?: number;
+  estimatedTotalCost?: number;
+  notes?: string;
+  status: MatchScheduleStatus;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IAcademyMatchDocument extends IAcademyMatch, Document {}

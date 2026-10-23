@@ -8,6 +8,7 @@ import {
   ITransferRequestDocument,
   IAcademyFeePaymentDocument,
   IAcademyFinanceTransactionDocument,
+  IAcademyMatchDocument,
 } from './academy.interface';
 
 const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
@@ -278,3 +279,54 @@ export const AcademyFinanceTransaction = model<IAcademyFinanceTransactionDocumen
   'AcademyFinanceTransaction',
   AcademyFinanceTransactionSchema,
 );
+
+// ==========================================
+// ACADEMY MATCHES (SCHEDULE & COSTS)
+// ==========================================
+const AcademyMatchSchema = new Schema<IAcademyMatchDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    matchTitle: { type: String, required: true },
+    ourTeamId: { type: Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
+    opponentTeam: { type: String, required: true },
+    matchType: { type: String, required: true, default: 'Friendly' },
+    competitionName: { type: String },
+    homeOrAway: {
+      type: String,
+      default: 'HOME GROUND',
+    },
+    venueName: { type: String, required: true },
+    venueAddress: { type: String, required: true },
+    matchDate: { type: Date, required: true },
+    kickOffTime: { type: String, required: true },
+    referees: { type: String },
+    travelRequired: { type: Boolean, default: false },
+    transportCost: { type: Number, default: 0 },
+    groundCost: { type: Number, default: 0 },
+    mealsCost: { type: Number, default: 0 },
+    otherCosts: { type: Number, default: 0 },
+    estimatedTotalCost: { type: Number, default: 0 },
+    notes: { type: String },
+    status: {
+      type: String,
+      enum: ['SCHEDULED', 'COMPLETED', 'CANCELLED'],
+      default: 'SCHEDULED',
+      index: true,
+    },
+  },
+  { timestamps: true },
+);
+
+AcademyMatchSchema.pre('save', function (next) {
+  this.estimatedTotalCost =
+    (Number(this.transportCost) || 0) +
+    (Number(this.groundCost) || 0) +
+    (Number(this.mealsCost) || 0) +
+    (Number(this.otherCosts) || 0);
+  next();
+});
+
+AcademyMatchSchema.index({ academyId: 1, matchDate: 1 });
+AcademyMatchSchema.index({ ourTeamId: 1, matchDate: 1 });
+
+export const AcademyMatch = model<IAcademyMatchDocument>('AcademyMatch', AcademyMatchSchema);

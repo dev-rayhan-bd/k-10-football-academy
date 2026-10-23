@@ -1,0 +1,308 @@
+{
+  "info": {
+    "_postman_id": "k10-matches-management-api-collection",
+    "name": "K10 Academy - Matches & Schedule Management APIs",
+    "description": "Complete enterprise API endpoints for:\n1. Matches Page (List scheduled matches with search, filters, cost breakdown cards)\n2. Create Match Modal (Full form with Match Info, Venue Details, Date & Time, Officials, Costs Breakdown, Notes)\n3. Reused Dropdown Metadata (Our Teams, Match Types, Home/Away, Statuses)\n\nAuthenticated using Bearer Token with {{token_ACADEMY}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token_ACADEMY}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Dropdowns & Form Metadata (Reused Teams)",
+      "item": [
+        {
+          "name": "1. Get Matches Meta (Teams Dropdown + Form Options)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/matches/meta",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "matches", "meta"]
+            },
+            "description": "Returns our academy's teams (reused directly from Team model) along with matchTypes, home/away options, status options, and date filters."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get Existing Teams Dropdown (Direct Reuse)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/training-sessions/teams",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "training-sessions", "teams"]
+            },
+            "description": "Existing training sessions team dropdown endpoint reused directly to avoid redundant APIs."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Matches Management",
+      "item": [
+        {
+          "name": "1. Get Scheduled Matches (List & Filter Cards)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/matches?page=1&limit=10&searchTerm=&teamId=&status=&matchType=&homeOrAway=&date=",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "matches"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of cards per page (default: 10)"
+                },
+                {
+                  "key": "searchTerm",
+                  "value": "",
+                  "description": "Search by team name, opponent, competition, or venue"
+                },
+                {
+                  "key": "teamId",
+                  "value": "",
+                  "description": "Filter by Our Team ID ('All Teams' dropdown)"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filter by status: SCHEDULED, COMPLETED, CANCELLED ('All Status' dropdown)"
+                },
+                {
+                  "key": "matchType",
+                  "value": "",
+                  "description": "Filter by match type: Friendly, League, Tournament, Cup ('All Matches' dropdown)"
+                },
+                {
+                  "key": "homeOrAway",
+                  "value": "",
+                  "description": "Filter by HOME GROUND, AWAY, or NEUTRAL"
+                },
+                {
+                  "key": "date",
+                  "value": "",
+                  "description": "Filter by Date ('Date' dropdown): today, this_week, this_month, upcoming, past, or YYYY-MM-DD"
+                }
+              ]
+            },
+            "description": "Returns matches list with calculated cost breakdown cards (TRANSPORT, GROUND COST, MEALS, OTHER COSTS, TOTAL COST) matching UI Screenshot 1."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Create Match (Schedule Match Modal)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matchTitle\": \"Santos FC U-15 vs Manchester City U-15\",\n  \"ourTeamId\": \"REPLACE_WITH_TEAM_ID\",\n  \"opponentTeam\": \"Manchester City U-15\",\n  \"matchType\": \"Friendly\",\n  \"competitionName\": \"Regional Youth League\",\n  \"homeOrAway\": \"HOME GROUND\",\n  \"venueName\": \"Santos Home Stadium\",\n  \"venueAddress\": \"124 Academy Way, Stadium Complex\",\n  \"matchDate\": \"2026-01-28\",\n  \"kickOffTime\": \"3:00 PM\",\n  \"referees\": \"John Doe (Chief Referee), Alex Smith (Assistant)\",\n  \"travelRequired\": false,\n  \"transportCost\": 150,\n  \"groundCost\": 200,\n  \"mealsCost\": 0,\n  \"otherCosts\": 50,\n  \"notes\": \"Special instructions: Players must arrive 1 hour before kick-off with home jersey.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/matches",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "matches"]
+            },
+            "description": "Creates a new scheduled match. Backend automatically calculates estimatedTotalCost = transportCost + groundCost + mealsCost + otherCosts (e.g. 150 + 200 + 0 + 50 = $400)."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get Match Details by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/matches/{{matchId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "matches", "{{matchId}}"]
+            },
+            "description": "Fetches complete details of a scheduled match by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Update Match Details / Costs",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transportCost\": 300,\n  \"groundCost\": 250,\n  \"mealsCost\": 0,\n  \"otherCosts\": 100,\n  \"status\": \"SCHEDULED\",\n  \"notes\": \"Updated travel arrangements and bus booking confirmed.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/matches/{{matchId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "matches", "{{matchId}}"]
+            },
+            "description": "Updates match details, status, or costs. Automatically recalculates estimatedTotalCost."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Delete / Cancel Match",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/matches/{{matchId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "matches", "{{matchId}}"]
+            },
+            "description": "Deletes a match record permanently."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5005/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "token_ACADEMY",
+      "value": "YOUR_ACADEMY_JWT_TOKEN",
+      "type": "string"
+    },
+    {
+      "key": "matchId",
+      "value": "MATCH_ID_HERE",
+      "type": "string"
+    }
+  ]
+}

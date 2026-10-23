@@ -71,6 +71,24 @@ import {
   unlinkPlayerFromParent,
 } from './academy.controller';
 
+import {
+  createTrainingSessionZodSchema,
+  updateTrainingSessionZodSchema,
+  saveAttendanceZodSchema,
+} from '@/modules/training/training.validation';
+import {
+  getTrainingFormMeta,
+  getTeamsDropdown,
+  getCoachesDropdown,
+  createTrainingSession,
+  getTrainingSessions,
+  getTrainingSessionById,
+  updateTrainingSession,
+  deleteTrainingSession,
+  getSessionAttendance,
+  saveAttendance,
+} from '@/modules/training/training.controller';
+
 import { upload } from '@/middlewares/multer';
 
 const router = Router();
@@ -401,6 +419,138 @@ router.delete(
   '/:academyId/parents/:id/players/:playerId',
   auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
   unlinkPlayerFromParent,
+);
+
+// ==========================================
+// TRAINING SESSIONS (ACADEMY DASHBOARD)
+// ==========================================
+router.get(
+  '/training-sessions/form-meta',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTrainingFormMeta,
+);
+router.get('/training-sessions/teams', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getTeamsDropdown);
+router.get(
+  '/training-sessions/coaches',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getCoachesDropdown,
+);
+router.get(
+  '/training-sessions',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
+  getTrainingSessions,
+);
+router.post(
+  '/training-sessions',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(createTrainingSessionZodSchema),
+  createTrainingSession,
+);
+router.get(
+  '/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getSessionAttendance,
+);
+router.put(
+  '/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(saveAttendanceZodSchema),
+  saveAttendance,
+);
+router.post(
+  '/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(saveAttendanceZodSchema),
+  saveAttendance,
+);
+router.get(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
+  getTrainingSessionById,
+);
+router.patch(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(updateTrainingSessionZodSchema),
+  updateTrainingSession,
+);
+router.put(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(updateTrainingSessionZodSchema),
+  updateTrainingSession,
+);
+router.delete(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  deleteTrainingSession,
+);
+
+// Route aliases with :academyId in path
+router.get(
+  '/:academyId/training-sessions/form-meta',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTrainingFormMeta,
+);
+router.get(
+  '/:academyId/training-sessions/teams',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTeamsDropdown,
+);
+router.get(
+  '/:academyId/training-sessions/coaches',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getCoachesDropdown,
+);
+router.get(
+  '/:academyId/training-sessions',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
+  getTrainingSessions,
+);
+router.post(
+  '/:academyId/training-sessions',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(createTrainingSessionZodSchema),
+  createTrainingSession,
+);
+router.get(
+  '/:academyId/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getSessionAttendance,
+);
+router.put(
+  '/:academyId/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(saveAttendanceZodSchema),
+  saveAttendance,
+);
+router.post(
+  '/:academyId/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(saveAttendanceZodSchema),
+  saveAttendance,
+);
+router.get(
+  '/:academyId/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
+  getTrainingSessionById,
+);
+router.patch(
+  '/:academyId/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(updateTrainingSessionZodSchema),
+  updateTrainingSession,
+);
+router.put(
+  '/:academyId/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(updateTrainingSessionZodSchema),
+  updateTrainingSession,
+);
+router.delete(
+  '/:academyId/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  deleteTrainingSession,
 );
 
 router.get('/:id', getAcademyProfile);

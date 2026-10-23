@@ -6,6 +6,8 @@ import {
   IPlayerEvaluationDocument,
   IAcademyCoachDocument,
   ITransferRequestDocument,
+  IAcademyFeePaymentDocument,
+  IAcademyFinanceTransactionDocument,
 } from './academy.interface';
 
 const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
@@ -208,4 +210,71 @@ TransferRequestSchema.index({ playerId: 1, status: 1 });
 export const TransferRequest = model<ITransferRequestDocument>(
   'TransferRequest',
   TransferRequestSchema,
+);
+
+// ==========================================
+// FEES & PAYMENTS SCHEMA (SCREENSHOT 1)
+// ==========================================
+const AcademyFeePaymentSchema = new Schema<IAcademyFeePaymentDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true, index: true },
+    parentId: { type: Schema.Types.ObjectId, ref: 'ParentProfile' },
+    feeType: { type: String, required: true, default: 'Monthly Fee' },
+    amount: { type: Number, required: true },
+    paymentDate: { type: Date, required: true, default: Date.now },
+    status: {
+      type: String,
+      enum: ['PAID', 'UNPAID', 'PENDING'],
+      default: 'PAID',
+      index: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['CASH', 'CARD', 'STRIPE', 'BANK_TRANSFER', 'OTHER'],
+      default: 'CASH',
+    },
+    transactionId: { type: String },
+    notes: { type: String },
+  },
+  { timestamps: true },
+);
+
+AcademyFeePaymentSchema.index({ academyId: 1, paymentDate: -1 });
+
+export const AcademyFeePayment = model<IAcademyFeePaymentDocument>(
+  'AcademyFeePayment',
+  AcademyFeePaymentSchema,
+);
+
+// ==========================================
+// FINANCE COMMITTEE SCHEMA (SCREENSHOT 2)
+// ==========================================
+const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true, index: true },
+    coachId: { type: Schema.Types.ObjectId, ref: 'CoachProfile' },
+    reportId: { type: Schema.Types.ObjectId, ref: 'GameReport' },
+    validationId: { type: Schema.Types.ObjectId, ref: 'PlayerCvValidation' },
+    transactionType: { type: String, required: true, default: 'Game Report' },
+    cost: { type: Number, required: true },
+    commissionAcademy: { type: Number, required: true },
+    transactionDate: { type: Date, required: true, default: Date.now },
+    status: {
+      type: String,
+      enum: ['COMPLETED', 'PENDING', 'REJECTED'],
+      default: 'COMPLETED',
+      index: true,
+    },
+    notes: { type: String },
+  },
+  { timestamps: true },
+);
+
+AcademyFinanceTransactionSchema.index({ academyId: 1, transactionDate: -1 });
+
+export const AcademyFinanceTransaction = model<IAcademyFinanceTransactionDocument>(
+  'AcademyFinanceTransaction',
+  AcademyFinanceTransactionSchema,
 );

@@ -626,3 +626,110 @@ export const unlinkPlayerFromParent = catchAsync(async (req: Request, res: Respo
     data: result,
   });
 });
+
+// ==========================================
+// FEES & PAYMENTS CONTROLLERS (SCREENSHOT 1)
+// ==========================================
+
+export const getFeesPayments = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getFeesPayments(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Fees and payments fetched successfully',
+    data: result,
+  });
+});
+
+export const createFeePayment = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.createFeePayment(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.payment,
+  });
+});
+
+export const updateFeePaymentStatus = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.updateFeePaymentStatus(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.payment,
+  });
+});
+
+export const getFeesPaymentsExport = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getFeesPaymentsExport(user, req.query, academyIdentifier);
+
+  if (req.query.format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+    res.status(200).send(result.csvContent);
+    return;
+  }
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Fees and payments export data generated successfully',
+    data: result,
+  });
+});
+
+// ==========================================
+// FINANCE COMMITTEE CONTROLLERS (SCREENSHOT 2)
+// ==========================================
+
+export const getFinanceCommittee = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getFinanceCommittee(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Finance committee data fetched successfully',
+    data: result,
+  });
+});
+
+export const createFinanceTransaction = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.createFinanceTransaction(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.transaction,
+  });
+});
+
+export const updateFinanceTransactionStatus = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.updateFinanceTransactionStatus(
+    id,
+    user,
+    req.body,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.transaction,
+  });
+});

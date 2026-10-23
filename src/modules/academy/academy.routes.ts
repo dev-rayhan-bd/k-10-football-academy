@@ -16,6 +16,10 @@ import {
   createTransferRequestZodSchema,
   respondTransferRequestZodSchema,
   onboardParentZodSchema,
+  createFeePaymentZodSchema,
+  updateFeePaymentStatusZodSchema,
+  createFinanceTransactionZodSchema,
+  updateFinanceTransactionStatusZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -69,6 +73,13 @@ import {
   unlinkParentFromAcademy,
   linkPlayerToParent,
   unlinkPlayerFromParent,
+  getFeesPayments,
+  createFeePayment,
+  updateFeePaymentStatus,
+  getFeesPaymentsExport,
+  getFinanceCommittee,
+  createFinanceTransaction,
+  updateFinanceTransactionStatus,
 } from './academy.controller';
 
 import {
@@ -551,6 +562,76 @@ router.delete(
   '/:academyId/training-sessions/:sessionId',
   auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
   deleteTrainingSession,
+);
+
+// ==========================================
+// FEES & PAYMENTS ROUTES (SCREENSHOT 1)
+// ==========================================
+router.get('/fees-payments/export', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getFeesPaymentsExport);
+router.get(
+  '/:academyId/fees-payments/export',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getFeesPaymentsExport,
+);
+router.get('/fees-payments', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getFeesPayments);
+router.get('/:academyId/fees-payments', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getFeesPayments);
+router.post(
+  '/fees-payments',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createFeePaymentZodSchema),
+  createFeePayment,
+);
+router.post(
+  '/:academyId/fees-payments',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createFeePaymentZodSchema),
+  createFeePayment,
+);
+router.patch(
+  '/fees-payments/:id/status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateFeePaymentStatusZodSchema),
+  updateFeePaymentStatus,
+);
+router.patch(
+  '/:academyId/fees-payments/:id/status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateFeePaymentStatusZodSchema),
+  updateFeePaymentStatus,
+);
+
+// ==========================================
+// FINANCE COMMITTEE ROUTES (SCREENSHOT 2)
+// ==========================================
+router.get('/finance-committee', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getFinanceCommittee);
+router.get(
+  '/:academyId/finance-committee',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getFinanceCommittee,
+);
+router.post(
+  '/finance-committee/transactions',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createFinanceTransactionZodSchema),
+  createFinanceTransaction,
+);
+router.post(
+  '/:academyId/finance-committee/transactions',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(createFinanceTransactionZodSchema),
+  createFinanceTransaction,
+);
+router.patch(
+  '/finance-committee/transactions/:id/status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateFinanceTransactionStatusZodSchema),
+  updateFinanceTransactionStatus,
+);
+router.patch(
+  '/:academyId/finance-committee/transactions/:id/status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateFinanceTransactionStatusZodSchema),
+  updateFinanceTransactionStatus,
 );
 
 router.get('/:id', getAcademyProfile);

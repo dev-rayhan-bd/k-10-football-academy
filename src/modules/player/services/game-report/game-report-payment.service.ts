@@ -13,6 +13,7 @@ import { ParentChild } from '@/modules/parent/parent.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { redisClient } from '@/config/redis';
 import { resolveOrCreatePlayerProfile } from './game-report.utils';
+import { AcademyFeePayment, AcademyFinanceTransaction } from '@/modules/academy/academy.model';
 
 export class GameReportPaymentService {
   /**
@@ -327,6 +328,54 @@ export class GameReportPaymentService {
       // 5. Invalidate Player Cache so CV immediately shows PAID and pending status!
       if (playerProfile._id) {
         await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
+      }
+
+      // 5b. Auto-Update Academy Finance & Fee Payment records via Webhook
+      if (playerProfile.academyId) {
+        try {
+          const cost = updatedRecord.coachReview?.paymentAmount || 6.99;
+          const commissionAcademy = parseFloat((cost * 0.4).toFixed(3));
+          await Promise.all([
+            AcademyFinanceTransaction.findOneAndUpdate(
+              { reportId: updatedRecord._id },
+              {
+                academyId: playerProfile.academyId,
+                playerId: playerProfile._id,
+                coachId: updatedRecord.coachReview?.coachId || undefined,
+                reportId: updatedRecord._id,
+                transactionType: 'Game Report',
+                cost,
+                commissionAcademy,
+                transactionDate: updatedRecord.createdAt || new Date(),
+                status: updatedRecord.coachReview?.status === 'COMPLETED' ? 'COMPLETED' : 'PENDING',
+                notes: `Stripe webhook processed via ${transactionId || updatedRecord.coachReview?.transactionId || 'session'}`,
+              },
+              { upsert: true, new: true },
+            ),
+            AcademyFeePayment.findOneAndUpdate(
+              {
+                $or: [
+                  { transactionId: transactionId || updatedRecord.coachReview?.transactionId },
+                  { notes: `Game Report Evaluation fee for report ${updatedRecord._id}` },
+                ],
+              },
+              {
+                academyId: playerProfile.academyId,
+                playerId: playerProfile._id,
+                feeType: 'Validation Fee',
+                amount: cost,
+                paymentDate: updatedRecord.createdAt || new Date(),
+                status: 'PAID',
+                paymentMethod: 'STRIPE',
+                transactionId: transactionId || updatedRecord.coachReview?.transactionId,
+                notes: `Game Report Evaluation fee for report ${updatedRecord._id}`,
+              },
+              { upsert: true, new: true },
+            ),
+          ]);
+        } catch (syncErr: any) {
+          logger.warn(`Failed to auto-sync academy finance records in webhook: ${syncErr.message}`);
+        }
       }
 
       // 6. In-App Notification to Player (Guaranteed Exactly Once)

@@ -1,0 +1,305 @@
+{
+  "info": {
+    "_postman_id": "k10-fees-and-finance-api-collection",
+    "name": "K10 Academy - Fees & Payments & Finance Committee APIs",
+    "description": "Complete enterprise API endpoints for:\n1. Fees & Payments Page (Stats, Recent Payments Table, Export CSV)\n2. Finance Committee Page (Stats, Game Report / Validation / Commission Table, Update Status)\n\nAuthenticated using Bearer Token with {{token_ACADEMY}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token_ACADEMY}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Fees & Payments",
+      "item": [
+        {
+          "name": "1. Get Fees & Payments (Stats + Recent Payments Table)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/fees-payments?page=1&limit=10&status=&feeType=&search=",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "fees-payments"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (default: 10)"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filter by status: PAID, UNPAID, PENDING"
+                },
+                {
+                  "key": "feeType",
+                  "value": "",
+                  "description": "Filter by feeType e.g. Monthly Fee, Training Session Fee, etc."
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Search by player name"
+                }
+              ]
+            },
+            "description": "Fetches the top statistics cards (TOTAL COLLECTED, PENDING, THIS MONTH) and the paginated list of recent player fee payments with avatar, player details, amount, date, and status."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Record New Fee Payment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"playerId\": \"{{playerId}}\",\n  \"feeType\": \"Monthly Fee\",\n  \"amount\": 150,\n  \"paymentDate\": \"2026-01-20\",\n  \"status\": \"PAID\",\n  \"paymentMethod\": \"CASH\",\n  \"notes\": \"Regular monthly training fee payment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/fees-payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "fees-payments"]
+            },
+            "description": "Records a new payment for a player under this academy."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Update Fee Payment Status",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PAID\",\n  \"paymentMethod\": \"CARD\",\n  \"notes\": \"Paid via POS terminal\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/fees-payments/{{paymentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "fees-payments", "{{paymentId}}", "status"]
+            },
+            "description": "Updates the payment status (PAID, UNPAID, PENDING) and payment method."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Export Fees & Payments (JSON / CSV)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/academies/fees-payments/export?format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "fees-payments", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv",
+                  "description": "Set to 'csv' to download direct CSV file, or omit for JSON"
+                }
+              ]
+            },
+            "description": "Exports fee payment records matching current filters as a downloadable CSV or JSON structure."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Finance Committee",
+      "item": [
+        {
+          "name": "1. Get Finance Committee (Stats + Transactions Table)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academies/finance-committee?page=1&limit=10&status=&transactionType=&search=",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "finance-committee"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (default: 10)"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filter by status: COMPLETED, PENDING, REJECTED"
+                },
+                {
+                  "key": "transactionType",
+                  "value": "",
+                  "description": "Filter by type: Game Report, CV Validation, etc."
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Search by player name"
+                }
+              ]
+            },
+            "description": "Fetches the top statistics cards (137 GAME REPORTS, 30 PENDING, 7 REJECTED, $ 279.6 TOTAL EARNINGS, $ 125.82 THIS MONTH) and the paginated list of transactions with NAME, TYPE, COST ($ 6.99), COMMISSION ACADEMY ($ 2.796), DATE, and STATUS."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Record New Finance Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"playerId\": \"{{playerId}}\",\n  \"transactionType\": \"Game Report\",\n  \"cost\": 6.99,\n  \"commissionAcademy\": 2.796,\n  \"transactionDate\": \"2024-01-15\",\n  \"status\": \"COMPLETED\",\n  \"notes\": \"Official game evaluation commission\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/finance-committee/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "finance-committee", "transactions"]
+            },
+            "description": "Records a new revenue/commission transaction for a game report or CV validation."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Update Finance Transaction Status",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_ACADEMY}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"notes\": \"Payout cleared and confirmed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academies/finance-committee/transactions/{{transactionId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["academies", "finance-committee", "transactions", "{{transactionId}}", "status"]
+            },
+            "description": "Updates transaction status (COMPLETED, PENDING, REJECTED)."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

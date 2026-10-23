@@ -167,3 +167,57 @@ export interface ITransferRequest {
 }
 
 export interface ITransferRequestDocument extends ITransferRequest, Document {}
+
+// ==========================================
+// FEES & PAYMENTS INTERFACE (SCREENSHOT 1)
+// ==========================================
+export type FeePaymentType =
+  | 'Monthly Fee'
+  | 'Training Session Fee'
+  | 'Validation Fee'
+  | 'Weekly Fee'
+  | 'Uniform Kit Fee'
+  | string;
+
+export type FeePaymentStatus = 'PAID' | 'UNPAID' | 'PENDING';
+
+export interface IAcademyFeePayment {
+  academyId: Types.ObjectId;
+  playerId: Types.ObjectId;
+  parentId?: Types.ObjectId;
+  feeType: FeePaymentType;
+  amount: number;
+  paymentDate: Date;
+  status: FeePaymentStatus;
+  paymentMethod?: 'CASH' | 'CARD' | 'STRIPE' | 'BANK_TRANSFER' | 'OTHER';
+  transactionId?: string;
+  notes?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IAcademyFeePaymentDocument extends IAcademyFeePayment, Document {}
+
+// ==========================================
+// FINANCE COMMITTEE INTERFACE (SCREENSHOT 2)
+// ==========================================
+export type FinanceTransactionType = 'Game Report' | 'CV Validation' | 'Commission' | string;
+export type FinanceTransactionStatus = 'COMPLETED' | 'PENDING' | 'REJECTED';
+
+export interface IAcademyFinanceTransaction {
+  academyId: Types.ObjectId;
+  playerId: Types.ObjectId;
+  coachId?: Types.ObjectId;
+  reportId?: Types.ObjectId;
+  validationId?: Types.ObjectId;
+  transactionType: FinanceTransactionType;
+  cost: number;
+  commissionAcademy: number;
+  transactionDate: Date;
+  status: FinanceTransactionStatus;
+  notes?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IAcademyFinanceTransactionDocument extends IAcademyFinanceTransaction, Document {}

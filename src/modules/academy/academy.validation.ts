@@ -137,3 +137,71 @@ export const onboardParentZodSchema = z.object({
     })
     .passthrough(),
 });
+
+export const createFeePaymentZodSchema = z.object({
+  body: z
+    .object({
+      playerId: z.string({ required_error: 'Player ID is required' }),
+      feeType: z.string().optional().default('Monthly Fee'),
+      amount: z.number({ required_error: 'Amount is required' }).or(
+        z
+          .string()
+          .regex(/^\d+(\.\d+)?$/)
+          .transform(Number),
+      ),
+      paymentDate: z.string().or(z.date()).optional(),
+      status: z.enum(['PAID', 'UNPAID', 'PENDING']).optional().default('PAID'),
+      paymentMethod: z
+        .enum(['CASH', 'CARD', 'STRIPE', 'BANK_TRANSFER', 'OTHER'])
+        .optional()
+        .default('CASH'),
+      notes: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const updateFeePaymentStatusZodSchema = z.object({
+  body: z
+    .object({
+      status: z.enum(['PAID', 'UNPAID', 'PENDING']),
+      paymentMethod: z.enum(['CASH', 'CARD', 'STRIPE', 'BANK_TRANSFER', 'OTHER']).optional(),
+      notes: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const createFinanceTransactionZodSchema = z.object({
+  body: z
+    .object({
+      playerId: z.string({ required_error: 'Player ID is required' }),
+      transactionType: z.string().optional().default('Game Report'),
+      cost: z.number().or(
+        z
+          .string()
+          .regex(/^\d+(\.\d+)?$/)
+          .transform(Number),
+      ),
+      commissionAcademy: z
+        .number()
+        .or(
+          z
+            .string()
+            .regex(/^\d+(\.\d+)?$/)
+            .transform(Number),
+        )
+        .optional(),
+      transactionDate: z.string().or(z.date()).optional(),
+      status: z.enum(['COMPLETED', 'PENDING', 'REJECTED']).optional().default('COMPLETED'),
+      notes: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const updateFinanceTransactionStatusZodSchema = z.object({
+  body: z
+    .object({
+      status: z.enum(['COMPLETED', 'PENDING', 'REJECTED']),
+      notes: z.string().optional(),
+    })
+    .passthrough(),
+});

@@ -118,3 +118,22 @@ export const respondTransferRequestZodSchema = z.object({
     })
     .optional(),
 });
+
+export const onboardParentZodSchema = z.object({
+  body: z
+    .object({
+      firstName: z.string({ required_error: 'First name is required' }).min(1),
+      lastName: z.string({ required_error: 'Last name is required' }).min(1),
+      relationship: z.string().optional().default('Guardian'),
+      occupation: z.string().optional(),
+      email: z.string({ required_error: 'Email address is required' }).email(),
+      primaryPhone: z.string({ required_error: 'Primary phone is required' }).min(1),
+      alternatePhone: z.string().optional(),
+      streetAddress: z.string().optional(),
+      city: z.string().optional(),
+      zipCode: z.string().optional(),
+      linkedPlayerIds: z.array(z.string()).optional().default([]),
+      notes: z.string().optional(),
+    })
+    .passthrough(),
+});

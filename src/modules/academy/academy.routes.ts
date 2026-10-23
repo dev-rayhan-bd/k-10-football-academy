@@ -15,6 +15,7 @@ import {
   respondAffiliationZodSchema,
   createTransferRequestZodSchema,
   respondTransferRequestZodSchema,
+  onboardParentZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -60,6 +61,14 @@ import {
   respondToTransferRequest,
   approveTransferRequest,
   rejectTransferRequest,
+  getAcademyParents,
+  getAvailablePlayersForParentLinking,
+  onboardParent,
+  getAcademyParentById,
+  updateAcademyParent,
+  unlinkParentFromAcademy,
+  linkPlayerToParent,
+  unlinkPlayerFromParent,
 } from './academy.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -322,6 +331,76 @@ router.get(
   '/:academyId/transfer-requests/my-players',
   auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
   getMyAcademyPlayersForTransfer,
+);
+
+// ==========================================
+// PARENT MANAGEMENT (ACADEMY DASHBOARD)
+// ==========================================
+router.get('/parents', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getAcademyParents);
+router.get(
+  '/parents/available-players',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getAvailablePlayersForParentLinking,
+);
+router.post(
+  '/parents',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(onboardParentZodSchema),
+  onboardParent,
+);
+router.get('/parents/:id', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getAcademyParentById);
+router.patch('/parents/:id', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), updateAcademyParent);
+router.put('/parents/:id', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), updateAcademyParent);
+router.delete('/parents/:id', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), unlinkParentFromAcademy);
+router.post(
+  '/parents/:id/link-player',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  linkPlayerToParent,
+);
+router.delete(
+  '/parents/:id/players/:playerId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  unlinkPlayerFromParent,
+);
+
+// Route aliases with :academyId in path
+router.get('/:academyId/parents', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getAcademyParents);
+router.get(
+  '/:academyId/parents/available-players',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getAvailablePlayersForParentLinking,
+);
+router.post(
+  '/:academyId/parents',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(onboardParentZodSchema),
+  onboardParent,
+);
+router.get(
+  '/:academyId/parents/:id',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getAcademyParentById,
+);
+router.patch(
+  '/:academyId/parents/:id',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  updateAcademyParent,
+);
+router.put('/:academyId/parents/:id', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), updateAcademyParent);
+router.delete(
+  '/:academyId/parents/:id',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  unlinkParentFromAcademy,
+);
+router.post(
+  '/:academyId/parents/:id/link-player',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  linkPlayerToParent,
+);
+router.delete(
+  '/:academyId/parents/:id/players/:playerId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  unlinkPlayerFromParent,
 );
 
 router.get('/:id', getAcademyProfile);

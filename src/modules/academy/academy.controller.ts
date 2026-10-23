@@ -494,3 +494,135 @@ export const rejectTransferRequest = catchAsync(async (req: Request, res: Respon
     data: result.transfer,
   });
 });
+
+// ==========================================
+// PARENT MANAGEMENT CONTROLLERS
+// ==========================================
+
+export const getAcademyParents = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAcademyParents(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy parents fetched successfully',
+    data: result,
+  });
+});
+
+export const getAvailablePlayersForParentLinking = catchAsync(
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const academyIdentifier = req.params.academyId;
+    const result = await academyService.getAvailablePlayersForParentLinking(
+      user,
+      req.query,
+      academyIdentifier,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Available academy athletes for parent linking fetched successfully',
+      data: result,
+    });
+  },
+);
+
+export const onboardParent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.onboardParent(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getAcademyParentById = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id, parentId } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAcademyParentById(parentId || id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Parent profile details fetched successfully',
+    data: result,
+  });
+});
+
+export const updateAcademyParent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id, parentId } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.updateAcademyParent(
+    parentId || id,
+    user,
+    req.body,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Parent profile updated successfully',
+    data: result,
+  });
+});
+
+export const unlinkParentFromAcademy = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id, parentId } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.unlinkParentFromAcademy(
+    parentId || id,
+    user,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const linkPlayerToParent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id, parentId } = req.params;
+  const { playerId, relationship } = req.body;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.linkPlayerToParent(
+    parentId || id,
+    playerId,
+    relationship,
+    user,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const unlinkPlayerFromParent = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id, parentId, playerId } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.unlinkPlayerFromParent(
+    parentId || id,
+    playerId || req.body.playerId,
+    user,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});

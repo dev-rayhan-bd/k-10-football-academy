@@ -6,6 +6,16 @@ export type CoachReviewStatus = 'PENDING' | 'EVALUATED' | 'UNREQUESTED';
 export interface IParentProfile {
   userId: Types.ObjectId;
   contactPhone: string;
+  alternatePhone?: string;
+  firstName?: string;
+  lastName?: string;
+  relationship?: string;
+  occupation?: string;
+  streetAddress?: string;
+  city?: string;
+  zipCode?: string;
+  notes?: string;
+  academyId?: Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -9,6 +9,16 @@ const ParentProfileSchema = new Schema<IParentProfileDocument>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     contactPhone: { type: String, required: true },
+    alternatePhone: { type: String },
+    firstName: { type: String },
+    lastName: { type: String },
+    relationship: { type: String },
+    occupation: { type: String },
+    streetAddress: { type: String },
+    city: { type: String },
+    zipCode: { type: String },
+    notes: { type: String },
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile' },
   },
   { timestamps: true },
 );

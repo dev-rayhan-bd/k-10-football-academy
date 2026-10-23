@@ -3,6 +3,7 @@ import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { academyService } from './academy.service';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
+import { coachService } from '@/modules/coach/coach.service';
 
 export const createAcademyProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await academyService.createProfile(req.body);
@@ -1450,6 +1451,107 @@ export const notifyCoachForCvValidation = catchAsync(async (req: Request, res: R
     statusCode: 200,
     success: true,
     message: result.message,
+    data: result,
+  });
+});
+
+// ==========================================
+// ACADEMY PLAYER EVALUATIONS (SCREENSHOT 1 & 2)
+// ==========================================
+
+export const getAcademyPlayerEvaluationDashboard = catchAsync(
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const academyIdentifier = req.params.academyId || user?.userId;
+    const result = await academyService.getAcademyPlayerEvaluationDashboard(
+      academyIdentifier,
+      req.query as Record<string, unknown>,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Academy player evaluations dashboard fetched successfully',
+      data: result,
+    });
+  },
+);
+
+export const getAcademyPlayerEvaluationDetails = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId || user?.userId;
+  const targetId = req.params.id || req.params.evaluationId;
+  const result = await academyService.getAcademyPlayerEvaluationDetails(
+    targetId,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluation details fetched successfully',
+    data: result,
+  });
+});
+
+export const getAcademyPlayerEvaluationPdfData = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const targetId = req.params.id || req.params.evaluationId;
+  const result = await coachService.getPlayerEvaluationProgressPdfData(user?.userId, targetId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player evaluation progress report for download retrieved successfully',
+    data: result,
+  });
+});
+
+// ==========================================
+// ACADEMY ANALYTICS REPORT CONTROLLERS (SCREENSHOTS 1-6)
+// ==========================================
+
+export const getAcademyAnalyticsReport = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const query = { ...req.query };
+  if (req.params.year) {
+    query.year = req.params.year;
+  }
+  const result = await academyService.getAcademyAnalyticsReport(user, query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy analytics report fetched successfully',
+    data: result,
+  });
+});
+
+export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const query = { ...req.query };
+  if (req.params.year) {
+    query.year = req.params.year;
+  }
+  const result = await academyService.exportAcademyAnalyticsReport(user, query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Analytics report exported successfully',
+    data: result,
+  });
+});
+
+export const getAcademyManagementDashboard = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const query = { ...req.query };
+  if (req.params.year) {
+    query.year = req.params.year;
+  }
+  const result = await academyService.getAcademyManagementDashboard(user, query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy management dashboard fetched successfully',
     data: result,
   });
 });

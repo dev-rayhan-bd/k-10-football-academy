@@ -74,15 +74,24 @@ router.post('/validate-player-cv', auth('COACH', 'SUPER_ADMIN'), validatePlayerC
 // ==========================================
 router.get('/me/player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
 router.get('/my-player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
-router.get('/me/player-evaluations/:id', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationDetails);
+router.get(
+  '/me/player-evaluations/:id',
+  auth('COACH', 'SUPER_ADMIN', 'ACADEMY', 'PLAYER'),
+  getPlayerEvaluationDetails,
+);
+router.get(
+  '/player-evaluations/:id',
+  auth('COACH', 'SUPER_ADMIN', 'ACADEMY', 'PLAYER'),
+  getPlayerEvaluationDetails,
+);
 router.get(
   '/me/player-evaluations/:id/pdf',
-  auth('COACH', 'SUPER_ADMIN', 'PLAYER'),
+  auth('COACH', 'SUPER_ADMIN', 'PLAYER', 'ACADEMY'),
   getPlayerEvaluationPdfData,
 );
 router.get(
   '/player-evaluations/:id/pdf',
-  auth('COACH', 'SUPER_ADMIN', 'PLAYER'),
+  auth('COACH', 'SUPER_ADMIN', 'PLAYER', 'ACADEMY'),
   getPlayerEvaluationPdfData,
 );
 router.post(

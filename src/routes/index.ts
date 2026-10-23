@@ -28,6 +28,8 @@ const moduleRoutes = [
   { path: '/chats', route: ChatRoutes },
   { path: '/invoices', route: InvoiceRoutes },
   { path: '/shop', route: ShopRoutes },
+  { path: '/products', route: ShopRoutes },
+  { path: '/store', route: ShopRoutes },
   { path: '/subscriptions', route: SubscriptionRoutes },
   { path: '/notifications', route: NotificationRoutes },
   { path: '/media', route: MediaRoutes },

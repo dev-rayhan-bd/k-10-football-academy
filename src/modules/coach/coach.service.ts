@@ -1730,10 +1730,7 @@ export class CoachService {
   }
 
   async getPlayerEvaluationDetails(userId: string, targetId: string) {
-    const coach = await CoachProfile.findOne({ userId });
-    if (!coach) {
-      throw new AppError(404, 'Coach profile not found');
-    }
+    const coach = userId ? await CoachProfile.findOne({ userId }) : null;
 
     let evaluation: any = null;
     let player: any = null;
@@ -1748,12 +1745,9 @@ export class CoachService {
     if (!player && Types.ObjectId.isValid(targetId)) {
       player = await PlayerProfile.findById(targetId).lean();
       if (player) {
-        evaluation = await PlayerEvaluation.findOne({
-          coachId: coach._id,
-          playerId: player._id,
-        })
-          .sort({ createdAt: -1 })
-          .lean();
+        const query: any = { playerId: player._id };
+        if (coach) query.coachId = coach._id;
+        evaluation = await PlayerEvaluation.findOne(query).sort({ createdAt: -1 }).lean();
       }
     }
 
@@ -1784,7 +1778,7 @@ export class CoachService {
         age: player.age || null,
         avatar: player.profileImage || '',
         position: player.position || '',
-        centre: player.currentClub || coach.currentClub || 'N/A',
+        centre: player.currentClub || coach?.currentClub || 'N/A',
         rating: evaluation?.overallRating || player.overallRating || 0,
       },
       evaluation: {

@@ -131,6 +131,12 @@ import {
   getAcademyGameReportsDashboard,
   getAcademyValidateCvDashboard,
   notifyCoachForCvValidation,
+  getAcademyPlayerEvaluationDashboard,
+  getAcademyPlayerEvaluationDetails,
+  getAcademyPlayerEvaluationPdfData,
+  getAcademyAnalyticsReport,
+  exportAcademyAnalyticsReport,
+  getAcademyManagementDashboard,
 } from './academy.controller';
 
 import {
@@ -1068,6 +1074,166 @@ router.post(
   auth('ACADEMY', 'SUPER_ADMIN'),
   validateRequest(notifyCoachCvValidationZodSchema),
   notifyCoachForCvValidation,
+);
+
+// ==========================================
+// ACADEMY PLAYER EVALUATION DASHBOARD & DETAILS (SCREENSHOT 1 & 2)
+// ==========================================
+router.get(
+  '/player-evaluations/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPlayerEvaluationDashboard,
+);
+router.get(
+  '/:academyId/player-evaluations/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPlayerEvaluationDashboard,
+);
+router.get(
+  '/player-evaluations',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPlayerEvaluationDashboard,
+);
+router.get(
+  '/:academyId/player-evaluations',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPlayerEvaluationDashboard,
+);
+
+router.get(
+  '/player-evaluations/:id/pdf',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
+  getAcademyPlayerEvaluationPdfData,
+);
+router.get(
+  '/:academyId/player-evaluations/:id/pdf',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
+  getAcademyPlayerEvaluationPdfData,
+);
+
+router.get(
+  '/player-evaluations/:id',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
+  getAcademyPlayerEvaluationDetails,
+);
+router.get(
+  '/:academyId/player-evaluations/:id',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
+  getAcademyPlayerEvaluationDetails,
+);
+
+// ==========================================
+// ACADEMY ANALYTICS REPORT (SCREENSHOTS 1-6)
+// ==========================================
+router.get(
+  '/analytics-report/export',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get(
+  '/analytics-report/export/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get(
+  '/:academyId/analytics-report/export',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get(
+  '/:academyId/analytics-report/export/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get('/analytics-report', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyAnalyticsReport);
+router.get(
+  '/analytics-report/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyAnalyticsReport,
+);
+router.get(
+  '/:academyId/analytics-report',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyAnalyticsReport,
+);
+router.get(
+  '/:academyId/analytics-report/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyAnalyticsReport,
+);
+
+// Route aliases
+router.get(
+  '/analytics/export',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get(
+  '/analytics/export/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get(
+  '/:academyId/analytics/export',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get(
+  '/:academyId/analytics/export/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  exportAcademyAnalyticsReport,
+);
+router.get('/analytics', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyAnalyticsReport);
+router.get('/analytics/:year', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyAnalyticsReport);
+router.get(
+  '/:academyId/analytics',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyAnalyticsReport,
+);
+router.get(
+  '/:academyId/analytics/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyAnalyticsReport,
+);
+
+// ==========================================
+// ACADEMY MANAGEMENT DASHBOARD & ANALYTICS (SCREENSHOTS 1, 2, 3)
+// ==========================================
+router.get('/dashboard', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyManagementDashboard);
+router.get(
+  '/dashboard/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyManagementDashboard,
+);
+router.get(
+  '/:academyId/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyManagementDashboard,
+);
+router.get(
+  '/:academyId/dashboard/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyManagementDashboard,
+);
+router.get(
+  '/dashboard/management',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyManagementDashboard,
+);
+router.get(
+  '/:academyId/dashboard/management',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyManagementDashboard,
+);
+router.get(
+  '/management-dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyManagementDashboard,
+);
+router.get(
+  '/:academyId/management-dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyManagementDashboard,
 );
 
 router.get('/:id', getAcademyProfile);

@@ -635,3 +635,13 @@ export const updateSuccessStoryStatusZodSchema = z.object({
     })
     .passthrough(),
 });
+
+export const notifyCoachCvValidationZodSchema = z.object({
+  body: z
+    .object({
+      playerId: z.string({ required_error: 'Player ID is required' }),
+      coachId: z.string().optional(),
+      message: z.string().optional(),
+    })
+    .passthrough(),
+});

@@ -1,0 +1,252 @@
+{
+  "info": {
+    "_postman_id": "c71fe7d2-5c90-4eb0-a99b-326349fa2263",
+    "name": "K10 Football - Game Reports & Validate CV Module",
+    "description": "APIs for Academy Game Reports Dashboard, Player Game Report Details, Validate CV Dashboard, and Coach CV Validation Notification.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5005/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "reportId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "playerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "coachId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Game Reports Dashboard (Metrics, Scouting Reports, Top Scorers, Top Performers)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/game-reports?page=1&limit=9&searchTerm=",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "game-reports"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "9"
+            },
+            {
+              "key": "searchTerm",
+              "value": "",
+              "description": "Search by player name, scout, team, or position"
+            }
+          ]
+        },
+        "description": "Fetches Game Reports dashboard including 4 metrics cards (Avg Match Rating, Total Goals, Assists, Reports), Scouting Reports cards, Top Scorers widget, and Top Performers widget."
+      },
+      "response": []
+    },
+    {
+      "name": "2. View Player Game Report Details (Modal View)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/players/game-reports/{{reportId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["players", "game-reports", "{{reportId}}"]
+        },
+        "description": "Fetches complete game report details (match stats, radar chart, scout analysis, goalkeeper/outfield performance metrics) for the side modal view."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Validate CV Dashboard (Player CV Library & Counts)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/validate-cv?page=1&limit=10&searchTerm=",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "validate-cv"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "searchTerm",
+              "value": "",
+              "description": "Search by name, position, country, or coach"
+            },
+            {
+              "key": "tier",
+              "value": "ALL",
+              "description": "ALL | GOLD | SILVER | BRONZE",
+              "disabled": true
+            },
+            {
+              "key": "position",
+              "value": "ALL",
+              "description": "ALL | Goalkeeper | Defender | Midfielder | Forward",
+              "disabled": true
+            },
+            {
+              "key": "validation",
+              "value": "ALL",
+              "description": "ALL | VERIFIED | PENDING",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Fetches Validate CV dashboard including 4 metrics cards (Total Players, Gold CVs, Silver CVs, Bronze CVs), and Player CVs table."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Validate CV - Filter by Tier (Gold / Silver / Bronze)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/validate-cv?tier=GOLD&page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "validate-cv"],
+          "query": [
+            {
+              "key": "tier",
+              "value": "GOLD"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Filters player CVs by tier: GOLD, SILVER, or BRONZE."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Notify Coach to Validate Player CV (Auto / Assigned Coach)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"playerId\": \"{{playerId}}\",\n  \"message\": \"Please review and validate player CV profile\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/validate-cv/notify-coach",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "validate-cv", "notify-coach"]
+        },
+        "description": "Sends in-app notification to the coach (auto-finds assigned coach) to validate the player's CV."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Select & Notify Specific Coach to Validate Player CV",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"playerId\": \"{{playerId}}\",\n  \"coachId\": \"{{coachId}}\",\n  \"message\": \"Please review and validate this player's CV.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/validate-cv/notify-coach",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "validate-cv", "notify-coach"]
+        },
+        "description": "Selects a specific coach from the academy coaches list and sends a validation request notification."
+      },
+      "response": []
+    },
+    {
+      "name": "7. View Player CV Details (Full Profile)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/players/{{playerId}}/cv",
+          "host": ["{{baseUrl}}"],
+          "path": ["players", "{{playerId}}", "cv"]
+        },
+        "description": "Existing Player CV API accessible by ACADEMY token to view player's full football CV profile."
+      },
+      "response": []
+    }
+  ]
+}

@@ -5700,6 +5700,526 @@ export class AcademyService {
       message: 'Success story deleted successfully',
     };
   }
+
+  // ==========================================
+  // ACADEMY GAME REPORTS DASHBOARD (SCREENSHOT 1)
+  // ==========================================
+  async getAcademyGameReportsDashboard(user: any, query: any = {}, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    // 1. Gather all players of this academy (direct and via team rosters)
+    const directPlayers = await PlayerProfile.find({ academyId: academy._id })
+      .select('_id fullName position profileImage ageGroup age overallRating currentClub')
+      .lean();
+
+    const teamPlayerIds = await Team.find({ academyId: academy._id }).distinct('roster.playerId');
+    const extraPlayers = await PlayerProfile.find({
+      _id: { $in: teamPlayerIds, $nin: directPlayers.map((p) => p._id) },
+    })
+      .select('_id fullName position profileImage ageGroup age overallRating currentClub')
+      .lean();
+
+    const allPlayers = [...directPlayers, ...extraPlayers];
+    const playerMap = new Map<string, any>();
+    allPlayers.forEach((p) => playerMap.set(p._id.toString(), p));
+
+    const allPlayerIds = allPlayers.map((p) => p._id);
+
+    // 2. Fetch all match records for academy players
+    const allMatches = await MatchRecord.find({
+      playerId: { $in: allPlayerIds },
+    })
+      .sort({ matchDate: -1, createdAt: -1 })
+      .lean();
+
+    // 3. Compute Metrics Cards (Screenshot 1)
+    const totalReports = allMatches.length;
+    const totalGoals = allMatches.reduce(
+      (sum, m: any) => sum + (m.goals ?? m.stats?.goalScored ?? 0),
+      0,
+    );
+    const totalAssists = allMatches.reduce(
+      (sum, m: any) => sum + (m.assists ?? m.stats?.assists ?? 0),
+      0,
+    );
+
+    const ratedMatches = allMatches.filter((m: any) => {
+      const r = m.coachReview?.coachRating ?? m.playerRating;
+      return r !== undefined && r !== null && Number(r) > 0;
+    });
+
+    const avgRatingNum =
+      ratedMatches.length > 0
+        ? ratedMatches.reduce((sum, m: any) => {
+            let r = Number(m.coachReview?.coachRating ?? m.playerRating);
+            if (r <= 10) r = r * 10;
+            return sum + r;
+          }, 0) / ratedMatches.length
+        : 0;
+
+    const metrics = {
+      avgMatchRating: `${avgRatingNum.toFixed(1)}%`,
+      totalGoals,
+      totalAssists,
+      totalReports,
+    };
+
+    // 4. Compute Top Scorers Widget (Screenshot 1)
+    const playerGoalsMap = new Map<string, { player: any; goals: number }>();
+    allMatches.forEach((m: any) => {
+      const pId = m.playerId?.toString();
+      const player = playerMap.get(pId);
+      if (!player) return;
+      const g = m.goals ?? m.stats?.goalScored ?? 0;
+      if (!playerGoalsMap.has(pId)) {
+        playerGoalsMap.set(pId, { player, goals: 0 });
+      }
+      playerGoalsMap.get(pId)!.goals += g;
+    });
+
+    const topScorers = Array.from(playerGoalsMap.values())
+      .filter((item) => item.goals > 0)
+      .sort((a, b) => b.goals - a.goals)
+      .slice(0, 5)
+      .map((item) => {
+        const p = item.player;
+        const pos = (p.position || '').toUpperCase();
+        const age = (p as any).ageGroup || (p.age ? `U-${p.age}` : '');
+        return {
+          _id: p._id,
+          name: p.fullName || '',
+          position: pos,
+          ageGroup: age,
+          goals: item.goals,
+          avatar: p.profileImage || '',
+        };
+      });
+
+    // 5. Compute Top Performers Widget (Screenshot 1)
+    const topPerformers = allMatches
+      .filter((m: any) => {
+        const r = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
+        return r > 0;
+      })
+      .map((m: any) => {
+        let r = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
+        if (r <= 10) r = Math.round(r * 10);
+        const player = playerMap.get(m.playerId?.toString()) || {};
+        const pos = (player.position || '').toUpperCase();
+        const age = m.ageGroup || (player as any).ageGroup || (player.age ? `U-${player.age}` : '');
+        return {
+          _id: m._id,
+          playerId: player._id,
+          name: player.fullName || '',
+          position: age && pos ? `${age} · ${pos}` : pos || age || '',
+          rating: `${r}%`,
+          ratingNum: r,
+        };
+      })
+      .sort((a, b) => b.ratingNum - a.ratingNum)
+      .slice(0, 5)
+      .map((item, idx) => ({
+        rank: `#${idx + 1}`,
+        name: item.name,
+        position: item.position,
+        rating: item.rating,
+      }));
+
+    // 6. Search and Paginate Scouting Reports Cards (Screenshot 1)
+    let filteredMatches = allMatches;
+    if (query.searchTerm || query.search) {
+      const term = String(query.searchTerm || query.search)
+        .trim()
+        .toLowerCase();
+      filteredMatches = filteredMatches.filter((m: any) => {
+        const player = playerMap.get(m.playerId?.toString());
+        const pName = (player?.fullName || '').toLowerCase();
+        const scout = (m.coachReview?.coachName || m.scoutName || '').toLowerCase();
+        const home = (m.homeTeam || '').toLowerCase();
+        const away = (m.awayTeam || '').toLowerCase();
+        const pos = (player?.position || '').toLowerCase();
+        return (
+          pName.includes(term) ||
+          scout.includes(term) ||
+          home.includes(term) ||
+          away.includes(term) ||
+          pos.includes(term)
+        );
+      });
+    }
+
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query.limit) || 9));
+    const total = filteredMatches.length;
+    const paginatedMatches = filteredMatches.slice((page - 1) * limit, page * limit);
+
+    const scoutingReports = paginatedMatches.map((m: any) => {
+      const player = playerMap.get(m.playerId?.toString()) || {};
+      let r = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
+      if (r <= 10) r = Math.round(r * 10);
+
+      const dateVal = m.coachReview?.evaluatedAt || m.matchDate || m.gameDate || m.createdAt;
+      let dateStr = '';
+      if (dateVal) {
+        try {
+          const d = new Date(dateVal);
+          const months = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ];
+          dateStr = `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+        } catch {
+          dateStr = String(dateVal);
+        }
+      }
+
+      const goals = m.goals ?? m.stats?.goalScored ?? 0;
+      const assists = m.assists ?? m.stats?.assists ?? 0;
+      const passes =
+        m.passes ??
+        m.stats?.passAccurate ??
+        (m.stats?.wrongPass ? (m.stats.passAccurate || 0) + (m.stats.wrongPass || 0) : 0);
+
+      const ratingVal = player.overallRating || 0;
+      const tierNum =
+        ratingVal >= 80 ? 'TIER 1' : ratingVal >= 60 ? 'TIER 2' : ratingVal > 0 ? 'TIER 3' : '';
+      const posUpper = (player.position || '').toUpperCase();
+
+      const home = m.homeTeam || player.currentClub || academy.name || '';
+      const away = m.awayTeam && m.awayTeam !== 'Opponent' ? m.awayTeam : '';
+      const matchTitle =
+        home && away
+          ? `${home.toUpperCase()} VS ${away.toUpperCase()}`
+          : home.toUpperCase() || away.toUpperCase() || 'MATCH REPORT';
+
+      return {
+        _id: m._id,
+        playerId: player._id,
+        playerName: player.fullName || '',
+        playerAvatar: player.profileImage || '',
+        ageGroup: m.ageGroup || (player as any).ageGroup || (player.age ? `U-${player.age}` : ''),
+        matchTitle,
+        date: dateStr,
+        scoutName: m.coachReview?.coachName || m.scoutName || '',
+        overallPerformance: `${r}%`,
+        performanceRatio: `(${r}% / 100%)`,
+        goals,
+        assists,
+        passes,
+        position: posUpper,
+        tier: tierNum,
+        positionTierBadge: posUpper && tierNum ? `${posUpper} · ${tierNum}` : posUpper || tierNum,
+        status: m.coachReview?.status || 'COMPLETED',
+      };
+    });
+
+    return {
+      metrics,
+      scoutingReports,
+      topScorers,
+      topPerformers,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  // ==========================================
+  // ACADEMY VALIDATE CV DASHBOARD (SCREENSHOT 4)
+  // ==========================================
+  async getAcademyValidateCvDashboard(user: any, query: any = {}, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    // 1. Gather all players of this academy without schema-breaking population
+    const teamPlayerIds = await Team.find({ academyId: academy._id }).distinct('roster.playerId');
+    const playerQueryFilter: any = {
+      $or: [{ academyId: academy._id }, { _id: { $in: teamPlayerIds } }],
+    };
+
+    const allPlayers = await PlayerProfile.find(playerQueryFilter)
+      .populate('userId', 'email name avatar')
+      .lean();
+
+    // 2. Resolve Academy Coaches & Verifying Coaches
+    const academyCoaches = await AcademyCoach.find({
+      academyId: academy._id,
+      status: 'APPROVED',
+    })
+      .populate('coachId', 'fullName title profileImage')
+      .lean();
+
+    const verifyingCoachIds = allPlayers.map((p) => p.verifyingCoachId).filter(Boolean);
+
+    const coachProfiles = await CoachProfile.find({
+      $or: [{ _id: { $in: verifyingCoachIds } }, { userId: { $in: verifyingCoachIds } }],
+    }).lean();
+
+    const coachMap = new Map<string, any>();
+    coachProfiles.forEach((c) => {
+      coachMap.set(c._id.toString(), c);
+      if (c.userId) coachMap.set(c.userId.toString(), c);
+    });
+
+    const defaultAcademyCoach = academyCoaches[0];
+    const defaultCoachName = (defaultAcademyCoach?.coachId as any)?.fullName || '';
+    const defaultCoachId = (defaultAcademyCoach?.coachId as any)?._id || null;
+
+    // 3. Metrics Cards: Total, Gold, Silver, Bronze (Screenshot 4)
+    let goldCount = 0;
+    let silverCount = 0;
+    let bronzeCount = 0;
+
+    allPlayers.forEach((p) => {
+      const rating = Number(p.overallRating) || 0;
+      if (rating >= 80) {
+        goldCount++;
+      } else if (rating >= 60) {
+        silverCount++;
+      } else {
+        bronzeCount++;
+      }
+    });
+
+    const metrics = {
+      totalPlayers: allPlayers.length,
+      goldCvs: goldCount,
+      silverCvs: silverCount,
+      bronzeCvs: bronzeCount,
+    };
+
+    // 4. Search & Filter
+    let filtered = allPlayers;
+
+    // Search term
+    if (query.searchTerm || query.search) {
+      const term = String(query.searchTerm || query.search)
+        .trim()
+        .toLowerCase();
+      filtered = filtered.filter((p) => {
+        const name = (p.fullName || '').toLowerCase();
+        const pos = (p.position || '').toLowerCase();
+        const country = (p.country || '').toLowerCase();
+        const verifyingCoach = p.verifyingCoachId
+          ? coachMap.get(p.verifyingCoachId.toString())
+          : null;
+        const coach = (
+          verifyingCoach?.fullName ||
+          p.coachVerification?.coachName ||
+          defaultCoachName
+        ).toLowerCase();
+        return (
+          name.includes(term) ||
+          pos.includes(term) ||
+          country.includes(term) ||
+          coach.includes(term)
+        );
+      });
+    }
+
+    // Tier filter (GOLD, SILVER, BRONZE)
+    if (query.tier && String(query.tier).toUpperCase() !== 'ALL') {
+      const targetTier = String(query.tier).toUpperCase();
+      filtered = filtered.filter((p) => {
+        const rating = Number(p.overallRating) || 0;
+        const tier = rating >= 80 ? 'GOLD' : rating >= 60 ? 'SILVER' : 'BRONZE';
+        return tier === targetTier;
+      });
+    }
+
+    // Position filter
+    if (query.position && String(query.position).toUpperCase() !== 'ALL') {
+      const posFilter = String(query.position).toLowerCase();
+      filtered = filtered.filter((p) => (p.position || '').toLowerCase().includes(posFilter));
+    }
+
+    // Validation filter (VERIFIED, PENDING)
+    if (query.validation && String(query.validation).toUpperCase() !== 'ALL') {
+      const valFilter = String(query.validation).toUpperCase();
+      filtered = filtered.filter((p) => {
+        const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
+        const status = isVerified ? 'VERIFIED' : 'PENDING';
+        return status === valFilter;
+      });
+    }
+
+    // 5. Pagination
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
+    const total = filtered.length;
+    const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+    // Helper to determine player position type group
+    const getTypeGroup = (position: string = ''): string => {
+      const pos = position.toUpperCase();
+      if (pos.includes('GOAL') || pos === 'GK') return 'Goalkeeper';
+      if (
+        pos.includes('DEF') ||
+        pos === 'CB' ||
+        pos === 'LB' ||
+        pos === 'RB' ||
+        pos === 'LWB' ||
+        pos === 'RWB'
+      )
+        return 'Defender';
+      if (
+        pos.includes('MID') ||
+        pos === 'CM' ||
+        pos === 'CDM' ||
+        pos === 'CAM' ||
+        pos === 'LM' ||
+        pos === 'RM'
+      )
+        return 'Midfielder';
+      return 'Forward';
+    };
+
+    const playersList = paginated.map((p) => {
+      const rating = Number(p.overallRating) || 0;
+      const cvTier: 'GOLD' | 'SILVER' | 'BRONZE' =
+        rating >= 80 ? 'GOLD' : rating >= 60 ? 'SILVER' : 'BRONZE';
+
+      const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
+      const validationStatus = isVerified ? 'VERIFIED' : 'PENDING';
+
+      const verifyingCoach = p.verifyingCoachId
+        ? coachMap.get(p.verifyingCoachId.toString())
+        : null;
+
+      const coachName =
+        verifyingCoach?.fullName ||
+        p.coachVerification?.coachName ||
+        defaultCoachName ||
+        'Unassigned';
+
+      const coachId = verifyingCoach?._id || defaultCoachId || null;
+
+      return {
+        _id: p._id,
+        player: {
+          _id: p._id,
+          name: p.fullName || '',
+          country: (p.country || '').toUpperCase(),
+          avatar: p.profileImage || (p.userId as any)?.avatar || '',
+        },
+        rating,
+        cvTier,
+        cvTierBadge: {
+          label: cvTier,
+          variant: cvTier.toLowerCase(),
+        },
+        type: getTypeGroup(p.position),
+        position: p.position || '',
+        validation: validationStatus,
+        validationBadge: {
+          label: validationStatus,
+          variant: isVerified ? 'green' : 'yellow',
+        },
+        coach: coachName,
+        assignedCoachId: coachId,
+        cvUrl: `/players/${p._id}/cv`,
+      };
+    });
+
+    return {
+      metrics,
+      players: playersList,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  // ==========================================
+  // NOTIFY COACH FOR CV VALIDATION (SCREENSHOT 4 & 5)
+  // ==========================================
+  async notifyCoachForCvValidation(user: any, payload: any, academyIdentifier?: string) {
+    const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const { playerId, coachId, message } = payload;
+    const player = await PlayerProfile.findById(playerId);
+    if (!player) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Player not found');
+    }
+
+    let targetCoachUserId = null;
+    let coachName = 'Coach';
+
+    if (coachId) {
+      // Find coach profile
+      const coach = await CoachProfile.findOne({
+        $or: [{ _id: coachId }, { userId: coachId }],
+      });
+      if (coach) {
+        targetCoachUserId = coach.userId;
+        coachName = coach.fullName;
+      }
+    }
+
+    const pAny = player as any;
+    if (!targetCoachUserId && (pAny.assignedCoachId || player.verifyingCoachId)) {
+      const cId = pAny.assignedCoachId || player.verifyingCoachId;
+      const coach = await CoachProfile.findOne({
+        $or: [{ _id: cId }, { userId: cId }],
+      });
+      if (coach) {
+        targetCoachUserId = coach.userId;
+        coachName = coach.fullName;
+      }
+    }
+
+    if (!targetCoachUserId) {
+      const defaultAcademyCoach = await AcademyCoach.findOne({
+        academyId: academy._id,
+        status: 'APPROVED',
+      });
+      if (defaultAcademyCoach) {
+        targetCoachUserId = defaultAcademyCoach.coachUserId || defaultAcademyCoach.coachId;
+        const coachProfile = await CoachProfile.findOne({
+          $or: [{ _id: defaultAcademyCoach.coachId }, { userId: defaultAcademyCoach.coachUserId }],
+        });
+        coachName = coachProfile?.fullName || 'Coach';
+      }
+    }
+
+    if (targetCoachUserId) {
+      await notificationService.createNotification({
+        recipientId: targetCoachUserId,
+        recipientRole: 'COACH',
+        type: 'CV_VALIDATION_REQUEST',
+        title: 'Player CV Validation Request',
+        message:
+          message ||
+          `Academy "${academy.name}" has requested you to review and validate the CV of player ${player.fullName}.`,
+        data: {
+          playerId: player._id,
+          academyId: academy._id,
+          actionUrl: '/coach/player-cv-validations',
+        },
+      });
+    }
+
+    return {
+      message: `Notification sent successfully to ${coachName} to validate ${player.fullName}'s CV`,
+      coachName,
+      playerId: player._id,
+    };
+  }
 }
 
 export const academyService = new AcademyService();

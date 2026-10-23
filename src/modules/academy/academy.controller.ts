@@ -1405,3 +1405,51 @@ export const deleteSuccessStory = catchAsync(async (req: Request, res: Response)
     data: null,
   });
 });
+
+// ==========================================
+// ACADEMY GAME REPORTS & VALIDATE CV CONTROLLERS (SCREENSHOTS)
+// ==========================================
+
+export const getAcademyGameReportsDashboard = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAcademyGameReportsDashboard(
+    user,
+    req.query,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy game reports dashboard fetched successfully',
+    data: result,
+  });
+});
+
+export const getAcademyValidateCvDashboard = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAcademyValidateCvDashboard(
+    user,
+    req.query,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy validate CV dashboard fetched successfully',
+    data: result,
+  });
+});
+
+export const notifyCoachForCvValidation = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.notifyCoachForCvValidation(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});

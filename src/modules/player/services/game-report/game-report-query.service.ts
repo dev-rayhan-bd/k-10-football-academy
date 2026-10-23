@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import QueryBuilder from '@/builder/QueryBuilder';
@@ -214,18 +215,30 @@ export class GameReportQueryService {
    * Get Specific Game Report Details for Side Drawer (Screenshot 2)
    */
   async getGameReportDetails(userIdOrPlayerId: string, reportId: string) {
-    const profile = await PlayerProfile.findOne({
-      $or: [{ _id: userIdOrPlayerId }, { userId: userIdOrPlayerId }],
-    });
+    let match: any = null;
+    let profile: any = null;
 
-    if (!profile) {
-      throw new AppError(404, 'Player profile not found');
+    if (reportId && Types.ObjectId.isValid(reportId)) {
+      match = await MatchRecord.findById(reportId).populate('playerId');
+      if (match && match.playerId) {
+        profile = match.playerId;
+      }
     }
 
-    const match = await MatchRecord.findOne({
-      _id: reportId,
-      playerId: profile._id,
-    });
+    if (!match || !profile) {
+      profile = await PlayerProfile.findOne({
+        $or: [{ _id: userIdOrPlayerId }, { userId: userIdOrPlayerId }],
+      });
+
+      if (!profile) {
+        throw new AppError(404, 'Player profile not found');
+      }
+
+      match = await MatchRecord.findOne({
+        _id: reportId,
+        playerId: profile._id,
+      });
+    }
 
     if (!match) {
       throw new AppError(404, 'Game report not found');

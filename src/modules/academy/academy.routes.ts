@@ -32,6 +32,7 @@ import {
   createAcademySuccessStoryZodSchema,
   updateAcademySuccessStoryZodSchema,
   updateSuccessStoryStatusZodSchema,
+  notifyCoachCvValidationZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -127,6 +128,9 @@ import {
   updateSuccessStory,
   updateSuccessStoryStatus,
   deleteSuccessStory,
+  getAcademyGameReportsDashboard,
+  getAcademyValidateCvDashboard,
+  notifyCoachForCvValidation,
 } from './academy.controller';
 
 import {
@@ -1007,6 +1011,63 @@ router.delete(
   '/:academyId/success-stories/:id',
   auth('ACADEMY', 'SUPER_ADMIN'),
   deleteSuccessStory,
+);
+
+// ==========================================
+// ACADEMY GAME REPORTS DASHBOARD (SCREENSHOT 1)
+// ==========================================
+router.get(
+  '/game-reports/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyGameReportsDashboard,
+);
+router.get(
+  '/:academyId/game-reports/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyGameReportsDashboard,
+);
+router.get(
+  '/game-reports',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyGameReportsDashboard,
+);
+router.get(
+  '/:academyId/game-reports',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyGameReportsDashboard,
+);
+
+// ==========================================
+// ACADEMY VALIDATE CV DASHBOARD & NOTIFY (SCREENSHOT 4 & 5)
+// ==========================================
+router.get(
+  '/validate-cv/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyValidateCvDashboard,
+);
+router.get(
+  '/:academyId/validate-cv/dashboard',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyValidateCvDashboard,
+);
+router.get('/validate-cv', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyValidateCvDashboard);
+router.get(
+  '/:academyId/validate-cv',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyValidateCvDashboard,
+);
+
+router.post(
+  '/validate-cv/notify-coach',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(notifyCoachCvValidationZodSchema),
+  notifyCoachForCvValidation,
+);
+router.post(
+  '/:academyId/validate-cv/notify-coach',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(notifyCoachCvValidationZodSchema),
+  notifyCoachForCvValidation,
 );
 
 router.get('/:id', getAcademyProfile);

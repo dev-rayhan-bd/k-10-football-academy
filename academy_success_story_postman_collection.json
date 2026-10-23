@@ -1,0 +1,261 @@
+{
+  "info": {
+    "_postman_id": "b81ee6c1-4b89-4fa9-b88a-215239ef1152",
+    "name": "K10 Football - Academy Success Story Module",
+    "description": "Enterprise APIs for Academy Success Story management: Add story (with photo upload & submit for approval), list stories (with status filters & counts), view details, update story, approve/reject status, and delete.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5005/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "storyId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get Success Stories Meta (Categories, Positions, Counts)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories/meta",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories", "meta"]
+        },
+        "description": "Fetches metadata dropdown options (categories, player positions, statuses) and real-time counts for ALL, APPROVED, PENDING, REJECTED."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Get Success Stories List (All / Search)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories?status=ALL&page=1&limit=10&searchTerm=",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories"],
+          "query": [
+            {
+              "key": "status",
+              "value": "ALL",
+              "description": "ALL | APPROVED | PENDING | REJECTED"
+            },
+            {
+              "key": "category",
+              "value": "",
+              "disabled": true
+            },
+            {
+              "key": "searchTerm",
+              "value": "",
+              "description": "Search by story title, player name, position, category, or content"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Lists academy success stories with pagination, status filter, and keyword search."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Get Success Stories List (Filter by Status: PENDING / APPROVED / REJECTED)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories?status=APPROVED&page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories"],
+          "query": [
+            {
+              "key": "status",
+              "value": "APPROVED",
+              "description": "APPROVED | PENDING | REJECTED"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Filter success stories by approval status (APPROVED, PENDING, REJECTED)."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Get Success Story By ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories/{{storyId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories", "{{storyId}}"]
+        },
+        "description": "Fetches a single success story details by its MongoDB ID."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Add Success Story (Submit for Approval - Form-Data)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "data",
+              "value": "{\n  \"storyTitle\": \"U14 Winger Signed by National Talent Centre\",\n  \"playerName\": \"Marcus Silva\",\n  \"position\": \"Forward\",\n  \"currentAcademy\": \"Elite Youth Academy\",\n  \"date\": \"2024-01-15\",\n  \"category\": \"Tournament Achievement\",\n  \"storyContent\": \"Marcus Silva has shown exceptional pace and dribbling skills throughout the tournament season, earning an official invitation and signing with the National Talent Centre.\"\n}",
+              "type": "text"
+            },
+            {
+              "key": "photo",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories"]
+        },
+        "description": "Creates a new success story with uploaded image and submits for approval (initial status: PENDING)."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Update Success Story (Form-Data)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "data",
+              "value": "{\n  \"storyTitle\": \"U14 Winger Signed by National Talent Centre - Official\",\n  \"position\": \"Left Winger\",\n  \"storyContent\": \"Updated story content with latest achievements.\"\n}",
+              "type": "text"
+            },
+            {
+              "key": "photo",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories/{{storyId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories", "{{storyId}}"]
+        },
+        "description": "Updates success story fields and/or uploads a new photo."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Approve / Reject Story Status (Super Admin / Admin)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"APPROVED\",\n  \"rejectionReason\": \"\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories/{{storyId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories", "{{storyId}}", "status"]
+        },
+        "description": "Updates approval status to APPROVED or REJECTED (with optional rejectionReason)."
+      },
+      "response": []
+    },
+    {
+      "name": "8. Delete Success Story",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/success-stories/{{storyId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "success-stories", "{{storyId}}"]
+        },
+        "description": "Soft-deletes the success story."
+      },
+      "response": []
+    }
+  ]
+}

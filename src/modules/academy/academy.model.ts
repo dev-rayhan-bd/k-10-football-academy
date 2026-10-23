@@ -12,6 +12,8 @@ import {
   IExtraEventDocument,
   IExtraEventParticipant,
   IAcademySponsorDocument,
+  IAcademyNewsDocument,
+  IAcademySuccessStoryDocument,
 } from './academy.interface';
 
 const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
@@ -545,4 +547,128 @@ AcademySponsorSchema.index({ academyId: 1, paymentStatus: 1 });
 export const AcademySponsor = model<IAcademySponsorDocument>(
   'AcademySponsor',
   AcademySponsorSchema,
+);
+
+// ==========================================
+// ACADEMY NEWS SCHEMA & MODEL (SCREENSHOTS)
+// ==========================================
+export const AcademyNewsSchema = new Schema<IAcademyNewsDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    articleTitle: { type: String, required: true, trim: true },
+    category: { type: String, default: 'General News', index: true },
+    author: { type: String, default: 'Admin' },
+    publishDate: { type: Date, default: Date.now },
+    formattedPublishDate: { type: String },
+    fullArticle: { type: String, default: '' },
+    excerpt: { type: String },
+    featuredImage: { type: String },
+    tags: [{ type: String }],
+    priority: {
+      type: String,
+      enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
+      default: 'MEDIUM',
+    },
+    visibility: {
+      type: String,
+      enum: ['PUBLIC', 'PRIVATE'],
+      default: 'PUBLIC',
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ['PUBLISHED', 'DRAFT', 'BIN'],
+      default: 'PUBLISHED',
+      index: true,
+    },
+    views: { type: Number, default: 0 },
+    sendPushNotification: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+
+AcademyNewsSchema.pre('save', function (next) {
+  // Format publish date (e.g. "JAN 22, 2026")
+  if (!this.formattedPublishDate && this.publishDate) {
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    const d = new Date(this.publishDate);
+    this.formattedPublishDate = `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  }
+
+  // Auto-generate excerpt if not provided
+  if (!this.excerpt && this.fullArticle) {
+    const plain = this.fullArticle.replace(/<[^>]*>?/gm, '').trim();
+    this.excerpt = plain.length > 120 ? `${plain.substring(0, 117)}...` : plain;
+  }
+
+  next();
+});
+
+AcademyNewsSchema.index({ academyId: 1, status: 1 });
+AcademyNewsSchema.index({ academyId: 1, visibility: 1 });
+AcademyNewsSchema.index({ academyId: 1, isDeleted: 1 });
+
+export const AcademyNews = model<IAcademyNewsDocument>('AcademyNews', AcademyNewsSchema);
+
+// ==========================================
+// ACADEMY SUCCESS STORY MODEL (SCREENSHOTS)
+// ==========================================
+const AcademySuccessStorySchema = new Schema<IAcademySuccessStoryDocument>(
+  {
+    academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
+    storyTitle: { type: String, required: true, trim: true },
+    playerName: { type: String, trim: true },
+    position: { type: String, trim: true },
+    currentAcademy: { type: String, trim: true },
+    date: { type: Date, required: true, default: Date.now },
+    formattedDate: { type: String },
+    category: { type: String, required: true, trim: true },
+    photo: { type: String, default: '' },
+    storyContent: { type: String, default: '' },
+    status: {
+      type: String,
+      enum: ['PENDING', 'APPROVED', 'REJECTED'],
+      default: 'PENDING',
+      index: true,
+    },
+    rejectionReason: { type: String },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+
+AcademySuccessStorySchema.pre('save', function (next) {
+  if (this.date) {
+    try {
+      const d = new Date(this.date);
+      this.formattedDate = d.toISOString().split('T')[0];
+    } catch {
+      // Ignore date formatting error
+    }
+  }
+  next();
+});
+
+AcademySuccessStorySchema.index({ academyId: 1, status: 1 });
+AcademySuccessStorySchema.index({ academyId: 1, isDeleted: 1 });
+
+export const AcademySuccessStory = model<IAcademySuccessStoryDocument>(
+  'AcademySuccessStory',
+  AcademySuccessStorySchema,
 );

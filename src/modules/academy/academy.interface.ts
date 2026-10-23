@@ -345,3 +345,60 @@ export interface IAcademySponsor {
 }
 
 export interface IAcademySponsorDocument extends IAcademySponsor, Document {}
+
+// ==========================================
+// ACADEMY NEWS INTERFACES (SCREENSHOTS)
+// ==========================================
+export type NewsStatus = 'PUBLISHED' | 'DRAFT' | 'BIN';
+export type NewsVisibility = 'PUBLIC' | 'PRIVATE';
+export type NewsPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+export interface IAcademyNews {
+  academyId: Types.ObjectId;
+  articleTitle: string;
+  category: string;
+  author: string;
+  publishDate: Date;
+  formattedPublishDate?: string;
+  fullArticle: string;
+  excerpt?: string;
+  featuredImage?: string;
+  tags?: string[];
+  priority: NewsPriority | string;
+  visibility: NewsVisibility | string;
+  status: NewsStatus | string;
+  views: number;
+  sendPushNotification: boolean;
+  isDeleted: boolean;
+  deletedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IAcademyNewsDocument extends IAcademyNews, Document {}
+
+// ==========================================
+// ACADEMY SUCCESS STORY INTERFACES (SCREENSHOTS)
+// ==========================================
+export type SuccessStoryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface IAcademySuccessStory {
+  academyId: Types.ObjectId;
+  storyTitle: string;
+  playerName?: string;
+  position?: string;
+  currentAcademy?: string;
+  date: Date;
+  formattedDate?: string;
+  category: string;
+  photo?: string;
+  storyContent?: string;
+  status: SuccessStoryStatus | string;
+  rejectionReason?: string;
+  isDeleted: boolean;
+  deletedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IAcademySuccessStoryDocument extends IAcademySuccessStory, Document {}

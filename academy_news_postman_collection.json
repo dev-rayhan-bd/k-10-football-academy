@@ -1,0 +1,296 @@
+{
+  "info": {
+    "_postman_id": "a90df5e2-2a78-4eb8-b99b-314128df0041",
+    "name": "K10 Football - Academy News Module",
+    "description": "Enterprise APIs for Academy News management: Draft save (with single field), Publish Now (with strict validation), Notifications toggle for academy users, Tabs (ALL, PUBLISHED, PRIVATE, DRAFT, BIN), Visibility toggle, Bin soft-delete/restore, and Form-Data image upload.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5005/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "newsId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Metadata & Dynamic Tab Counts",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news/meta",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news", "meta"]
+        },
+        "description": "Fetches metadata dropdown options (categories, priorities, visibilities, statuses) and real-time tab counts for ALL, PUBLISHED, PRIVATE, DRAFT, BIN."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Get News List (All News / Filtered by Tabs)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news?status=PUBLISHED&page=1&limit=10&searchTerm=",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news"],
+          "query": [
+            {
+              "key": "status",
+              "value": "PUBLISHED",
+              "description": "ALL | PUBLISHED | PRIVATE | DRAFT | BIN"
+            },
+            {
+              "key": "category",
+              "value": "",
+              "disabled": true
+            },
+            {
+              "key": "priority",
+              "value": "",
+              "disabled": true
+            },
+            {
+              "key": "searchTerm",
+              "value": ""
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Lists academy news articles with pagination, tab filtering, category/priority filter, and search by title, content, or tags."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Get News Article By ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news/{{newsId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news", "{{newsId}}"]
+        },
+        "description": "Fetches news article details and auto-increments the view count."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Save Draft (Partial / Single Field Support - Form-Data)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "data",
+              "value": "{\n  \"articleTitle\": \"Upcoming Summer Championship 2026\",\n  \"status\": \"DRAFT\"\n}",
+              "type": "text"
+            },
+            {
+              "key": "featuredImage",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news"]
+        },
+        "description": "Saves article as DRAFT. Supports single input field fillup without requiring other fields."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Publish News Article (Full Validation + Notification Toggle - Form-Data)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "data",
+              "value": "{\n  \"articleTitle\": \"Santos FC Academy Wins Regional Championship\",\n  \"category\": \"Tournament Updates\",\n  \"author\": \"Admin\",\n  \"publishDate\": \"2026-01-22\",\n  \"fullArticle\": \"Our U-17 team dominated the regional finals with a stunning 4-1 victory. Spectacular goals and team spirit earned our academy the coveted championship trophy.\",\n  \"priority\": \"HIGH\",\n  \"tags\": [\"U-17\", \"Championship\", \"Victory\"],\n  \"visibility\": \"PUBLIC\",\n  \"status\": \"PUBLISHED\",\n  \"sendPushNotification\": true\n}",
+              "type": "text"
+            },
+            {
+              "key": "featuredImage",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news"]
+        },
+        "description": "Publishes news article with full field validation. When sendPushNotification is true, pushes notification to all academy members (players, coaches, parents)."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Update News Article (Form-Data)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "data",
+              "value": "{\n  \"articleTitle\": \"Updated: Santos FC Academy Wins Regional Championship\",\n  \"priority\": \"URGENT\",\n  \"sendPushNotification\": false\n}",
+              "type": "text"
+            },
+            {
+              "key": "featuredImage",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news/{{newsId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news", "{{newsId}}"]
+        },
+        "description": "Updates news article details and/or changes featured image."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Toggle News Visibility (Public <-> Private)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news/{{newsId}}/toggle-visibility",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news", "{{newsId}}", "toggle-visibility"]
+        },
+        "description": "Toggles article visibility between PUBLIC and PRIVATE."
+      },
+      "response": []
+    },
+    {
+      "name": "8. Move News to Bin (Soft Delete)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news/{{newsId}}/bin",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news", "{{newsId}}", "bin"]
+        },
+        "description": "Soft-deletes article and moves it to BIN tab."
+      },
+      "response": []
+    },
+    {
+      "name": "9. Restore News from Bin",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news/{{newsId}}/restore",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news", "{{newsId}}", "restore"]
+        },
+        "description": "Restores an article from the BIN back to DRAFT."
+      },
+      "response": []
+    },
+    {
+      "name": "10. Delete News Permanently",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_ACADEMY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/academies/academy-news/{{newsId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "academy-news", "{{newsId}}"]
+        },
+        "description": "Permanently deletes the article from the database."
+      },
+      "response": []
+    }
+  ]
+}

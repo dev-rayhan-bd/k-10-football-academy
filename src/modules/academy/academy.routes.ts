@@ -27,6 +27,11 @@ import {
   registerExtraEventParticipantZodSchema,
   createAcademySponsorZodSchema,
   updateAcademySponsorZodSchema,
+  createAcademyNewsZodSchema,
+  updateAcademyNewsZodSchema,
+  createAcademySuccessStoryZodSchema,
+  updateAcademySuccessStoryZodSchema,
+  updateSuccessStoryStatusZodSchema,
 } from './academy.validation';
 import {
   createAcademyProfile,
@@ -106,6 +111,22 @@ import {
   createSponsor,
   updateSponsor,
   deleteSponsor,
+  getAcademyNewsMeta,
+  getAcademyNews,
+  getAcademyNewsById,
+  createAcademyNews,
+  updateAcademyNews,
+  toggleNewsVisibility,
+  moveNewsToBin,
+  restoreNewsFromBin,
+  deleteNewsPermanently,
+  getSuccessStoriesMeta,
+  getSuccessStories,
+  getSuccessStoryById,
+  createSuccessStory,
+  updateSuccessStory,
+  updateSuccessStoryStatus,
+  deleteSuccessStory,
 } from './academy.controller';
 
 import {
@@ -807,6 +828,186 @@ router.patch(
 
 router.delete('/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSponsor);
 router.delete('/:academyId/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSponsor);
+
+// ==========================================
+// ACADEMY NEWS ROUTES (SCREENSHOTS)
+// ==========================================
+router.get(
+  '/academy-news/meta',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getAcademyNewsMeta,
+);
+router.get(
+  '/:academyId/academy-news/meta',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getAcademyNewsMeta,
+);
+
+router.get(
+  '/academy-news',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getAcademyNews,
+);
+router.get(
+  '/:academyId/academy-news',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getAcademyNews,
+);
+
+router.post(
+  '/academy-news',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(createAcademyNewsZodSchema),
+  createAcademyNews,
+);
+router.post(
+  '/:academyId/academy-news',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(createAcademyNewsZodSchema),
+  createAcademyNews,
+);
+
+router.get(
+  '/academy-news/:id',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getAcademyNewsById,
+);
+router.get(
+  '/:academyId/academy-news/:id',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getAcademyNewsById,
+);
+
+router.patch(
+  '/academy-news/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(updateAcademyNewsZodSchema),
+  updateAcademyNews,
+);
+router.patch(
+  '/:academyId/academy-news/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(updateAcademyNewsZodSchema),
+  updateAcademyNews,
+);
+
+router.patch(
+  '/academy-news/:id/toggle-visibility',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  toggleNewsVisibility,
+);
+router.patch(
+  '/:academyId/academy-news/:id/toggle-visibility',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  toggleNewsVisibility,
+);
+
+router.patch('/academy-news/:id/bin', auth('ACADEMY', 'SUPER_ADMIN'), moveNewsToBin);
+router.patch('/:academyId/academy-news/:id/bin', auth('ACADEMY', 'SUPER_ADMIN'), moveNewsToBin);
+
+router.patch('/academy-news/:id/restore', auth('ACADEMY', 'SUPER_ADMIN'), restoreNewsFromBin);
+router.patch(
+  '/:academyId/academy-news/:id/restore',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  restoreNewsFromBin,
+);
+
+router.delete('/academy-news/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteNewsPermanently);
+router.delete(
+  '/:academyId/academy-news/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  deleteNewsPermanently,
+);
+
+// ==========================================
+// ACADEMY SUCCESS STORY ROUTES (SCREENSHOTS)
+// ==========================================
+router.get(
+  '/success-stories/meta',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getSuccessStoriesMeta,
+);
+router.get(
+  '/:academyId/success-stories/meta',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getSuccessStoriesMeta,
+);
+
+router.get(
+  '/success-stories',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getSuccessStories,
+);
+router.get(
+  '/:academyId/success-stories',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getSuccessStories,
+);
+
+router.post(
+  '/success-stories',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(createAcademySuccessStoryZodSchema),
+  createSuccessStory,
+);
+router.post(
+  '/:academyId/success-stories',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(createAcademySuccessStoryZodSchema),
+  createSuccessStory,
+);
+
+router.get(
+  '/success-stories/:id',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getSuccessStoryById,
+);
+router.get(
+  '/:academyId/success-stories/:id',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
+  getSuccessStoryById,
+);
+
+router.patch(
+  '/success-stories/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(updateAcademySuccessStoryZodSchema),
+  updateSuccessStory,
+);
+router.patch(
+  '/:academyId/success-stories/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  validateRequest(updateAcademySuccessStoryZodSchema),
+  updateSuccessStory,
+);
+
+router.patch(
+  '/success-stories/:id/status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateSuccessStoryStatusZodSchema),
+  updateSuccessStoryStatus,
+);
+router.patch(
+  '/:academyId/success-stories/:id/status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateSuccessStoryStatusZodSchema),
+  updateSuccessStoryStatus,
+);
+
+router.delete('/success-stories/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSuccessStory);
+router.delete(
+  '/:academyId/success-stories/:id',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  deleteSuccessStory,
+);
 
 router.get('/:id', getAcademyProfile);
 

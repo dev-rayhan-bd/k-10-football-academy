@@ -1052,3 +1052,356 @@ export const deleteSponsor = catchAsync(async (req: Request, res: Response) => {
     data: null,
   });
 });
+
+// ==========================================
+// ACADEMY NEWS CONTROLLERS (SCREENSHOTS)
+// ==========================================
+
+export const getAcademyNewsMeta = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAcademyNewsMeta(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy news metadata & tab counts fetched successfully',
+    data: result,
+  });
+});
+
+export const getAcademyNews = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAcademyNews(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy news articles fetched successfully',
+    data: result,
+  });
+});
+
+export const getAcademyNewsById = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAcademyNewsById(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy news article details fetched successfully',
+    data: result,
+  });
+});
+
+export const createAcademyNews = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore JSON parse error if data is already processed
+    }
+  }
+
+  // 2. Handle featured image upload from form-data
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const imgFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'featuredImage' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'banner' ||
+          f.fieldname === 'file',
+      ) || allFiles[0];
+
+    if (imgFile) {
+      req.body.featuredImage = await uploadToStorage(imgFile, 'academy_news');
+    }
+  }
+
+  const result = await academyService.createAcademyNews(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.article,
+  });
+});
+
+export const updateAcademyNews = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore JSON parse error if data is already processed
+    }
+  }
+
+  // 2. Handle featured image update if file is uploaded
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const imgFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'featuredImage' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'banner' ||
+          f.fieldname === 'file',
+      ) || allFiles[0];
+
+    if (imgFile) {
+      req.body.featuredImage = await uploadToStorage(imgFile, 'academy_news');
+    }
+  }
+
+  const result = await academyService.updateAcademyNews(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.article,
+  });
+});
+
+export const toggleNewsVisibility = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.toggleNewsVisibility(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const moveNewsToBin = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.moveNewsToBin(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+export const restoreNewsFromBin = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.restoreNewsFromBin(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.article,
+  });
+});
+
+export const deleteNewsPermanently = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.deleteNewsPermanently(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+// ==========================================
+// ACADEMY SUCCESS STORY CONTROLLERS (SCREENSHOTS)
+// ==========================================
+
+export const getSuccessStoriesMeta = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getSuccessStoriesMeta(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Success stories metadata fetched successfully',
+    data: result,
+  });
+});
+
+export const getSuccessStories = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getSuccessStories(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Success stories fetched successfully',
+    data: result,
+  });
+});
+
+export const getSuccessStoryById = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getSuccessStoryById(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Success story details fetched successfully',
+    data: result,
+  });
+});
+
+export const createSuccessStory = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore JSON parse error if data is already processed
+    }
+  }
+
+  // 2. Handle photo upload from form-data
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const imgFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'photo' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'file' ||
+          f.fieldname === 'uploadPhoto',
+      ) || allFiles[0];
+
+    if (imgFile) {
+      req.body.photo = await uploadToStorage(imgFile, 'academy_success_stories');
+    }
+  }
+
+  const result = await academyService.createSuccessStory(user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: result.message,
+    data: result.story,
+  });
+});
+
+export const updateSuccessStory = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore JSON parse error if data is already processed
+    }
+  }
+
+  // 2. Handle photo upload from form-data
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const imgFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'photo' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'file' ||
+          f.fieldname === 'uploadPhoto',
+      ) || allFiles[0];
+
+    if (imgFile) {
+      req.body.photo = await uploadToStorage(imgFile, 'academy_success_stories');
+    }
+  }
+
+  const result = await academyService.updateSuccessStory(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.story,
+  });
+});
+
+export const updateSuccessStoryStatus = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { status, rejectionReason } = req.body;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.updateSuccessStoryStatus(
+    id,
+    user,
+    status,
+    rejectionReason,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.story,
+  });
+});
+
+export const deleteSuccessStory = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.deleteSuccessStory(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});

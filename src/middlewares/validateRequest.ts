@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AnyZodObject } from 'zod';
+import { AnyZodObject, ZodTypeAny } from 'zod';
 import { catchAsync } from '@/utils/catchAsync';
 import { AppError } from '@/utils/AppError';
 import { StatusCodes } from 'http-status-codes';
 
-export const validateRequest = (schema: AnyZodObject) => {
+export const validateRequest = (schema: AnyZodObject | ZodTypeAny) => {
   return catchAsync(async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (req.body && req.body.data) {
       if (typeof req.body.data === 'string') {

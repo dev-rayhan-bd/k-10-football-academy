@@ -492,3 +492,146 @@ export const updateAcademySponsorZodSchema = z.object({
     })
     .passthrough(),
 });
+
+// ==========================================
+// ACADEMY NEWS VALIDATIONS (SCREENSHOTS)
+// ==========================================
+export const createAcademyNewsZodSchema = z
+  .object({
+    body: z
+      .object({
+        articleTitle: z.string().optional(),
+        category: z.string().optional(),
+        author: z.string().optional().default('Admin'),
+        publishDate: z.string().or(z.date()).optional(),
+        fullArticle: z.string().optional(),
+        excerpt: z.string().optional(),
+        featuredImage: z.string().optional(),
+        tags: z
+          .array(z.string())
+          .or(
+            z.string().transform((val) =>
+              val
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean),
+            ),
+          )
+          .optional(),
+        priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional().default('MEDIUM'),
+        visibility: z.enum(['PUBLIC', 'PRIVATE']).optional().default('PUBLIC'),
+        status: z.enum(['PUBLISHED', 'DRAFT', 'BIN']).optional().default('PUBLISHED'),
+        sendPushNotification: z.boolean().optional().default(false),
+      })
+      .passthrough(),
+  })
+  .superRefine((data, ctx) => {
+    const b = data.body;
+    const isDraft = b.status === 'DRAFT';
+
+    if (isDraft) {
+      // Draft mode: allow saving even with just a single field / draft title
+      if (!b.articleTitle || b.articleTitle.trim().length === 0) {
+        b.articleTitle = 'Untitled Draft';
+      }
+    } else {
+      // Published mode: full strict validation applies
+      if (!b.articleTitle || b.articleTitle.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Article title is required (minimum 2 characters)',
+          path: ['body', 'articleTitle'],
+        });
+      }
+      if (!b.category || b.category.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Category is required',
+          path: ['body', 'category'],
+        });
+      }
+      if (!b.fullArticle || b.fullArticle.trim().length < 5) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Full article content is required (minimum 5 characters)',
+          path: ['body', 'fullArticle'],
+        });
+      }
+    }
+  });
+
+export const updateAcademyNewsZodSchema = z.object({
+  body: z
+    .object({
+      articleTitle: z.string().min(1).optional(),
+      category: z.string().optional(),
+      author: z.string().optional(),
+      publishDate: z.string().or(z.date()).optional(),
+      fullArticle: z.string().optional(),
+      excerpt: z.string().optional(),
+      featuredImage: z.string().optional(),
+      tags: z
+        .array(z.string())
+        .or(
+          z.string().transform((val) =>
+            val
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean),
+          ),
+        )
+        .optional(),
+      priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+      visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+      status: z.enum(['PUBLISHED', 'DRAFT', 'BIN']).optional(),
+      sendPushNotification: z.boolean().optional(),
+    })
+    .passthrough(),
+});
+
+// ==========================================
+// ACADEMY SUCCESS STORY VALIDATIONS (SCREENSHOTS)
+// ==========================================
+export const createAcademySuccessStoryZodSchema = z.object({
+  body: z
+    .object({
+      storyTitle: z.string({ required_error: 'Story title is required' }).min(2),
+      playerName: z.string().optional(),
+      position: z.string().optional(),
+      currentAcademy: z.string().optional(),
+      date: z.string().or(z.date()).optional(),
+      category: z.string({ required_error: 'Category is required' }).min(2),
+      photo: z.string().optional(),
+      storyContent: z.string().optional(),
+      status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional().default('PENDING'),
+    })
+    .passthrough(),
+});
+
+export const updateAcademySuccessStoryZodSchema = z.object({
+  body: z
+    .object({
+      storyTitle: z.string().min(2).optional(),
+      playerName: z.string().optional(),
+      position: z.string().optional(),
+      currentAcademy: z.string().optional(),
+      date: z.string().or(z.date()).optional(),
+      category: z.string().optional(),
+      photo: z.string().optional(),
+      storyContent: z.string().optional(),
+      status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+      rejectionReason: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const updateSuccessStoryStatusZodSchema = z.object({
+  body: z
+    .object({
+      status: z.enum(['PENDING', 'APPROVED', 'REJECTED'], {
+        required_error: 'Status is required (PENDING, APPROVED, REJECTED)',
+      }),
+      rejectionReason: z.string().optional(),
+    })
+    .passthrough(),
+});

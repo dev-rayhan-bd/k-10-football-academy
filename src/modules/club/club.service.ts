@@ -922,8 +922,18 @@ export class ClubService {
     }).select('targetPlayerId');
     const likedSet = new Set(likedFavs.map((f) => f.targetPlayerId?.toString()).filter(Boolean));
 
-    // 2. Query Players for Top Players Engaged Table
-    const playerQuery: any = {};
+    const engagedPlayerIdList = Array.from(
+      new Set([
+        ...Array.from(viewsMap.keys()),
+        ...Array.from(likedSet),
+        ...Array.from(sharesMap.keys()),
+      ]),
+    ).filter((id): id is string => typeof id === 'string' && Types.ObjectId.isValid(id));
+
+    // 2. Query Players for Top Players Engaged Table (Only players this club engaged with)
+    const playerQuery: any = {
+      _id: { $in: engagedPlayerIdList },
+    };
     if (position && position !== 'ALL' && position !== 'ALL POSITIONS') {
       playerQuery.position = new RegExp(position, 'i');
     }
@@ -940,12 +950,15 @@ export class ClubService {
       ];
     }
 
-    const rawPlayers = await PlayerProfile.find(playerQuery)
-      .select(
-        '_id fullName avatar profileImage position currentClub academy country dateOfBirth age overallRating cvTier profileViews totalLikes',
-      )
-      .sort({ overallRating: -1, createdAt: -1 })
-      .lean();
+    const rawPlayers =
+      engagedPlayerIdList.length > 0
+        ? await PlayerProfile.find(playerQuery)
+            .select(
+              '_id fullName avatar profileImage position currentClub academy country dateOfBirth age overallRating cvTier profileViews totalLikes',
+            )
+            .sort({ overallRating: -1, createdAt: -1 })
+            .lean()
+        : [];
 
     let processedPlayers = rawPlayers.map((p: any) => {
       let age = typeof p.age === 'number' ? p.age : null;
@@ -959,8 +972,8 @@ export class ClubService {
         p.cvTier || (rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE');
       const pid = p._id.toString();
 
-      const views = viewsMap.get(pid) || p.profileViews || 0;
-      const likes = likedSet.has(pid) ? 1 : p.totalLikes || 0;
+      const views = viewsMap.get(pid) || 0;
+      const likes = likedSet.has(pid) ? 1 : 0;
       const shares = sharesMap.get(pid) || 0;
 
       return {

@@ -21,6 +21,15 @@ export interface IAcademyProfile {
   trainingPhilosophy?: string;
   currentPlan?: 'FREE' | 'BASIC' | 'PRO' | 'PREMIUM';
   maxTeams?: number;
+  contactPhone?: string;
+  contactEmail?: string;
+  nationality?: string;
+  likedPlayerIds?: Types.ObjectId[];
+  sharedPlayerProfiles?: {
+    playerId: Types.ObjectId;
+    sharedAt: Date;
+    shareCount: number;
+  }[];
   createdAt?: Date;
   updatedAt?: Date;
 }

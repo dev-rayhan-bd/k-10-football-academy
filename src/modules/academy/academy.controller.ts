@@ -36,6 +36,99 @@ export const getMyAcademyProfile = catchAsync(async (req: Request, res: Response
   });
 });
 
+export const updateMyAcademyProfile = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore parse error
+    }
+  }
+
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  for (const f of allFiles) {
+    if (
+      f.fieldname === 'coverPhoto' ||
+      f.fieldname === 'coverImage' ||
+      f.fieldname === 'cover' ||
+      f.fieldname === 'uploadCoverPhoto'
+    ) {
+      req.body.coverPhoto = await uploadToStorage(f, 'academy_profiles');
+    } else if (
+      f.fieldname === 'logo' ||
+      f.fieldname === 'uploadLogo' ||
+      f.fieldname === 'avatar' ||
+      f.fieldname === 'badge'
+    ) {
+      req.body.logo = await uploadToStorage(f, 'academy_profiles');
+    }
+  }
+
+  const result = await academyService.updateMyProfile(userId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy profile updated successfully',
+    data: result,
+  });
+});
+
+export const updateAcademyProfileById = catchAsync(async (req: Request, res: Response) => {
+  const targetId = req.params.id || req.params.academyId;
+  const userId = (req as any).user?.userId;
+
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore
+    }
+  }
+
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  for (const f of allFiles) {
+    if (
+      f.fieldname === 'coverPhoto' ||
+      f.fieldname === 'coverImage' ||
+      f.fieldname === 'cover' ||
+      f.fieldname === 'uploadCoverPhoto'
+    ) {
+      req.body.coverPhoto = await uploadToStorage(f, 'academy_profiles');
+    } else if (
+      f.fieldname === 'logo' ||
+      f.fieldname === 'uploadLogo' ||
+      f.fieldname === 'avatar' ||
+      f.fieldname === 'badge'
+    ) {
+      req.body.logo = await uploadToStorage(f, 'academy_profiles');
+    }
+  }
+
+  const result = await academyService.updateProfileById(targetId, req.body, userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy profile updated successfully',
+    data: result,
+  });
+});
+
 export const getAllAcademyProfiles = catchAsync(async (req: Request, res: Response) => {
   const { meta, result } = await academyService.getAllProfiles(req.query);
   sendResponse(res, {
@@ -1552,6 +1645,79 @@ export const getAcademyManagementDashboard = catchAsync(async (req: Request, res
     statusCode: 200,
     success: true,
     message: 'Academy management dashboard fetched successfully',
+    data: result,
+  });
+});
+
+// ==========================================
+// CVS LIBRARY & PERFORMANCE ANALYTICS
+// ==========================================
+
+export const getCvsLibrary = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getCvsLibrary(user, req.query, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'CVs library fetched successfully',
+    data: result,
+  });
+});
+
+export const toggleLikePlayerCv = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const { playerId } = req.params;
+  const result = await academyService.toggleLikePlayerCv(user, playerId, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const sharePlayerCv = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const { playerId } = req.params;
+  const result = await academyService.sharePlayerCv(user, playerId, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getAcademyPerformanceAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const query = { ...req.query };
+  if (req.params.year) {
+    query.year = req.params.year;
+  }
+  const result = await academyService.getAcademyPerformanceAnalytics(
+    user,
+    query,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy performance analytics fetched successfully',
+    data: result,
+  });
+});
+
+export const getPublicPlayerCv = catchAsync(async (req: Request, res: Response) => {
+  const { playerId } = req.params;
+  const result = await academyService.getPublicPlayerCv(playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Public player CV fetched successfully',
     data: result,
   });
 });

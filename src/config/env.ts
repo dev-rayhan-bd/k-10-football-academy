@@ -36,6 +36,8 @@ const envSchema = z.object({
   STRIPE_SUCCESS_URL: z.string().default('http://localhost:3000/payment/success'),
   STRIPE_CANCEL_URL: z.string().default('http://localhost:3000/payment/cancel'),
   CLIENT_URL: z.string().optional(),
+  PUBLIC_SHARE_URL: z.string().optional(),
+  PUBLIC_API_URL: z.string().optional(),
 });
 
 if (!process.env.SMTP_PASS && process.env.APP_PASSWARD) {

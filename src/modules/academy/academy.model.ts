@@ -25,6 +25,9 @@ const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
     country: { type: String, default: 'Bangladesh' },
     city: { type: String, default: 'Dhaka' },
     location: { type: String },
+    nationality: { type: String },
+    contactPhone: { type: String },
+    contactEmail: { type: String },
     registrationId: { type: String },
     estimatedAcademySize: { type: String },
     logo: { type: String },
@@ -38,6 +41,14 @@ const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
       default: 'FREE',
     },
     maxTeams: { type: Number, default: 1 },
+    likedPlayerIds: [{ type: Schema.Types.ObjectId, ref: 'PlayerProfile' }],
+    sharedPlayerProfiles: [
+      {
+        playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile' },
+        sharedAt: { type: Date, default: Date.now },
+        shareCount: { type: Number, default: 1 },
+      },
+    ],
   },
   { timestamps: true },
 );

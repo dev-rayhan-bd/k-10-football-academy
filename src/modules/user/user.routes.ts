@@ -5,6 +5,10 @@ import { validateRequest } from '@/middlewares/validateRequest';
 import { auth } from '@/middlewares/auth.middleware';
 import { upload } from '@/middlewares/multer';
 import { authRateLimiter, searchRateLimiter } from '@/config/rateLimit.config';
+import {
+  getNotificationSettings,
+  updateNotificationSettings,
+} from '@/modules/notification/notification.controller';
 
 const router = Router();
 
@@ -82,6 +86,11 @@ router.patch(
   validateRequest(UserValidation.updateProfileZodSchema),
   userController.updateProfile,
 );
+
+router.get('/notification-settings', auth(), getNotificationSettings);
+router.patch('/notification-settings', auth(), updateNotificationSettings);
+router.get('/me/notification-settings', auth(), getNotificationSettings);
+router.patch('/me/notification-settings', auth(), updateNotificationSettings);
 
 // Resource-Intensive Search/Query Route (Protected with Search Rate Limiter)
 router.get('/search', auth('ADMIN', 'SUPER_ADMIN'), searchRateLimiter, userController.getAll);

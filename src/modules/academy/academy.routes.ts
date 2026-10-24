@@ -38,6 +38,8 @@ import {
   createAcademyProfile,
   getAcademyProfile,
   getMyAcademyProfile,
+  updateMyAcademyProfile,
+  updateAcademyProfileById,
   getAllAcademyProfiles,
   getCoachAndPlayersDashboard,
   getAvailableMembers,
@@ -137,6 +139,11 @@ import {
   getAcademyAnalyticsReport,
   exportAcademyAnalyticsReport,
   getAcademyManagementDashboard,
+  getCvsLibrary,
+  toggleLikePlayerCv,
+  sharePlayerCv,
+  getAcademyPerformanceAnalytics,
+  getPublicPlayerCv,
 } from './academy.controller';
 
 import {
@@ -170,6 +177,41 @@ router.post(
 );
 router.get('/', getAllAcademyProfiles);
 router.get('/my-profile', auth('ACADEMY', 'SUPER_ADMIN'), getMyAcademyProfile);
+router.patch(
+  '/my-profile',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyAcademyProfile,
+);
+router.put(
+  '/my-profile',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyAcademyProfile,
+);
+
+router.get('/profile', auth('ACADEMY', 'SUPER_ADMIN'), getMyAcademyProfile);
+router.patch(
+  '/profile',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyAcademyProfile,
+);
+router.put('/profile', auth('ACADEMY', 'SUPER_ADMIN'), upload.any() as any, updateMyAcademyProfile);
+
+router.get('/:academyId/profile', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyProfile);
+router.patch(
+  '/:academyId/profile',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateAcademyProfileById,
+);
+router.put(
+  '/:academyId/profile',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateAcademyProfileById,
+);
 
 // ==========================================
 // 4-MONTH PLAYER EVALUATION & REMINDER FLOW
@@ -1236,7 +1278,66 @@ router.get(
   getAcademyManagementDashboard,
 );
 
+// ==========================================
+// CVS LIBRARY (SCREENSHOT 1)
+// ==========================================
+router.get('/cvs-library', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getCvsLibrary);
+router.post('/cvs-library/:playerId/like', auth('ACADEMY', 'SUPER_ADMIN'), toggleLikePlayerCv);
+router.post('/cvs-library/:playerId/share', auth('ACADEMY', 'SUPER_ADMIN'), sharePlayerCv);
+router.get('/:academyId/cvs-library', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getCvsLibrary);
+router.post(
+  '/:academyId/cvs-library/:playerId/like',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  toggleLikePlayerCv,
+);
+router.post(
+  '/:academyId/cvs-library/:playerId/share',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  sharePlayerCv,
+);
+
+// Public Player CV View (NO AUTH REQUIRED)
+router.get('/public/players/:playerId/cv', getPublicPlayerCv);
+router.get('/players/share/:playerId', getPublicPlayerCv);
+router.get('/public-cv/:playerId', getPublicPlayerCv);
+
+// ==========================================
+// PERFORMANCE ANALYTICS (SCREENSHOTS 2, 3, 4)
+// ==========================================
+router.get(
+  '/analytics/performance',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPerformanceAnalytics,
+);
+router.get(
+  '/analytics/performance/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPerformanceAnalytics,
+);
+router.get(
+  '/performance-analytics',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPerformanceAnalytics,
+);
+router.get(
+  '/performance-analytics/:year',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPerformanceAnalytics,
+);
+router.get(
+  '/:academyId/analytics/performance',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPerformanceAnalytics,
+);
+router.get(
+  '/:academyId/performance-analytics',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAcademyPerformanceAnalytics,
+);
+
 router.get('/:id', getAcademyProfile);
+router.patch('/:id', auth('ACADEMY', 'SUPER_ADMIN'), upload.any() as any, updateAcademyProfileById);
+router.put('/:id', auth('ACADEMY', 'SUPER_ADMIN'), upload.any() as any, updateAcademyProfileById);
 
 router.post(
   '/:academyId/reports',

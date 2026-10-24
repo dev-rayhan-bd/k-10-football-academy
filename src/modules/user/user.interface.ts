@@ -64,8 +64,21 @@ export interface IUser {
   parentProfileId?: string;
   contactPhone?: string;
   address?: string;
+  notificationSettings?: INotificationSettings;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface INotificationSettings {
+  newVideoLikes?: boolean;
+  profileViews?: boolean;
+  interestAlerts?: boolean;
+  marketingEmails?: boolean;
+  newCvAlerts?: boolean;
+  profileShareAlerts?: boolean;
+  newPlayers?: boolean;
+  profileUpdates?: boolean;
+  sharedWithYou?: boolean;
 }
 
 export interface IUserDocument extends IUser, Document {

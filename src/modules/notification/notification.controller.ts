@@ -46,3 +46,25 @@ export const markAllNotificationsRead = catchAsync(async (req: Request, res: Res
     data: result,
   });
 });
+
+export const getNotificationSettings = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId || (req.user as any)?._id;
+  const result = await notificationService.getNotificationSettings(userId);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Notification settings retrieved successfully',
+    data: result,
+  });
+});
+
+export const updateNotificationSettings = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId || (req.user as any)?._id;
+  const result = await notificationService.updateNotificationSettings(userId, req.body);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Notification settings updated successfully',
+    data: result,
+  });
+});

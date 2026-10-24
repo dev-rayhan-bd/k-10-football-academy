@@ -93,6 +93,17 @@ const userSchema = new Schema<IUserDocument>(
     parentProfileId: { type: Schema.Types.ObjectId, ref: 'ParentProfile' },
     contactPhone: { type: String },
     address: { type: String },
+    notificationSettings: {
+      newVideoLikes: { type: Boolean, default: true },
+      profileViews: { type: Boolean, default: true },
+      interestAlerts: { type: Boolean, default: true },
+      marketingEmails: { type: Boolean, default: false },
+      newCvAlerts: { type: Boolean, default: true },
+      profileShareAlerts: { type: Boolean, default: true },
+      newPlayers: { type: Boolean, default: true },
+      profileUpdates: { type: Boolean, default: true },
+      sharedWithYou: { type: Boolean, default: true },
+    },
   },
   {
     timestamps: true,

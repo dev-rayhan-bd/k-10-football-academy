@@ -51,7 +51,14 @@ router.get(
 // 1. CLUB PROFILE (Accessible before approval to upload credentials)
 // ==========================================
 router.get('/profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
+router.get('/club-profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
 router.patch('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
+router.patch(
+  '/club-profile',
+  auth('CLUB', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyClubProfile,
+);
 
 // ==========================================
 // 2. SCOUTING BOARD (SCREENSHOTS 1 & 2)

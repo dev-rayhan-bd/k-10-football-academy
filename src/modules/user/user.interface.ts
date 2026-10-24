@@ -60,6 +60,19 @@ export interface IUser {
   registrationId?: string;
   estimatedAcademySize?: string;
   category?: string;
+  // Verification and Credentials (Clubs & Agents)
+  isVerified?: boolean;
+  verificationStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
+  officialWebsite?: string;
+  footballAssociation?: string;
+  authorizedRepresentativeName?: string;
+  authorizedRepresentativeJobTitle?: string;
+  authorizationDocument?: string;
+  clubRegistrationDocument?: string;
+  licenseCertificateDocument?: string;
+  identityDocument?: string;
+  adminReviewNotes?: string;
+  verifiedAt?: Date;
   // Parent specific
   parentProfileId?: string;
   contactPhone?: string;

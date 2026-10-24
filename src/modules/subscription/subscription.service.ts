@@ -7,8 +7,42 @@ export class SubscriptionService {
     return MembershipPlan.create(payload);
   }
 
-  async getActivePlans() {
-    return MembershipPlan.find({ isActive: true });
+  async getActivePlans(role?: string) {
+    // Ensure the 1 single flat price plan for CLUB exists
+    await MembershipPlan.findOneAndUpdate(
+      { targetRole: 'CLUB', isActive: true },
+      {
+        $setOnInsert: {
+          title: 'Professional Football Club Scouting Access',
+          targetRole: 'CLUB',
+          price: 199,
+          billingCycle: 'MONTHLY',
+          isActive: true,
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    // Ensure the 1 single flat price plan for AGENT exists
+    await MembershipPlan.findOneAndUpdate(
+      { targetRole: 'AGENT', isActive: true },
+      {
+        $setOnInsert: {
+          title: 'Licensed Football Agent Recruitment Access',
+          targetRole: 'AGENT',
+          price: 99,
+          billingCycle: 'MONTHLY',
+          isActive: true,
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    const filter: any = { isActive: true };
+    if (role) {
+      filter.targetRole = String(role).toUpperCase();
+    }
+    return MembershipPlan.find(filter);
   }
 
   async subscribe(userId: string, planId: string) {
@@ -24,12 +58,16 @@ export class SubscriptionService {
       nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
     }
 
-    return UserSubscription.create({
-      userId,
-      planId,
-      status: 'ACTIVE',
-      nextBillingDate,
-    });
+    return UserSubscription.findOneAndUpdate(
+      { userId },
+      {
+        userId,
+        planId,
+        status: 'ACTIVE',
+        nextBillingDate,
+      },
+      { upsert: true, new: true },
+    ).populate('planId');
   }
 
   async getUserSubscription(userId: string) {

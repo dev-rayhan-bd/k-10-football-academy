@@ -13,6 +13,15 @@ export interface IClubProfile {
   visionAndMission?: string;
   contactPhone?: string;
   contactEmail?: string;
+  officialWebsite?: string;
+  footballAssociation?: string;
+  authorizedRepresentativeName?: string;
+  authorizedRepresentativeJobTitle?: string;
+  authorizationDocument?: string;
+  clubRegistrationDocument?: string;
+  verificationStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
+  adminReviewNotes?: string;
+  verifiedAt?: Date;
   achievements?: {
     year: number | string;
     championship: string;

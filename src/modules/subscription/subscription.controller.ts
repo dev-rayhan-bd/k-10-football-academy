@@ -13,8 +13,9 @@ export const createPlan = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-export const getPlans = catchAsync(async (_req: Request, res: Response) => {
-  const result = await subscriptionService.getActivePlans();
+export const getPlans = catchAsync(async (req: Request, res: Response) => {
+  const role = req.query.role as string | undefined;
+  const result = await subscriptionService.getActivePlans(role);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -24,7 +25,7 @@ export const getPlans = catchAsync(async (_req: Request, res: Response) => {
 });
 
 export const subscribe = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.id || req.body.userId;
+  const userId = (req as any).user?.userId || (req as any).user?.id || req.body.userId;
   const result = await subscriptionService.subscribe(userId, req.body.planId);
   sendResponse(res, {
     statusCode: 201,
@@ -35,7 +36,7 @@ export const subscribe = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const getUserSubscription = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.id || req.params.userId;
+  const userId = (req as any).user?.userId || (req as any).user?.id || req.params.userId;
   const result = await subscriptionService.getUserSubscription(userId);
   sendResponse(res, {
     statusCode: 200,

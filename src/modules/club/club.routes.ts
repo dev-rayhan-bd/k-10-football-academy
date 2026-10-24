@@ -32,17 +32,23 @@ import {
 } from './club.controller';
 
 import { upload } from '@/middlewares/multer';
+import { requireClubOrAgentAccess } from '@/middlewares/clubAgentGate.middleware';
 
 const router = Router();
 
 // ==========================================
 // 0. CLUB DASHBOARD (SCREENSHOTS 1 TO 5 - REAL-TIME DB)
 // ==========================================
-router.get('/dashboard', auth('CLUB', 'SUPER_ADMIN'), getClubDashboard);
-router.get('/dashboard-analytics', auth('CLUB', 'SUPER_ADMIN'), getClubDashboard);
+router.get('/dashboard', auth('CLUB', 'SUPER_ADMIN'), requireClubOrAgentAccess(), getClubDashboard);
+router.get(
+  '/dashboard-analytics',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  getClubDashboard,
+);
 
 // ==========================================
-// 1. CLUB PROFILE
+// 1. CLUB PROFILE (Accessible before approval to upload credentials)
 // ==========================================
 router.get('/profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
 router.patch('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
@@ -50,40 +56,87 @@ router.patch('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updat
 // ==========================================
 // 2. SCOUTING BOARD (SCREENSHOTS 1 & 2)
 // ==========================================
-router.get('/scouting-board', auth('CLUB', 'SUPER_ADMIN'), getScoutingBoard);
-router.post('/scouting-board/favourite', auth('CLUB', 'SUPER_ADMIN'), toggleScoutingFavourite);
-router.post('/scouting-board/share', auth('CLUB', 'SUPER_ADMIN'), shareScoutingProfile);
+router.get(
+  '/scouting-board',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  getScoutingBoard,
+);
+router.post(
+  '/scouting-board/favourite',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  toggleScoutingFavourite,
+);
+router.post(
+  '/scouting-board/share',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  shareScoutingProfile,
+);
 
 // ==========================================
 // 3. CVS LIBRARY (SCREENSHOT 3)
 // ==========================================
-router.get('/cvs-library', auth('CLUB', 'SUPER_ADMIN'), getClubCvsLibrary);
-router.post('/cvs-library/:playerId/like', auth('CLUB', 'SUPER_ADMIN'), toggleLikePlayerCv);
-router.post('/cvs-library/:playerId/share', auth('CLUB', 'SUPER_ADMIN'), sharePlayerCv);
+router.get(
+  '/cvs-library',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  getClubCvsLibrary,
+);
+router.post(
+  '/cvs-library/:playerId/like',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  toggleLikePlayerCv,
+);
+router.post(
+  '/cvs-library/:playerId/share',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  sharePlayerCv,
+);
 
 // ==========================================
 // 4. SUCCESS STORIES (SCREENSHOTS 4 & 5)
 // ==========================================
-router.get('/success-stories', auth('CLUB', 'SUPER_ADMIN'), getClubSuccessStories);
+router.get(
+  '/success-stories',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  getClubSuccessStories,
+);
 router.post(
   '/success-stories',
   auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
   upload.any() as any,
   createClubSuccessStory,
 );
 router.patch(
   '/success-stories/:id',
   auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
   upload.any() as any,
   updateClubSuccessStory,
 );
-router.delete('/success-stories/:id', auth('CLUB', 'SUPER_ADMIN'), deleteClubSuccessStory);
+router.delete(
+  '/success-stories/:id',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  deleteClubSuccessStory,
+);
 
 // ==========================================
 // 5. CLUB ANALYTICS (SCREENSHOTS 2 & 3)
 // ==========================================
-router.get('/analytics', auth('CLUB', 'SUPER_ADMIN'), getClubAnalytics);
-router.post('/analytics/view-player/:playerId', auth('CLUB', 'SUPER_ADMIN'), recordPlayerView);
+router.get('/analytics', auth('CLUB', 'SUPER_ADMIN'), requireClubOrAgentAccess(), getClubAnalytics);
+router.post(
+  '/analytics/view-player/:playerId',
+  auth('CLUB', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  recordPlayerView,
+);
 
 // ==========================================
 // GENERAL / ADMIN CLUB ROUTES

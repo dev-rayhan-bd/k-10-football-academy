@@ -8,8 +8,16 @@ export type StoryCategory = 'TRANSFER_ACHIEVEMENT' | 'SIGNING_ACHIEVEMENT' | 'AG
 export interface IAgentProfile {
   userId: Types.ObjectId;
   licenseId?: string;
+  fifaLicenseNumber?: string;
+  agencyName?: string;
+  officialWebsite?: string;
+  licenseCertificateDocument?: string;
+  identityDocument?: string;
+  associationMembershipDocument?: string;
   certifications?: string;
   verificationStatus: AgentVerificationStatus;
+  adminReviewNotes?: string;
+  verifiedAt?: Date;
   cvsSharedCount: number;
   createdAt?: Date;
   updatedAt?: Date;

@@ -49,6 +49,18 @@ export const updateMyClubProfile = catchAsync(async (req: Request, res: Response
       f.fieldname === 'crest'
     ) {
       req.body.logo = await uploadToStorage(f, 'club_profiles');
+    } else if (
+      f.fieldname === 'authorizationDocument' ||
+      f.fieldname === 'authorizationDoc' ||
+      f.fieldname === 'authorizationLetter'
+    ) {
+      req.body.authorizationDocument = await uploadToStorage(f, 'club_verification_docs');
+    } else if (
+      f.fieldname === 'clubRegistrationDocument' ||
+      f.fieldname === 'clubRegistrationDoc' ||
+      f.fieldname === 'registrationDoc'
+    ) {
+      req.body.clubRegistrationDocument = await uploadToStorage(f, 'club_verification_docs');
     }
   }
 

@@ -95,6 +95,18 @@ router.patch('/me/notification-settings', auth(), updateNotificationSettings);
 // Resource-Intensive Search/Query Route (Protected with Search Rate Limiter)
 router.get('/search', auth('ADMIN', 'SUPER_ADMIN'), searchRateLimiter, userController.getAll);
 
+// Admin Verification & Approval Routes (Football Clubs & Agents)
+router.get(
+  '/verifications/pending',
+  auth('ADMIN', 'SUPER_ADMIN'),
+  userController.getPendingVerifications,
+);
+router.patch(
+  '/verifications/:userId/decision',
+  auth('ADMIN', 'SUPER_ADMIN'),
+  userController.decideVerification,
+);
+
 // Admin / Super Admin routes
 router.get('/', auth('ADMIN', 'SUPER_ADMIN'), userController.getAll);
 router.get('/:id', auth('ADMIN', 'SUPER_ADMIN'), userController.getById);

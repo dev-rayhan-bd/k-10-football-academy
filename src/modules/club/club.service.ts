@@ -59,6 +59,19 @@ export class ClubService {
         description: p.description || '',
         visionAndMission: p.visionAndMission || '',
       },
+      verification: {
+        status: p.verificationStatus || 'PENDING',
+        officialWebsite: p.officialWebsite || user.officialWebsite || '',
+        footballAssociation: p.footballAssociation || user.footballAssociation || '',
+        authorizedRepresentativeName:
+          p.authorizedRepresentativeName || user.authorizedRepresentativeName || '',
+        authorizedRepresentativeJobTitle:
+          p.authorizedRepresentativeJobTitle || user.authorizedRepresentativeJobTitle || '',
+        authorizationDocument: p.authorizationDocument || user.authorizationDocument || '',
+        clubRegistrationDocument: p.clubRegistrationDocument || user.clubRegistrationDocument || '',
+        adminReviewNotes: p.adminReviewNotes || '',
+        verifiedAt: p.verifiedAt || null,
+      },
     };
   }
 

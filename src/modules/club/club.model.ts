@@ -20,6 +20,20 @@ const ClubProfileSchema = new Schema<IClubProfileDocument>(
     visionAndMission: { type: String },
     contactPhone: { type: String },
     contactEmail: { type: String },
+    officialWebsite: { type: String },
+    footballAssociation: { type: String },
+    authorizedRepresentativeName: { type: String },
+    authorizedRepresentativeJobTitle: { type: String },
+    authorizationDocument: { type: String },
+    clubRegistrationDocument: { type: String },
+    verificationStatus: {
+      type: String,
+      enum: ['APPROVED', 'PENDING', 'REJECTED'],
+      default: 'PENDING',
+      index: true,
+    },
+    adminReviewNotes: { type: String },
+    verifiedAt: { type: Date },
     achievements: [
       {
         year: { type: Schema.Types.Mixed },

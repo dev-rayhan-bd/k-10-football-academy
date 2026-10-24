@@ -218,6 +218,28 @@ export class UserController {
       message: 'User deleted successfully',
     });
   });
+
+  getPendingVerifications = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const role = req.query.role as string | undefined;
+    const result = await this.service.getPendingVerifications(role);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Pending verifications fetched successfully',
+      data: result,
+    });
+  });
+
+  decideVerification = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const targetUserId = req.params.userId;
+    const result = await this.service.decideVerification(targetUserId, req.body);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  });
 }
 
 export const userController = new UserController(userService);

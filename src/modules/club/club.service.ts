@@ -12,12 +12,12 @@ export class ClubService {
   formatClubProfileResponse(profile: any, fallbackUser?: any) {
     const p = profile.toObject ? profile.toObject() : profile;
     const user = p.userId && typeof p.userId === 'object' ? p.userId : fallbackUser || {};
-    const establishedYear = p.establishedYear || 1878;
-    const contactPhone = p.contactPhone || user.phone || '+55 11 9999-8888';
-    const contactEmail = p.contactEmail || user.email || 'liverpool.fc@gmail.com';
-    const country = p.country || 'Brazil';
-    const league = p.league || 'Premier League';
-    const clubName = p.name || user.name || 'Liverpool FC';
+    const establishedYear = p.establishedYear || null;
+    const contactPhone = p.contactPhone || user.phone || '';
+    const contactEmail = p.contactEmail || user.email || '';
+    const country = p.country || '';
+    const league = p.league || '';
+    const clubName = p.name || user.name || '';
     const achievements = Array.isArray(p.achievements) ? p.achievements : [];
 
     return {
@@ -30,7 +30,7 @@ export class ClubService {
       league,
       clubLeague: league,
       establishedYear,
-      dateOfEstablishment: String(establishedYear),
+      dateOfEstablishment: establishedYear ? String(establishedYear) : '',
       contact: contactPhone,
       contactPhone,
       email: contactEmail,
@@ -43,10 +43,10 @@ export class ClubService {
         clubName,
         logo: p.logo || user.avatar || null,
         coverPhoto: p.coverPhoto || null,
-        category: p.clubType || 'Premium Club',
+        category: p.clubType || 'Club',
         status: 'ACTIVE CLUB',
         tier: 'ACTIVE CLUB',
-        subInfo: `${p.clubType || 'Premium Club'} • Est. ${establishedYear} • ${country}`,
+        subInfo: `${p.clubType || 'Club'}${establishedYear ? ` • Est. ${establishedYear}` : ''}${country ? ` • ${country}` : ''}`,
         country,
         foundedYear: establishedYear,
         contact: contactPhone,
@@ -66,13 +66,13 @@ export class ClubService {
       if (!user) throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
       profile = await ClubProfile.create({
         userId: user._id,
-        name: user.name || 'Liverpool FC',
-        clubType: 'Premium Club',
-        establishedYear: 1878,
-        country: 'Brazil',
-        league: 'Premier League',
-        contactPhone: user.phone || '+55 11 9999-8888',
-        contactEmail: user.email || 'liverpool.fc@gmail.com',
+        name: user.name || '',
+        clubType: 'Club',
+        establishedYear: new Date().getFullYear(),
+        country: '',
+        league: '',
+        contactPhone: user.phone || '',
+        contactEmail: user.email || '',
       });
     }
     return profile;
@@ -88,13 +88,13 @@ export class ClubService {
       if (!user) throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
       profile = await ClubProfile.create({
         userId: user._id,
-        name: user.name || 'Liverpool FC',
-        clubType: 'Premium Club',
-        establishedYear: 1878,
-        country: 'Brazil',
-        league: 'Premier League',
-        contactPhone: user.phone || '+55 11 9999-8888',
-        contactEmail: user.email || 'liverpool.fc@gmail.com',
+        name: user.name || '',
+        clubType: 'Club',
+        establishedYear: new Date().getFullYear(),
+        country: '',
+        league: '',
+        contactPhone: user.phone || '',
+        contactEmail: user.email || '',
       });
       profile = await ClubProfile.findById(profile._id).populate(
         'userId',
@@ -111,11 +111,11 @@ export class ClubService {
       if (!user) throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
       profile = await ClubProfile.create({
         userId: user._id,
-        name: payload.clubName || payload.name || user.name || 'Liverpool FC',
-        clubType: payload.clubType || 'Premium Club',
-        establishedYear: 1878,
-        country: payload.clubCountry || payload.country || 'Brazil',
-        league: payload.clubLeague || payload.league || 'Premier League',
+        name: payload.clubName || payload.name || user.name || '',
+        clubType: payload.clubType || 'Club',
+        establishedYear: new Date().getFullYear(),
+        country: payload.clubCountry || payload.country || '',
+        league: payload.clubLeague || payload.league || '',
       });
     }
 
@@ -239,15 +239,13 @@ export class ClubService {
       .lean();
 
     let processedPlayers = rawPlayers.map((p: any) => {
-      let age = 18;
+      let age = typeof p.age === 'number' ? p.age : null;
       if (p.dateOfBirth) {
         const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
         age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
-      } else if (typeof p.age === 'number') {
-        age = p.age;
       }
 
-      const rating = Number(p.overallRating || 75);
+      const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
       const tier: 'GOLD' | 'SILVER' | 'BRONZE' =
         p.cvTier || (rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE');
       const pid = p._id.toString();
@@ -255,21 +253,23 @@ export class ClubService {
       return {
         id: p._id,
         playerId: p._id,
-        name: p.fullName || 'Athlete',
-        position: (p.position || 'FORWARD').toUpperCase(),
+        name: p.fullName || '',
+        position: (p.position || '').toUpperCase(),
         avatar: p.profileImage || p.avatar || null,
         rating: (rating / 10).toFixed(1),
         rawRating: rating,
-        club: p.currentClub || p.academy || 'Manchester Academy',
-        country: p.country || 'Brazil',
+        club: p.currentClub || p.academy || '',
+        country: p.country || '',
         age,
         status: tier,
         isFavourite: favPlayerIdSet.has(pid),
       };
     });
 
-    if (minAge !== null) processedPlayers = processedPlayers.filter((p) => p.age >= minAge);
-    if (maxAge !== null) processedPlayers = processedPlayers.filter((p) => p.age <= maxAge);
+    if (minAge !== null)
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age >= minAge : false));
+    if (maxAge !== null)
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age <= maxAge : false));
     if (playerStatus && playerStatus !== 'ALL' && playerStatus !== 'ALL STATUS') {
       processedPlayers = processedPlayers.filter((p) => p.status === playerStatus);
     }
@@ -316,18 +316,18 @@ export class ClubService {
 
     const processedCoaches = rawCoaches.map((c: any) => {
       const cid = c._id.toString();
-      const yrs = c.yearsExperience || 1;
+      const yrs = typeof c.yearsExperience === 'number' ? c.yearsExperience : 0;
       let status = c.status || 'AVAILABLE';
       if (status === 'ACTIVE') status = 'AVAILABLE';
       return {
         id: c._id,
         coachId: c._id,
-        name: c.fullName || 'Coach',
-        role: (c.title || c.academyRole || 'HEAD COACH').toUpperCase(),
-        speciality: c.speciality || 'Attacking',
-        club: c.currentClub || 'Santos FC',
-        country: c.birthCountry || c.location || 'Brazil',
-        experience: `${yrs} yrs`,
+        name: c.fullName || '',
+        role: (c.title || c.academyRole || 'COACH').toUpperCase(),
+        speciality: c.speciality || '',
+        club: c.currentClub || '',
+        country: c.birthCountry || c.location || '',
+        experience: yrs ? `${yrs} yrs` : '0 yrs',
         yearsExperience: yrs,
         status,
         avatar: c.profileImage || null,
@@ -578,15 +578,13 @@ export class ClubService {
       .lean();
 
     let processedPlayers = rawPlayers.map((p: any) => {
-      let age = 18;
+      let age = typeof p.age === 'number' ? p.age : null;
       if (p.dateOfBirth) {
         const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
         age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
-      } else if (typeof p.age === 'number') {
-        age = p.age;
       }
 
-      const rating = Number(p.overallRating || 75);
+      const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
       const tier: 'GOLD' | 'SILVER' | 'BRONZE' =
         p.cvTier || (rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE');
       const pid = p._id.toString();
@@ -594,13 +592,13 @@ export class ClubService {
       return {
         id: p._id,
         playerId: p._id,
-        name: p.fullName || 'Athlete',
-        position: (p.position || 'FORWARD').toUpperCase(),
+        name: p.fullName || '',
+        position: (p.position || '').toUpperCase(),
         avatar: p.profileImage || p.avatar || null,
         rating: (rating / 10).toFixed(1),
         rawRating: rating,
-        club: p.currentClub || p.academy || 'Manchester Academy',
-        country: p.country || 'Brazil',
+        club: p.currentClub || p.academy || '',
+        country: p.country || '',
         age,
         status: tier,
         isLiked: favPlayerIdSet.has(pid),
@@ -609,8 +607,10 @@ export class ClubService {
       };
     });
 
-    if (minAge !== null) processedPlayers = processedPlayers.filter((p) => p.age >= minAge);
-    if (maxAge !== null) processedPlayers = processedPlayers.filter((p) => p.age <= maxAge);
+    if (minAge !== null)
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age >= minAge : false));
+    if (maxAge !== null)
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age <= maxAge : false));
     if (statusFilter && statusFilter !== 'ALL' && statusFilter !== 'ALL STATUS') {
       processedPlayers = processedPlayers.filter((p) => p.status === statusFilter);
     }
@@ -948,15 +948,13 @@ export class ClubService {
       .lean();
 
     let processedPlayers = rawPlayers.map((p: any) => {
-      let age = 18;
+      let age = typeof p.age === 'number' ? p.age : null;
       if (p.dateOfBirth) {
         const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
         age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
-      } else if (typeof p.age === 'number') {
-        age = p.age;
       }
 
-      const rating = Number(p.overallRating || 75);
+      const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
       const tier: 'GOLD' | 'SILVER' | 'BRONZE' =
         p.cvTier || (rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE');
       const pid = p._id.toString();
@@ -968,14 +966,14 @@ export class ClubService {
       return {
         id: p._id,
         playerId: p._id,
-        name: p.fullName || 'Athlete',
-        position: (p.position || 'FORWARD').toUpperCase(),
+        name: p.fullName || '',
+        position: (p.position || '').toUpperCase(),
         avatar: p.profileImage || p.avatar || null,
         rating: (rating / 10).toFixed(1),
         rawRating: rating,
         age,
-        country: p.country || 'Brazil',
-        club: p.currentClub || p.academy || 'Manchester Academy',
+        country: p.country || '',
+        club: p.currentClub || p.academy || '',
         status: tier,
         views,
         likes,
@@ -983,8 +981,10 @@ export class ClubService {
       };
     });
 
-    if (minAge !== null) processedPlayers = processedPlayers.filter((p) => p.age >= minAge);
-    if (maxAge !== null) processedPlayers = processedPlayers.filter((p) => p.age <= maxAge);
+    if (minAge !== null)
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age >= minAge : false));
+    if (maxAge !== null)
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age <= maxAge : false));
     if (statusFilter && statusFilter !== 'ALL' && statusFilter !== 'ALL STATUS') {
       processedPlayers = processedPlayers.filter((p) => p.status === statusFilter);
     }
@@ -1016,43 +1016,52 @@ export class ClubService {
       else posCounts.Midfielder++;
     });
 
-    const totalPos = Object.values(posCounts).reduce((a, b) => a + b, 0) || 1;
+    const totalPos = Object.values(posCounts).reduce((a, b) => a + b, 0);
     const positionInterestDistribution = [
       {
         position: 'Midfielder',
         value: posCounts.Midfielder,
-        percentage: Math.round((posCounts.Midfielder / totalPos) * 100),
+        percentage: totalPos > 0 ? Math.round((posCounts.Midfielder / totalPos) * 100) : 0,
       },
       {
         position: 'Striker',
         value: posCounts.Striker,
-        percentage: Math.round((posCounts.Striker / totalPos) * 100),
+        percentage: totalPos > 0 ? Math.round((posCounts.Striker / totalPos) * 100) : 0,
       },
       {
         position: 'Defender',
         value: posCounts.Defender,
-        percentage: Math.round((posCounts.Defender / totalPos) * 100),
+        percentage: totalPos > 0 ? Math.round((posCounts.Defender / totalPos) * 100) : 0,
       },
       {
         position: 'Goalkeeper',
         value: posCounts.Goalkeeper,
-        percentage: Math.round((posCounts.Goalkeeper / totalPos) * 100),
+        percentage: totalPos > 0 ? Math.round((posCounts.Goalkeeper / totalPos) * 100) : 0,
       },
       {
         position: 'Winger',
         value: posCounts.Winger,
-        percentage: Math.round((posCounts.Winger / totalPos) * 100),
+        percentage: totalPos > 0 ? Math.round((posCounts.Winger / totalPos) * 100) : 0,
       },
     ];
 
-    // 4. Players & Coaches Monitored Chart Trend (6 bi-monthly periods)
+    // 4. Real Players & Coaches Monitored Chart Trend
+    const totalFavPlayers = await ClubFavourite.countDocuments({
+      clubId: club._id,
+      targetType: 'PLAYER',
+    });
+    const totalFavCoaches = await ClubFavourite.countDocuments({
+      clubId: club._id,
+      targetType: 'COACH',
+    });
+
     const playersAndCoachesMonitored = [
-      { period: 'Jan-Feb', players: Math.max(12, Math.round(total * 0.3)), coaches: 8 },
-      { period: 'Mar-Apr', players: Math.max(25, Math.round(total * 0.5)), coaches: 14 },
-      { period: 'May-Jun', players: Math.max(40, Math.round(total * 0.7)), coaches: 19 },
-      { period: 'Jul-Aug', players: Math.max(35, Math.round(total * 0.65)), coaches: 17 },
-      { period: 'Sept-Oct', players: Math.max(55, Math.round(total * 0.85)), coaches: 23 },
-      { period: 'Nov-Dec', players: Math.max(70, Math.round(total * 1.0)), coaches: 28 },
+      { period: 'Jan-Feb', players: 0, coaches: 0 },
+      { period: 'Mar-Apr', players: 0, coaches: 0 },
+      { period: 'May-Jun', players: 0, coaches: 0 },
+      { period: 'Jul-Aug', players: 0, coaches: 0 },
+      { period: 'Sept-Oct', players: 0, coaches: 0 },
+      { period: 'Nov-Dec', players: totalFavPlayers, coaches: totalFavCoaches },
     ];
 
     return {

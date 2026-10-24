@@ -35,6 +35,14 @@ const ClubProfileSchema = new Schema<IClubProfileDocument>(
         shareCount: { type: Number, default: 1 },
       },
     ],
+    viewedPlayerProfiles: [
+      {
+        playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile' },
+        viewedAt: { type: Date, default: Date.now },
+        viewCount: { type: Number, default: 1 },
+      },
+    ],
+    profileViews: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

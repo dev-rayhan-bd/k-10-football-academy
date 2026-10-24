@@ -26,6 +26,8 @@ import {
   createClubSuccessStory,
   updateClubSuccessStory,
   deleteClubSuccessStory,
+  getClubAnalytics,
+  recordPlayerView,
 } from './club.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -69,6 +71,12 @@ router.patch(
   updateClubSuccessStory,
 );
 router.delete('/success-stories/:id', auth('CLUB', 'SUPER_ADMIN'), deleteClubSuccessStory);
+
+// ==========================================
+// 5. CLUB ANALYTICS (SCREENSHOTS 2 & 3)
+// ==========================================
+router.get('/analytics', auth('CLUB', 'SUPER_ADMIN'), getClubAnalytics);
+router.post('/analytics/view-player/:playerId', auth('CLUB', 'SUPER_ADMIN'), recordPlayerView);
 
 // ==========================================
 // GENERAL / ADMIN CLUB ROUTES

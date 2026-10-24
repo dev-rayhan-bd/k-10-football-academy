@@ -321,3 +321,28 @@ export const deleteClubSuccessStory = catchAsync(async (req: Request, res: Respo
     data: result,
   });
 });
+
+// ==========================================
+// 5. CLUB ANALYTICS (SCREENSHOTS 2 & 3)
+// ==========================================
+export const getClubAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.getClubAnalytics(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Club analytics fetched successfully',
+    data: result,
+  });
+});
+
+export const recordPlayerView = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.recordPlayerView(userId, req.params.playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});

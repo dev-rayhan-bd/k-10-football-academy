@@ -24,6 +24,12 @@ export interface IClubProfile {
     sharedAt: Date;
     shareCount: number;
   }[];
+  viewedPlayerProfiles?: {
+    playerId: Types.ObjectId;
+    viewedAt: Date;
+    viewCount: number;
+  }[];
+  profileViews?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }

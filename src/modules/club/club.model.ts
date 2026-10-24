@@ -82,7 +82,7 @@ const ClubSuccessStorySchema = new Schema<IClubSuccessStoryDocument>(
     status: {
       type: String,
       enum: ['APPROVED', 'PENDING', 'REJECTED'],
-      default: 'PENDING',
+      default: 'APPROVED',
       index: true,
     },
     isDeleted: { type: Boolean, default: false, index: true },

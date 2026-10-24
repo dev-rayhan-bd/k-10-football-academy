@@ -799,7 +799,7 @@ export class ClubService {
       date: payload.date ? new Date(payload.date) : new Date(),
       coverImage: payload.coverImage || payload.photo || '',
       photo: payload.photo || payload.coverImage || '',
-      status: payload.status || 'PENDING',
+      status: payload.status || 'APPROVED',
     });
 
     return {
@@ -1045,15 +1045,15 @@ export class ClubService {
       },
     ];
 
-    // 4. Real Players & Coaches Monitored Chart Trend
-    const totalFavPlayers = await ClubFavourite.countDocuments({
+    // 4. Real Players & Coaches Monitored Chart Trend (Grouped bi-monthly for the selected year)
+    const selectedYear = query.year ? Number(query.year) : new Date().getFullYear();
+    const startOfYear = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0));
+    const endOfYear = new Date(Date.UTC(selectedYear, 11, 31, 23, 59, 59, 999));
+
+    const favsThisYear = await ClubFavourite.find({
       clubId: club._id,
-      targetType: 'PLAYER',
-    });
-    const totalFavCoaches = await ClubFavourite.countDocuments({
-      clubId: club._id,
-      targetType: 'COACH',
-    });
+      createdAt: { $gte: startOfYear, $lte: endOfYear },
+    }).select('targetType createdAt');
 
     const playersAndCoachesMonitored = [
       { period: 'Jan-Feb', players: 0, coaches: 0 },
@@ -1061,10 +1061,23 @@ export class ClubService {
       { period: 'May-Jun', players: 0, coaches: 0 },
       { period: 'Jul-Aug', players: 0, coaches: 0 },
       { period: 'Sept-Oct', players: 0, coaches: 0 },
-      { period: 'Nov-Dec', players: totalFavPlayers, coaches: totalFavCoaches },
+      { period: 'Nov-Dec', players: 0, coaches: 0 },
     ];
 
+    favsThisYear.forEach((fav: any) => {
+      const m = new Date(fav.createdAt).getUTCMonth();
+      const bucketIdx = Math.floor(m / 2);
+      if (bucketIdx >= 0 && bucketIdx < 6) {
+        if (fav.targetType === 'PLAYER') {
+          playersAndCoachesMonitored[bucketIdx].players++;
+        } else if (fav.targetType === 'COACH') {
+          playersAndCoachesMonitored[bucketIdx].coaches++;
+        }
+      }
+    });
+
     return {
+      selectedYear,
       metrics: {
         playersProfileViewed: {
           label: 'PLAYERS PROFILE VIEWED',
@@ -1085,7 +1098,6 @@ export class ClubService {
           totalPages: Math.ceil(total / limit) || 1,
         },
       },
-      players: paginated,
     };
   }
 

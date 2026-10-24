@@ -139,6 +139,7 @@ router.patch('/me/documents/:documentId', auth(), upload.any() as any, updatePla
 router.put('/me/documents/:documentId', auth(), upload.any() as any, updatePlayerDocument);
 router.delete('/me/documents/:documentId', auth(), deletePlayerDocument);
 
+router.get('/share/:id', optionalAuth(), getPlayerCV);
 router.get('/:id/cv', optionalAuth(), getPlayerCV);
 router.get('/:id', optionalAuth(), getPlayerProfile);
 router.patch(

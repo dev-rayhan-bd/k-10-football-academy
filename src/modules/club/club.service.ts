@@ -386,6 +386,16 @@ export class ClubService {
     }
 
     const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const playerShareBase = (
+      env.SCOUTING_BOARD_SHARE_PLAYER ||
+      process.env.SCOUTING_BOARD_SHARE_PLAYER ||
+      `${baseUrl}/players/share`
+    ).replace(/\/$/, '');
+    const coachShareBase = (
+      env.SCOUTING_BOARD_SHARE_COACH ||
+      process.env.SCOUTING_BOARD_SHARE_COACH ||
+      `${baseUrl}/coach/share`
+    ).replace(/\/$/, '');
 
     if (targetType === 'PLAYER') {
       const player = await PlayerProfile.findById(targetId);
@@ -411,7 +421,7 @@ export class ClubService {
       await club.save();
 
       return {
-        shareableUrl: `${baseUrl}/players/share/${targetId}`,
+        shareableUrl: `${playerShareBase}/${targetId}`,
         targetType: 'PLAYER',
         targetId,
         shareCount: updatedShareCount,
@@ -422,7 +432,7 @@ export class ClubService {
       if (!coach) throw new AppError(StatusCodes.NOT_FOUND, 'Coach not found');
 
       return {
-        shareableUrl: `${baseUrl}/coaches/share/${targetId}`,
+        shareableUrl: `${coachShareBase}/${targetId}`,
         targetType: 'COACH',
         targetId,
         shareCount: 1,
@@ -504,6 +514,11 @@ export class ClubService {
   async getClubCvsLibrary(userId: string, query: any = {}) {
     const club = await this.resolveClub(userId);
     const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const playerShareBase = (
+      env.SCOUTING_BOARD_SHARE_PLAYER ||
+      process.env.SCOUTING_BOARD_SHARE_PLAYER ||
+      `${baseUrl}/players/share`
+    ).replace(/\/$/, '');
 
     const tab = (query.tab || 'ALL').toUpperCase();
     const position = query.position ? String(query.position).toUpperCase() : null;
@@ -590,7 +605,7 @@ export class ClubService {
         status: tier,
         isLiked: favPlayerIdSet.has(pid),
         shareCount: sharedMap.get(pid) || 0,
-        shareableUrl: `${baseUrl}/players/share/${pid}`,
+        shareableUrl: `${playerShareBase}/${pid}`,
       };
     });
 
@@ -688,6 +703,11 @@ export class ClubService {
     }
 
     const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const playerShareBase = (
+      env.SCOUTING_BOARD_SHARE_PLAYER ||
+      process.env.SCOUTING_BOARD_SHARE_PLAYER ||
+      `${baseUrl}/players/share`
+    ).replace(/\/$/, '');
     const profiles = club.sharedPlayerProfiles || [];
     const existingIndex = profiles.findIndex((s) => s.playerId?.toString() === playerId);
 
@@ -710,7 +730,7 @@ export class ClubService {
     const totalProfilesShared = profiles.reduce((sum, s) => sum + (s.shareCount || 1), 0);
 
     return {
-      shareableUrl: `${baseUrl}/players/share/${playerId}`,
+      shareableUrl: `${playerShareBase}/${playerId}`,
       shareCount: updatedShareCount,
       totalProfilesShared,
       message: 'Profile shared successfully',

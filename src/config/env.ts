@@ -38,6 +38,8 @@ const envSchema = z.object({
   CLIENT_URL: z.string().optional(),
   PUBLIC_SHARE_URL: z.string().optional(),
   PUBLIC_API_URL: z.string().optional(),
+  SCOUTING_BOARD_SHARE_PLAYER: z.string().optional(),
+  SCOUTING_BOARD_SHARE_COACH: z.string().optional(),
 });
 
 if (!process.env.SMTP_PASS && process.env.APP_PASSWARD) {

@@ -224,6 +224,7 @@ router.delete('/me/testimonials/:testimonialId', auth(), deleteMyTestimonial);
 // ==========================================
 // 5. PUBLIC / ID-BASED ROUTES
 // ==========================================
+router.get('/share/:id', optionalAuth(), getCoachCV);
 router.get('/:id/cv', optionalAuth(), getCoachCV);
 router.get('/:id/analytics', optionalAuth(), getCoachAnalytics);
 router.get('/:id', optionalAuth(), getCoachProfile);

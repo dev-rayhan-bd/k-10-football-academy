@@ -20,6 +20,7 @@ const moduleRoutes = [
   { path: '/users', route: UserRoutes },
   { path: '/players', route: PlayerRoutes },
   { path: '/coaches', route: CoachRoutes },
+  { path: '/coach', route: CoachRoutes },
   { path: '/academies', route: AcademyRoutes },
   { path: '/clubs', route: ClubRoutes },
   { path: '/agents', route: AgentRoutes },

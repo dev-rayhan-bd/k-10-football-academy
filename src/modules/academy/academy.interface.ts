@@ -24,6 +24,12 @@ export interface IAcademyProfile {
   contactPhone?: string;
   contactEmail?: string;
   nationality?: string;
+  league?: string;
+  achievements?: {
+    year?: string;
+    championship?: string;
+    venue?: string;
+  }[];
   likedPlayerIds?: Types.ObjectId[];
   sharedPlayerProfiles?: {
     playerId: Types.ObjectId;

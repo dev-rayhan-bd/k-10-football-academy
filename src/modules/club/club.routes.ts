@@ -7,6 +7,8 @@ import {
   addClubFavouriteZodSchema,
 } from './club.validation';
 import {
+  getMyClubProfile,
+  updateMyClubProfile,
   createClubProfile,
   getClubProfile,
   getAllClubProfiles,
@@ -19,6 +21,24 @@ import {
 import { upload } from '@/middlewares/multer';
 
 const router = Router();
+
+// ==========================================
+// AUTHENTICATED CLUB PROFILE (FOR CLUB ROLE)
+// ==========================================
+router.get('/profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
+router.get('/my-profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
+router.get('/club-profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
+
+router.patch('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
+router.patch('/my-profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
+router.patch(
+  '/club-profile',
+  auth('CLUB', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyClubProfile,
+);
+router.put('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
+router.put('/club-profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
 
 router.post(
   '/',

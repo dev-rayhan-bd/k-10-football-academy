@@ -68,30 +68,48 @@ export class AcademyService {
       p.location ||
       (p.city && p.country ? `${p.city}, ${p.country}` : p.country || 'São Paulo, Brazil');
 
+    const league = p.league || 'Premier League';
+    const achievements = Array.isArray(p.achievements) ? p.achievements : [];
+    const clubName = p.name || 'Liverpool FC';
+    const country = p.country || 'Brazil';
+
     return {
       ...p,
-      academyName: p.name,
+      name: clubName,
+      clubName,
+      academyName: clubName,
+      country,
+      clubCountry: country,
+      league,
+      clubLeague: league,
+      achievements,
       nationality,
-      academyCategory: p.category || 'Premier League Academy',
+      academyCategory: p.category || 'Premium Club',
       dateOfEstablishment: formattedEstablishmentDate,
       dateOfEstablishmentFormatted,
       contact: contactPhone,
       contactPhone,
       email: contactEmail,
       contactEmail,
-      activeStatus: 'ACTIVE ACADEMY',
+      activeStatus: 'ACTIVE CLUB',
+      tier: 'ACTIVE CLUB',
       isActive: true,
       foundedYear,
       foundedText: `Founded ${foundedYear}`,
       locationText: nationality,
       bannerInfo: {
-        name: p.name,
+        name: clubName,
+        clubName,
         logo: p.logo || null,
         coverPhoto: p.coverPhoto || null,
-        category: p.category || 'Premier League Academy',
-        status: 'ACTIVE ACADEMY',
+        category: p.category || 'Premium Club',
+        status: 'ACTIVE CLUB',
+        tier: 'ACTIVE CLUB',
+        subInfo: `${p.category || 'Premium Club'} • Est. ${foundedYear} • ${country}`,
+        foundedYear,
         foundedText: `Founded ${foundedYear}`,
         locationText: nationality,
+        country,
         contact: contactPhone,
         email: contactEmail,
       },
@@ -188,11 +206,14 @@ export class AcademyService {
       throw new AppError(404, 'Academy profile not found');
     }
 
-    if (payload.name || payload.academyName) {
-      profile.name = payload.name || payload.academyName;
+    if (payload.clubName || payload.name || payload.academyName) {
+      profile.name = payload.clubName || payload.name || payload.academyName;
     }
     if (payload.category || payload.academyCategory) {
       profile.category = payload.category || payload.academyCategory;
+    }
+    if (payload.clubLeague || payload.league) {
+      profile.league = payload.clubLeague || payload.league;
     }
     if (payload.nationality || payload.location) {
       const loc = payload.nationality || payload.location;
@@ -208,16 +229,33 @@ export class AcademyService {
         profile.country = loc;
       }
     }
-    if (payload.country) profile.country = payload.country;
+    if (payload.clubCountry || payload.country) {
+      profile.country = payload.clubCountry || payload.country;
+    }
     if (payload.city) profile.city = payload.city;
 
-    if (payload.establishedDate || payload.dateOfEstablishment) {
-      const rawDate = payload.establishedDate || payload.dateOfEstablishment;
-      if (typeof rawDate === 'string' && rawDate.includes('/')) {
+    if (payload.establishedDate || payload.dateOfEstablishment || payload.yearOfEstablishment) {
+      const rawDate =
+        payload.establishedDate || payload.dateOfEstablishment || payload.yearOfEstablishment;
+      if (typeof rawDate === 'string' && /^\d{4}$/.test(rawDate.trim())) {
+        profile.establishedDate = new Date(`${rawDate.trim()}-01-01`);
+      } else if (typeof rawDate === 'string' && rawDate.includes('/')) {
         const [d, m, y] = rawDate.split('/').map(Number);
         profile.establishedDate = new Date(y, m - 1, d);
       } else {
         profile.establishedDate = new Date(rawDate);
+      }
+    }
+
+    if (payload.achievements !== undefined) {
+      if (typeof payload.achievements === 'string') {
+        try {
+          profile.achievements = JSON.parse(payload.achievements);
+        } catch {
+          // ignore
+        }
+      } else if (Array.isArray(payload.achievements)) {
+        profile.achievements = payload.achievements;
       }
     }
 

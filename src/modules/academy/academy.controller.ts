@@ -4,6 +4,7 @@ import { sendResponse } from '@/utils/sendResponse';
 import { academyService } from './academy.service';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
 import { coachService } from '@/modules/coach/coach.service';
+import { clubService } from '@/modules/club/club.service';
 
 export const createAcademyProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await academyService.createProfile(req.body);
@@ -26,8 +27,18 @@ export const getAcademyProfile = catchAsync(async (req: Request, res: Response) 
 });
 
 export const getMyAcademyProfile = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId;
-  const result = await academyService.getMyProfile(userId);
+  const user = (req as any).user;
+  if (user?.role === 'CLUB') {
+    const result = await clubService.getMyClubProfile(user.userId);
+    return sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Club profile fetched successfully',
+      data: result,
+    });
+  }
+
+  const result = await academyService.getMyProfile(user.userId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -37,7 +48,8 @@ export const getMyAcademyProfile = catchAsync(async (req: Request, res: Response
 });
 
 export const updateMyAcademyProfile = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId;
+  const user = (req as any).user;
+  const userId = user.userId;
 
   if (req.body?.data && typeof req.body.data === 'string') {
     try {
@@ -55,6 +67,8 @@ export const updateMyAcademyProfile = catchAsync(async (req: Request, res: Respo
       ? [req.file as Express.Multer.File]
       : [];
 
+  const folder = user?.role === 'CLUB' ? 'club_profiles' : 'academy_profiles';
+
   for (const f of allFiles) {
     if (
       f.fieldname === 'coverPhoto' ||
@@ -62,15 +76,26 @@ export const updateMyAcademyProfile = catchAsync(async (req: Request, res: Respo
       f.fieldname === 'cover' ||
       f.fieldname === 'uploadCoverPhoto'
     ) {
-      req.body.coverPhoto = await uploadToStorage(f, 'academy_profiles');
+      req.body.coverPhoto = await uploadToStorage(f, folder);
     } else if (
       f.fieldname === 'logo' ||
       f.fieldname === 'uploadLogo' ||
       f.fieldname === 'avatar' ||
-      f.fieldname === 'badge'
+      f.fieldname === 'badge' ||
+      f.fieldname === 'crest'
     ) {
-      req.body.logo = await uploadToStorage(f, 'academy_profiles');
+      req.body.logo = await uploadToStorage(f, folder);
     }
+  }
+
+  if (user?.role === 'CLUB') {
+    const result = await clubService.updateMyClubProfile(userId, req.body);
+    return sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Club profile updated successfully',
+      data: result,
+    });
   }
 
   const result = await academyService.updateMyProfile(userId, req.body);

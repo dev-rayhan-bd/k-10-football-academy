@@ -41,6 +41,14 @@ const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
       default: 'FREE',
     },
     maxTeams: { type: Number, default: 1 },
+    league: { type: String, default: 'Premier League' },
+    achievements: [
+      {
+        year: { type: String },
+        championship: { type: String },
+        venue: { type: String },
+      },
+    ],
     likedPlayerIds: [{ type: Schema.Types.ObjectId, ref: 'PlayerProfile' }],
     sharedPlayerProfiles: [
       {

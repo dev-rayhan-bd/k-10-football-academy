@@ -15,6 +15,17 @@ const ClubProfileSchema = new Schema<IClubProfileDocument>(
     league: { type: String, required: true },
     logo: { type: String },
     coverPhoto: { type: String },
+    description: { type: String },
+    visionAndMission: { type: String },
+    contactPhone: { type: String },
+    contactEmail: { type: String },
+    achievements: [
+      {
+        year: { type: Schema.Types.Mixed },
+        championship: { type: String },
+        venue: { type: String },
+      },
+    ],
   },
   { timestamps: true },
 );

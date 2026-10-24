@@ -190,14 +190,32 @@ router.put(
   updateMyAcademyProfile,
 );
 
-router.get('/profile', auth('ACADEMY', 'SUPER_ADMIN'), getMyAcademyProfile);
+router.get('/profile', auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'), getMyAcademyProfile);
+router.get('/club-profile', auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'), getMyAcademyProfile);
 router.patch(
   '/profile',
-  auth('ACADEMY', 'SUPER_ADMIN'),
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
   upload.any() as any,
   updateMyAcademyProfile,
 );
-router.put('/profile', auth('ACADEMY', 'SUPER_ADMIN'), upload.any() as any, updateMyAcademyProfile);
+router.patch(
+  '/club-profile',
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyAcademyProfile,
+);
+router.put(
+  '/profile',
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyAcademyProfile,
+);
+router.put(
+  '/club-profile',
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateMyAcademyProfile,
+);
 
 router.get('/:academyId/profile', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyProfile);
 router.patch(

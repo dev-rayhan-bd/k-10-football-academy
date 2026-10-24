@@ -9,6 +9,15 @@ export interface IClubProfile {
   league: string;
   logo?: string;
   coverPhoto?: string;
+  description?: string;
+  visionAndMission?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  achievements?: {
+    year: number | string;
+    championship: string;
+    venue?: string;
+  }[];
   createdAt?: Date;
   updatedAt?: Date;
 }

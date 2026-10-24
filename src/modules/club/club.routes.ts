@@ -28,11 +28,18 @@ import {
   deleteClubSuccessStory,
   getClubAnalytics,
   recordPlayerView,
+  getClubDashboard,
 } from './club.controller';
 
 import { upload } from '@/middlewares/multer';
 
 const router = Router();
+
+// ==========================================
+// 0. CLUB DASHBOARD (SCREENSHOTS 1 TO 5 - REAL-TIME DB)
+// ==========================================
+router.get('/dashboard', auth('CLUB', 'SUPER_ADMIN'), getClubDashboard);
+router.get('/dashboard-analytics', auth('CLUB', 'SUPER_ADMIN'), getClubDashboard);
 
 // ==========================================
 // 1. CLUB PROFILE

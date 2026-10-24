@@ -5,6 +5,9 @@ import { env } from '@/config/env';
 import { User } from '@/modules/user/user.model';
 import { PlayerProfile } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
+import { Media } from '@/modules/media/media.model';
+import { Notification } from '@/modules/notification/notification.model';
+import { Team } from '@/modules/academy/academy.model';
 import { IClubProfile, IClubAchievement, IClubFavourite } from './club.interface';
 import { ClubProfile, ClubAchievement, ClubFavourite, ClubSuccessStory } from './club.model';
 
@@ -1224,6 +1227,373 @@ export class ClubService {
 
   async getFavourites(clubId: string) {
     return ClubFavourite.find({ clubId }).populate('targetPlayerId').populate('targetCoachId');
+  }
+
+  formatTimeAgo(date: Date | string): string {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'RECENTLY';
+    const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (seconds < 60) return 'JUST NOW';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} MINUTE${minutes > 1 ? 'S' : ''} AGO`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} HOUR${hours > 1 ? 'S' : ''} AGO`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} DAY${days > 1 ? 'S' : ''} AGO`;
+    const months = Math.floor(days / 30);
+    return `${months} MONTH${months > 1 ? 'S' : ''} AGO`;
+  }
+
+  // ==========================================
+  // 0. CLUB DASHBOARD (FULL REAL-TIME DB DASHBOARD)
+  // ==========================================
+  async getClubDashboard(userId: string, query: any = {}) {
+    const club = await this.resolveClub(userId);
+    const user = await User.findById(userId).select('name email phone avatar');
+
+    const playerShareBase =
+      env.SCOUTING_BOARD_SHARE_PLAYER || 'https://k-10-football-academy.onrender.com/players/share';
+    const coachShareBase =
+      env.SCOUTING_BOARD_SHARE_COACH || 'https://k-10-football-academy.onrender.com/coach/share';
+
+    // 1. Club Header / Banner Info
+    const clubInfo = {
+      id: club._id,
+      name: club.name || user?.name || '',
+      tier: 'ACTIVE CLUB',
+      clubType: club.clubType || 'Club',
+      category: club.clubType || 'Club',
+      establishedYear: club.establishedYear || null,
+      country: club.country || '',
+      league: club.league || '',
+      contactPhone: club.contactPhone || user?.phone || '',
+      contactEmail: club.contactEmail || user?.email || '',
+      logo: club.logo || '',
+      coverPhoto: club.coverPhoto || '',
+      description: club.description || '',
+    };
+
+    // 2. Metric Cards (PLAYERS, COACHES, LIKED CVS, PROFILE SHARE)
+    const [totalPlayersCount, totalCoachesCount, totalLikedCvsCount] = await Promise.all([
+      PlayerProfile.countDocuments({}),
+      CoachProfile.countDocuments({}),
+      ClubFavourite.countDocuments({ clubId: club._id, targetType: 'PLAYER' }),
+    ]);
+
+    const sharedProfilesList = club.sharedPlayerProfiles || [];
+    const totalSharedCount = sharedProfilesList.reduce(
+      (sum: number, s: any) => sum + (s.shareCount || 1),
+      0,
+    );
+
+    const metrics = {
+      players: { label: 'PLAYERS', count: totalPlayersCount },
+      coaches: { label: 'COACHES', count: totalCoachesCount },
+      likedCvs: { label: 'LIKED CVS', count: totalLikedCvsCount },
+      profileShare: { label: 'PROFILE SHARE', count: totalSharedCount },
+    };
+
+    // 3. Analytics Charts (PLAYERS & COACHES MONITORED + POSITION INTEREST DISTRIBUTION)
+    const selectedYear = query.year ? Number(query.year) : new Date().getFullYear();
+    const startOfYear = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0));
+    const endOfYear = new Date(Date.UTC(selectedYear, 11, 31, 23, 59, 59, 999));
+
+    const favsThisYear = await ClubFavourite.find({
+      clubId: club._id,
+      createdAt: { $gte: startOfYear, $lte: endOfYear },
+    }).select('targetType createdAt');
+
+    const playersAndCoachesMonitored = [
+      { period: 'Jan-Feb', players: 0, coaches: 0 },
+      { period: 'Mar-Apr', players: 0, coaches: 0 },
+      { period: 'May-Jun', players: 0, coaches: 0 },
+      { period: 'Jul-Aug', players: 0, coaches: 0 },
+      { period: 'Sept-Oct', players: 0, coaches: 0 },
+      { period: 'Nov-Dec', players: 0, coaches: 0 },
+    ];
+
+    favsThisYear.forEach((fav: any) => {
+      const m = new Date(fav.createdAt).getUTCMonth();
+      const bucketIdx = Math.floor(m / 2);
+      if (bucketIdx >= 0 && bucketIdx < 6) {
+        if (fav.targetType === 'PLAYER') {
+          playersAndCoachesMonitored[bucketIdx].players++;
+        } else if (fav.targetType === 'COACH') {
+          playersAndCoachesMonitored[bucketIdx].coaches++;
+        }
+      }
+    });
+
+    const viewedList = club.viewedPlayerProfiles || [];
+    const viewsMap = new Map<string, number>();
+    viewedList.forEach((v: any) => {
+      if (v.playerId) viewsMap.set(v.playerId.toString(), v.viewCount || 1);
+    });
+
+    const sharesMap = new Map<string, number>();
+    sharedProfilesList.forEach((s: any) => {
+      if (s.playerId) sharesMap.set(s.playerId.toString(), s.shareCount || 1);
+    });
+
+    const likedFavs = await ClubFavourite.find({
+      clubId: club._id,
+      targetType: 'PLAYER',
+    }).select('targetPlayerId');
+    const likedSet = new Set(
+      likedFavs.map((f: any) => f.targetPlayerId?.toString()).filter(Boolean),
+    );
+
+    const engagedPlayerIdList = Array.from(
+      new Set([
+        ...Array.from(viewsMap.keys()),
+        ...Array.from(likedSet),
+        ...Array.from(sharesMap.keys()),
+      ]),
+    ).filter((id): id is string => typeof id === 'string' && Types.ObjectId.isValid(id));
+
+    const posCounts: Record<string, number> = {
+      Midfielder: 0,
+      Striker: 0,
+      Defender: 0,
+      Goalkeeper: 0,
+      Winger: 0,
+    };
+
+    if (engagedPlayerIdList.length > 0) {
+      const engagedPlayers = await PlayerProfile.find({ _id: { $in: engagedPlayerIdList } })
+        .select('position')
+        .lean();
+
+      engagedPlayers.forEach((p: any) => {
+        const pos = (p.position || '').toUpperCase();
+        if (pos.includes('MID')) posCounts.Midfielder++;
+        else if (pos.includes('STRIK') || pos.includes('FORWARD')) posCounts.Striker++;
+        else if (pos.includes('DEFEND') || pos.includes('BACK')) posCounts.Defender++;
+        else if (pos.includes('GOAL') || pos.includes('GK')) posCounts.Goalkeeper++;
+        else if (pos.includes('WING')) posCounts.Winger++;
+        else posCounts.Midfielder++;
+      });
+    }
+
+    const totalPos = Object.values(posCounts).reduce((a, b) => a + b, 0);
+    const positionInterestDistribution = [
+      {
+        position: 'Midfielder',
+        value: posCounts.Midfielder,
+        percentage: totalPos > 0 ? Math.round((posCounts.Midfielder / totalPos) * 100) : 0,
+      },
+      {
+        position: 'Striker',
+        value: posCounts.Striker,
+        percentage: totalPos > 0 ? Math.round((posCounts.Striker / totalPos) * 100) : 0,
+      },
+      {
+        position: 'Defender',
+        value: posCounts.Defender,
+        percentage: totalPos > 0 ? Math.round((posCounts.Defender / totalPos) * 100) : 0,
+      },
+      {
+        position: 'Goalkeeper',
+        value: posCounts.Goalkeeper,
+        percentage: totalPos > 0 ? Math.round((posCounts.Goalkeeper / totalPos) * 100) : 0,
+      },
+      {
+        position: 'Winger',
+        value: posCounts.Winger,
+        percentage: totalPos > 0 ? Math.round((posCounts.Winger / totalPos) * 100) : 0,
+      },
+    ];
+
+    // 4. Coaches & Players Section (Real Teams & Real Coaches)
+    const teams = await Team.find({
+      $or: [{ academyId: club._id }, { teamName: new RegExp(club.name, 'i') }],
+    })
+      .select('teamName ageGroup playersCount status')
+      .lean();
+
+    const formattedTeams = teams.map((t: any) => ({
+      id: t._id,
+      teamName: t.teamName,
+      ageGroup: t.ageGroup,
+      scout: club.name,
+      players: t.playersCount || 0,
+      status: t.status || 'ACTIVE',
+    }));
+
+    const clubCoaches = await CoachProfile.find({
+      $or: [
+        { currentClub: new RegExp(`^${club.name}$`, 'i') },
+        { currentClub: new RegExp(club.name, 'i') },
+      ],
+    })
+      .select('fullName title speciality currentClub yearsExperience status profileImage')
+      .lean();
+
+    const formattedCoaches = clubCoaches.map((c: any) => ({
+      id: c._id,
+      coachId: c._id,
+      name: c.fullName || '',
+      avatar: c.profileImage || null,
+      role: c.title || c.speciality || 'Head Coach',
+      team: c.currentClub || club.name,
+      experience: `${c.yearsExperience || 0} yrs`,
+      status: c.status || 'ACTIVE',
+    }));
+
+    // 5. Favourites (Favourite Players & Favourite Coaches)
+    const favPlayerDocs = await ClubFavourite.find({
+      clubId: club._id,
+      targetType: 'PLAYER',
+    })
+      .populate({
+        path: 'targetPlayerId',
+        select:
+          '_id fullName avatar profileImage position overallRating currentClub academy country dateOfBirth age',
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const favouritePlayers = favPlayerDocs
+      .filter((f: any) => f.targetPlayerId)
+      .map((f: any) => {
+        const p = f.targetPlayerId;
+        let age = typeof p.age === 'number' ? p.age : null;
+        if (p.dateOfBirth) {
+          const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
+          age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+        }
+        const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
+        return {
+          id: p._id,
+          playerId: p._id,
+          name: p.fullName || '',
+          avatar: p.profileImage || p.avatar || null,
+          position: (p.position || '').toUpperCase(),
+          rating: (rating / 10).toFixed(1),
+          club: p.currentClub || p.academy || '',
+          country: p.country || '',
+          age,
+          shareableUrl: `${playerShareBase}/${p._id}`,
+        };
+      });
+
+    const favCoachDocs = await ClubFavourite.find({
+      clubId: club._id,
+      targetType: 'COACH',
+    })
+      .populate({
+        path: 'targetCoachId',
+        select:
+          '_id fullName profileImage title speciality currentClub birthCountry yearsExperience',
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const favouriteCoaches = favCoachDocs
+      .filter((f: any) => f.targetCoachId)
+      .map((f: any) => {
+        const c = f.targetCoachId;
+        return {
+          id: c._id,
+          coachId: c._id,
+          name: c.fullName || '',
+          avatar: c.profileImage || null,
+          role: c.title || c.speciality || 'Coach',
+          speciality: c.speciality || 'General',
+          club: c.currentClub || '',
+          country: c.birthCountry || '',
+          experience: `${c.yearsExperience || 0} yrs`,
+          shareableUrl: `${coachShareBase}/${c._id}`,
+        };
+      });
+
+    // 6. Media Gallery (Images & Videos from common Media collection)
+    const mediaItems = await Media.find({
+      $or: [{ clubId: club._id }, { userId: club.userId, role: 'CLUB' }],
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formattedMedia = mediaItems.map((m: any) => ({
+      id: m._id,
+      url: m.url,
+      thumbnailUrl: m.thumbnailUrl || m.url,
+      title: m.title || 'Untitled',
+      description: m.description || '',
+      mediaType: m.mediaType,
+      views: m.views || 0,
+      likes: m.likes || 0,
+      createdAt: m.createdAt,
+    }));
+
+    const images = formattedMedia.filter((m: any) => m.mediaType === 'IMAGE');
+    const videos = formattedMedia.filter((m: any) => m.mediaType === 'VIDEO');
+
+    // 7. Recent Activity (Notifications + Club interactions)
+    const notifications = await Notification.find({
+      recipientId: club.userId,
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const activityList: any[] = notifications.map((n: any) => ({
+      id: n._id,
+      title: n.title,
+      description: n.message,
+      type: n.type || 'NOTIFICATION',
+      timeAgo: this.formatTimeAgo(n.createdAt),
+      createdAt: n.createdAt,
+    }));
+
+    if (activityList.length === 0) {
+      if (viewedList.length > 0) {
+        activityList.push({
+          id: 'act-views',
+          title: 'Player profiles viewed',
+          description: `Club has reviewed ${viewedList.length} player profiles`,
+          type: 'VIEW',
+          timeAgo: this.formatTimeAgo(viewedList[0].viewedAt || new Date()),
+          createdAt: viewedList[0].viewedAt || new Date(),
+        });
+      }
+      if (sharedProfilesList.length > 0) {
+        activityList.push({
+          id: 'act-shares',
+          title: 'Player CV shared',
+          description: `Club shared ${totalSharedCount} player profiles`,
+          type: 'SHARE',
+          timeAgo: this.formatTimeAgo(sharedProfilesList[0].sharedAt || new Date()),
+          createdAt: sharedProfilesList[0].sharedAt || new Date(),
+        });
+      }
+    }
+
+    return {
+      club: clubInfo,
+      metrics,
+      analytics: {
+        selectedYear,
+        playersAndCoachesMonitored,
+        positionInterestDistribution,
+      },
+      coachesAndPlayers: {
+        players: formattedTeams,
+        coaches: formattedCoaches,
+      },
+      favourites: {
+        players: favouritePlayers,
+        coaches: favouriteCoaches,
+      },
+      media: {
+        images,
+        videos,
+        all: formattedMedia,
+        totalImages: images.length,
+        totalVideos: videos.length,
+      },
+      recentActivity: activityList,
+    };
   }
 }
 

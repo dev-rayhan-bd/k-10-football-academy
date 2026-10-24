@@ -346,3 +346,17 @@ export const recordPlayerView = catchAsync(async (req: Request, res: Response) =
     data: result,
   });
 });
+
+// ==========================================
+// 6. CLUB DASHBOARD (REAL-TIME DB DASHBOARD)
+// ==========================================
+export const getClubDashboard = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.getClubDashboard(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Club dashboard analytics fetched successfully',
+    data: result,
+  });
+});

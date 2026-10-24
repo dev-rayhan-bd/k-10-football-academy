@@ -130,3 +130,183 @@ export const getFavourites = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
+// ==========================================
+// SCOUTING BOARD (SCREENSHOTS 1 & 2)
+// ==========================================
+export const getScoutingBoard = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.getScoutingBoard(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Scouting board fetched successfully',
+    data: result,
+  });
+});
+
+export const toggleScoutingFavourite = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.toggleScoutingFavourite(userId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+// ==========================================
+// CVS LIBRARY (SCREENSHOT 3)
+// ==========================================
+export const getClubCvsLibrary = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.getClubCvsLibrary(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'CVs library fetched successfully',
+    data: result,
+  });
+});
+
+export const toggleLikePlayerCv = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.toggleLikePlayerCv(userId, req.params.playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const sharePlayerCv = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.sharePlayerCv(userId, req.params.playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+// ==========================================
+// SUCCESS STORIES (SCREENSHOTS 4 & 5)
+// ==========================================
+export const getClubSuccessStories = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.getClubSuccessStories(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Success stories fetched successfully',
+    data: result,
+  });
+});
+
+export const createClubSuccessStory = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore
+    }
+  }
+
+  // 2. Handle cover image upload from form-data
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const imgFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'coverImage' ||
+          f.fieldname === 'photo' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'cover' ||
+          f.fieldname === 'file',
+      ) || allFiles[0];
+
+    if (imgFile) {
+      const uploadedUrl = await uploadToStorage(imgFile, 'club_success_stories');
+      req.body.coverImage = uploadedUrl;
+      req.body.photo = uploadedUrl;
+    }
+  }
+
+  const result = await clubService.createClubSuccessStory(userId, req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Success story created successfully',
+    data: result,
+  });
+});
+
+export const updateClubSuccessStory = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore
+    }
+  }
+
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const imgFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'coverImage' ||
+          f.fieldname === 'photo' ||
+          f.fieldname === 'image' ||
+          f.fieldname === 'cover' ||
+          f.fieldname === 'file',
+      ) || allFiles[0];
+
+    if (imgFile) {
+      const uploadedUrl = await uploadToStorage(imgFile, 'club_success_stories');
+      req.body.coverImage = uploadedUrl;
+      req.body.photo = uploadedUrl;
+    }
+  }
+
+  const result = await clubService.updateClubSuccessStory(userId, req.params.id, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Success story updated successfully',
+    data: result,
+  });
+});
+
+export const deleteClubSuccessStory = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.deleteClubSuccessStory(userId, req.params.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});

@@ -18,6 +18,12 @@ export interface IClubProfile {
     championship: string;
     venue?: string;
   }[];
+  likedPlayerIds?: Types.ObjectId[];
+  sharedPlayerProfiles?: {
+    playerId: Types.ObjectId;
+    sharedAt: Date;
+    shareCount: number;
+  }[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -42,3 +48,20 @@ export interface IClubFavourite {
 }
 
 export interface IClubFavouriteDocument extends IClubFavourite, Document {}
+
+export interface IClubSuccessStory {
+  clubId: Types.ObjectId;
+  storyTitle: string;
+  category: string;
+  date: Date;
+  formattedDate?: string;
+  coverImage?: string;
+  photo?: string;
+  status: 'APPROVED' | 'PENDING' | 'REJECTED';
+  isDeleted: boolean;
+  deletedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IClubSuccessStoryDocument extends IClubSuccessStory, Document {}

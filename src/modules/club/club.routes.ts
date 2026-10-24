@@ -16,6 +16,15 @@ import {
   getAchievements,
   addFavourite,
   getFavourites,
+  getScoutingBoard,
+  toggleScoutingFavourite,
+  getClubCvsLibrary,
+  toggleLikePlayerCv,
+  sharePlayerCv,
+  getClubSuccessStories,
+  createClubSuccessStory,
+  updateClubSuccessStory,
+  deleteClubSuccessStory,
 } from './club.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -23,23 +32,45 @@ import { upload } from '@/middlewares/multer';
 const router = Router();
 
 // ==========================================
-// AUTHENTICATED CLUB PROFILE (FOR CLUB ROLE)
+// 1. CLUB PROFILE
 // ==========================================
 router.get('/profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
-router.get('/my-profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
-router.get('/club-profile', auth('CLUB', 'SUPER_ADMIN'), getMyClubProfile);
-
 router.patch('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
-router.patch('/my-profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
-router.patch(
-  '/club-profile',
+
+// ==========================================
+// 2. SCOUTING BOARD (SCREENSHOTS 1 & 2)
+// ==========================================
+router.get('/scouting-board', auth('CLUB', 'SUPER_ADMIN'), getScoutingBoard);
+router.post('/scouting-board/favourite', auth('CLUB', 'SUPER_ADMIN'), toggleScoutingFavourite);
+
+// ==========================================
+// 3. CVS LIBRARY (SCREENSHOT 3)
+// ==========================================
+router.get('/cvs-library', auth('CLUB', 'SUPER_ADMIN'), getClubCvsLibrary);
+router.post('/cvs-library/:playerId/like', auth('CLUB', 'SUPER_ADMIN'), toggleLikePlayerCv);
+router.post('/cvs-library/:playerId/share', auth('CLUB', 'SUPER_ADMIN'), sharePlayerCv);
+
+// ==========================================
+// 4. SUCCESS STORIES (SCREENSHOTS 4 & 5)
+// ==========================================
+router.get('/success-stories', auth('CLUB', 'SUPER_ADMIN'), getClubSuccessStories);
+router.post(
+  '/success-stories',
   auth('CLUB', 'SUPER_ADMIN'),
   upload.any() as any,
-  updateMyClubProfile,
+  createClubSuccessStory,
 );
-router.put('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
-router.put('/club-profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updateMyClubProfile);
+router.patch(
+  '/success-stories/:id',
+  auth('CLUB', 'SUPER_ADMIN'),
+  upload.any() as any,
+  updateClubSuccessStory,
+);
+router.delete('/success-stories/:id', auth('CLUB', 'SUPER_ADMIN'), deleteClubSuccessStory);
 
+// ==========================================
+// GENERAL / ADMIN CLUB ROUTES
+// ==========================================
 router.post(
   '/',
   auth(),

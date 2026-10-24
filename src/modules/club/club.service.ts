@@ -893,10 +893,8 @@ export class ClubService {
 
     // 1. Metric counts
     const viewedProfiles = club.viewedPlayerProfiles || [];
-    const playersProfileViewedCount = viewedProfiles.reduce(
-      (sum, p) => sum + (p.viewCount || 1),
-      0,
-    );
+    // Enterprise standard: PLAYERS PROFILE VIEWED represents unique player profiles reviewed by this club
+    const playersProfileViewedCount = viewedProfiles.length;
     const totalLikedCount = await ClubFavourite.countDocuments({
       clubId: club._id,
       targetType: 'PLAYER',
@@ -1128,28 +1126,67 @@ export class ClubService {
     const views = club.viewedPlayerProfiles || [];
     const existingIndex = views.findIndex((v) => v.playerId?.toString() === playerId);
 
-    let updatedCount = 1;
+    // Enterprise session deduplication: 1-hour cooldown window for repeated clicks/refreshes
+    const COOLDOWN_MS = 60 * 60 * 1000;
+    const now = new Date();
+    let isNewSessionView: boolean;
+    let updatedCount: number;
+
     if (existingIndex > -1) {
-      views[existingIndex].viewCount = (views[existingIndex].viewCount || 1) + 1;
-      views[existingIndex].viewedAt = new Date();
-      updatedCount = views[existingIndex].viewCount;
+      const lastViewedAt = views[existingIndex].viewedAt
+        ? new Date(views[existingIndex].viewedAt).getTime()
+        : 0;
+      const elapsed = now.getTime() - lastViewedAt;
+
+      if (elapsed >= COOLDOWN_MS) {
+        // Cooldown passed: record new view session
+        views[existingIndex].viewCount = (views[existingIndex].viewCount || 1) + 1;
+        views[existingIndex].viewedAt = now;
+        isNewSessionView = true;
+      } else {
+        // Inside cooldown window: duplicate click ignored
+        isNewSessionView = false;
+      }
+      updatedCount = views[existingIndex].viewCount || 1;
     } else {
+      // First time viewing this player profile
       views.push({
         playerId: new Types.ObjectId(playerId),
-        viewedAt: new Date(),
+        viewedAt: now,
         viewCount: 1,
       });
+      isNewSessionView = true;
+      updatedCount = 1;
     }
 
-    club.viewedPlayerProfiles = views;
-    await club.save();
+    if (isNewSessionView) {
+      club.viewedPlayerProfiles = views;
+      await club.save();
 
-    await PlayerProfile.updateOne({ _id: playerId }, { $inc: { profileViews: 1 } });
+      // Synchronize with Player Profile views & interested clubs
+      await PlayerProfile.updateOne(
+        { _id: playerId },
+        {
+          $inc: { profileViews: 1 },
+          $addToSet: {
+            clubsInterested: {
+              clubName: club.name,
+              logoUrl: club.logo || '',
+              viewedAt: now,
+            },
+          },
+        },
+      );
+    }
 
     return {
       playerId,
       viewsCount: updatedCount,
-      message: 'Player view recorded successfully',
+      uniqueProfilesViewed: views.length,
+      isNewSessionView,
+      message: isNewSessionView
+        ? 'Player view recorded successfully'
+        : 'View acknowledged (duplicate ignored within cooldown window)',
     };
   }
 

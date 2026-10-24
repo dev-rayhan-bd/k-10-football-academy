@@ -11,7 +11,7 @@ export const createAgentProfileZodSchema = z.object({
 export const uploadVerificationDocZodSchema = z.object({
   body: z.object({
     documentType: z.enum(['LICENSE_CERTIFICATE', 'NATIONAL_ID_PASSPORT', 'ASSOCIATION_MEMBERSHIP']),
-    fileUrl: z.string().url('Must be a valid file URL'),
+    fileUrl: z.string().url('Must be a valid file URL').optional(),
   }),
 });
 

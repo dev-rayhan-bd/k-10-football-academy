@@ -2,6 +2,7 @@ import { AppError } from '@/utils/AppError';
 import { IAgentProfile, IVerificationDocument, ISuccessStory } from './agent.interface';
 import { AgentProfile, VerificationDocument, SuccessStory } from './agent.model';
 import { UserModel } from '@/modules/user/user.model';
+import { Notification } from '@/modules/notification/notification.model';
 import { Types } from 'mongoose';
 
 export class AgentService {
@@ -32,12 +33,37 @@ export class AgentService {
     if (payload.fifaLicenseNumber) userUpdates.fifaLicenseNumber = payload.fifaLicenseNumber;
     if (payload.licenseId) userUpdates.fifaLicenseNumber = payload.licenseId;
     if (payload.agencyName) userUpdates.agencyName = payload.agencyName;
+    if (payload.officialWebsite) userUpdates.officialWebsite = payload.officialWebsite;
+    if ((payload as any).countryOfOperation)
+      userUpdates.countryOfOperation = (payload as any).countryOfOperation;
+    if ((payload as any).phone) userUpdates.phone = (payload as any).phone;
     if (payload.licenseCertificateDocument)
       userUpdates.licenseCertificateDocument = payload.licenseCertificateDocument;
     if (payload.identityDocument) userUpdates.identityDocument = payload.identityDocument;
 
     if (Object.keys(userUpdates).length > 0) {
       await UserModel.findByIdAndUpdate(userId, { $set: userUpdates });
+    }
+
+    if (
+      payload.licenseCertificateDocument ||
+      payload.identityDocument ||
+      payload.associationMembershipDocument
+    ) {
+      const user = await UserModel.findById(userId);
+      const admins = await UserModel.find({ role: { $in: ['SUPER_ADMIN', 'ADMIN'] } }).select(
+        '_id role',
+      );
+      for (const admin of admins) {
+        await Notification.create({
+          recipientId: admin._id,
+          recipientRole: admin.role,
+          title: 'New Agent Verification Request',
+          message: `${user?.name || 'A Football Agent'} has submitted FIFA license and verification documents for review.`,
+          type: 'VERIFICATION',
+          data: { userId, role: 'AGENT' },
+        });
+      }
     }
 
     return updated;

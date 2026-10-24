@@ -182,8 +182,53 @@ export class ClubService {
         profile.achievements = payload.achievements;
       }
     }
+    if (payload.authorizationDocument) {
+      profile.authorizationDocument = payload.authorizationDocument;
+    }
+    if (payload.clubRegistrationDocument) {
+      profile.clubRegistrationDocument = payload.clubRegistrationDocument;
+    }
+    if (payload.officialWebsite) {
+      profile.officialWebsite = payload.officialWebsite;
+    }
+    if (payload.footballAssociation) {
+      profile.footballAssociation = payload.footballAssociation;
+    }
+    if (payload.authorizedRepresentativeName) {
+      profile.authorizedRepresentativeName = payload.authorizedRepresentativeName;
+    }
+    if (payload.authorizedRepresentativeJobTitle) {
+      profile.authorizedRepresentativeJobTitle = payload.authorizedRepresentativeJobTitle;
+    }
 
     await profile.save();
+
+    const userUpdates: Record<string, unknown> = {};
+    if (payload.authorizationDocument)
+      userUpdates.authorizationDocument = payload.authorizationDocument;
+    if (payload.clubRegistrationDocument)
+      userUpdates.clubRegistrationDocument = payload.clubRegistrationDocument;
+    if (payload.officialWebsite) userUpdates.officialWebsite = payload.officialWebsite;
+    if (Object.keys(userUpdates).length > 0) {
+      await User.findByIdAndUpdate(userId, { $set: userUpdates });
+    }
+
+    if (payload.authorizationDocument || payload.clubRegistrationDocument) {
+      const user = await User.findById(userId);
+      const admins = await User.find({ role: { $in: ['SUPER_ADMIN', 'ADMIN'] } }).select(
+        '_id role',
+      );
+      for (const admin of admins) {
+        await Notification.create({
+          recipientId: admin._id,
+          recipientRole: admin.role,
+          title: 'New Club Verification Request',
+          message: `${profile.name || user?.name || 'A Football Club'} has submitted verification documents for review.`,
+          type: 'VERIFICATION',
+          data: { userId, role: 'CLUB' },
+        });
+      }
+    }
 
     const updated = await ClubProfile.findById(profile._id).populate(
       'userId',

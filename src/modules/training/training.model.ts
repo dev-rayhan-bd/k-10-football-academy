@@ -55,6 +55,8 @@ const TrainingAttendanceSchema = new Schema<ITrainingAttendanceDocument>(
     },
     notes: { type: String },
     markedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    signInTime: { type: String },
+    signOutTime: { type: String },
   },
   { timestamps: true },
 );

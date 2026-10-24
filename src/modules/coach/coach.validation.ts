@@ -102,3 +102,39 @@ export const submitPlayerEvaluationZodSchema = z.object({
     })
     .passthrough(),
 });
+
+export const coachAttendanceTickZodSchema = z.object({
+  body: z
+    .object({
+      playerId: z.string({ required_error: 'Player ID is required' }),
+      sessionId: z.string().optional(),
+      teamId: z.string().optional(),
+      date: z.string().optional(),
+      isIn: z.boolean().optional(),
+      status: z.enum(['PRESENT', 'LATE', 'ABSENT', 'UNMARKED', 'EXCUSED']).optional(),
+      time: z.string().optional(),
+      notes: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const coachAttendanceBulkZodSchema = z.object({
+  body: z
+    .object({
+      sessionId: z.string().optional(),
+      teamId: z.string().optional(),
+      date: z.string().optional(),
+      markAll: z.enum(['PRESENT', 'ABSENT', 'CLEAR', 'UNMARKED']).optional(),
+      attendances: z
+        .array(
+          z.object({
+            playerId: z.string({ required_error: 'Player ID is required' }),
+            isIn: z.boolean().optional(),
+            status: z.enum(['PRESENT', 'LATE', 'ABSENT', 'UNMARKED', 'EXCUSED']).optional(),
+            notes: z.string().optional(),
+          }),
+        )
+        .optional(),
+    })
+    .passthrough(),
+});

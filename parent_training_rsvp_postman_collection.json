@@ -1,0 +1,149 @@
+{
+  "info": {
+    "_postman_id": "k10-parent-training-rsvp-api-v1",
+    "name": "K10 Parent - Training Attendance RSVP (Two-Way Attendance)",
+    "description": "APIs for Parent Training Attendance Confirmation (Pre-session Planning) and viewing Coach Actual Attendance for linked child athletes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token_PARENT",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "childPlayerId",
+      "value": "66df1234567890abcdef1234",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "6adc217c118a25d702953410",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get Child Upcoming Training Sessions (With RSVP & Coach Attendance)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_PARENT}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/parents/training-sessions?upcomingOnly=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "parents", "training-sessions"],
+          "query": [
+            {
+              "key": "upcomingOnly",
+              "value": "true",
+              "description": "Show only upcoming sessions (from today onwards)"
+            },
+            {
+              "key": "childPlayerId",
+              "value": "{{childPlayerId}}",
+              "description": "Filter by specific child",
+              "disabled": true
+            },
+            {
+              "key": "date",
+              "value": "2026-10-25",
+              "description": "Filter by specific session date (YYYY-MM-DD)",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Returns upcoming training sessions for parent's child/children with date, time, field, team, coach, current parent RSVP status ('CONFIRMED' / 'DECLINED' / 'PENDING'), and coach actual attendance."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Parent Confirm Attendance - Will Attend (CONFIRMED)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_PARENT}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"childPlayerId\": \"{{childPlayerId}}\",\n  \"rsvpStatus\": \"CONFIRMED\",\n  \"notes\": \"Will attend session on time\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/parents/sessions/{{sessionId}}/rsvp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "parents", "sessions", "{{sessionId}}", "rsvp"]
+        },
+        "description": "Parent confirms that the child will attend the training session. Coach and Academy can see this confirmation before training begins for session planning."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Parent Decline Attendance - Cannot Attend (DECLINED)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_PARENT}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"childPlayerId\": \"{{childPlayerId}}\",\n  \"rsvpStatus\": \"DECLINED\",\n  \"notes\": \"Cannot attend due to mild fever / doctor appointment\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/parents/sessions/{{sessionId}}/rsvp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "parents", "sessions", "{{sessionId}}", "rsvp"]
+        },
+        "description": "Parent informs that the child cannot attend this session. This marks the absence as excused/informed in advance."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Get My Children (Linked Child Athletes)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_PARENT}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/parents/my-children",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "parents", "my-children"]
+        },
+        "description": "Fetches all child athletes linked to this parent account (with childPlayerId and childUserId)."
+      },
+      "response": []
+    }
+  ]
+}

@@ -558,3 +558,36 @@ export const getPlayerEvaluationPdfData = catchAsync(async (req: Request, res: R
     data: result,
   });
 });
+
+export const tickPlayerAttendance = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await coachService.tickPlayerAttendance(userId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const bulkUpdateCoachAttendance = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await coachService.bulkUpdateCoachAttendance(userId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getCoachTrainingSessions = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await coachService.getCoachTrainingSessions(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Coach training sessions retrieved successfully',
+    data: result,
+  });
+});

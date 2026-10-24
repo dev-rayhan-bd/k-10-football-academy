@@ -1,0 +1,229 @@
+{
+  "info": {
+    "_postman_id": "k10-coach-team-attendance-api-v1",
+    "name": "K10 Football Coach - My Teams Squad Attendance API",
+    "description": "Complete APIs for Coach Training Attendance from the 'MY TEAMS' Squad page. Includes Date Picker & Session Selector dropdowns, Real-time Sign In (Tick) & Sign Out timestamps, Bulk Attendance, and Squad metrics.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token_COACH",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "playerId",
+      "value": "66df1234567890abcdef1234",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "671a5bc9f4931a28a9b1c782",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get My Teams Squad (Dropdowns for Date & Session + Player Attendance)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_COACH}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/coaches/me/teams?date=2026-10-24&sessionId={{sessionId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "coaches", "me", "teams"],
+          "query": [
+            {
+              "key": "date",
+              "value": "2026-10-24",
+              "description": "Date selected in Date Picker (defaults to Today YYYY-MM-DD)"
+            },
+            {
+              "key": "sessionId",
+              "value": "{{sessionId}}",
+              "description": "ID of session selected from the Session Dropdown"
+            },
+            {
+              "key": "status",
+              "value": "ALL",
+              "description": "Filter by player fitness: ALL, ACTIVE, INJURED",
+              "disabled": true
+            },
+            {
+              "key": "page",
+              "value": "1",
+              "disabled": true
+            },
+            {
+              "key": "limit",
+              "value": "20",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Loads the 'MY TEAMS' dashboard page (Screenshot). Returns top 4 summary cards (totalPlayers, avgRating, active, injured), sessionInfo (selectedDate, activeSession, availableSessions for the dropdown), and players table where each player has their exact attendance status ('PRESENT', 'LATE', 'ABSENT', 'UNMARKED'), 'isAttended', 'isIn', and 'markedAt' for that chosen session."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Mark Player PRESENT (Tick / In for Chosen Session)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_COACH}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"playerId\": \"{{playerId}}\",\n  \"status\": \"PRESENT\",\n  \"notes\": \"Arrived on time for practice\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/coaches/me/attendance/tick",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "coaches", "me", "attendance", "tick"]
+        },
+        "description": "Coach marks a player PRESENT for the session selected in the dropdown. Automatically sets status to 'PRESENT', isAttended/isIn to true, records markedAt (e.g., '08:30 AM'), and recalculates session metrics."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Mark Player LATE (For Chosen Session)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_COACH}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"playerId\": \"{{playerId}}\",\n  \"status\": \"LATE\",\n  \"notes\": \"Arrived 15 minutes late\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/coaches/me/attendance/tick",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "coaches", "me", "attendance", "tick"]
+        },
+        "description": "Coach marks player as LATE for the selected session. Records markedAt, marks status as 'LATE', isAttended to true, and updates session statistics."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Mark Player ABSENT (Untick / Out for Chosen Session)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_COACH}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"playerId\": \"{{playerId}}\",\n  \"status\": \"ABSENT\",\n  \"notes\": \"Player did not attend\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/coaches/me/attendance/tick",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "coaches", "me", "attendance", "tick"]
+        },
+        "description": "Coach marks player as ABSENT (or unticks). Sets status to 'ABSENT', isAttended/isIn to false, and updates attendance records."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Bulk Attendance (Mark All Present/Absent or Batch Save)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_COACH}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"markAll\": \"PRESENT\",\n  \"attendances\": [\n    {\n      \"playerId\": \"{{playerId}}\",\n      \"status\": \"PRESENT\",\n      \"notes\": \"Warm-up drill completed\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/coaches/me/attendance/bulk",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "coaches", "me", "attendance", "bulk"]
+        },
+        "description": "Allows marking all players as PRESENT or ABSENT in 1 click, or submitting custom attendance for multiple squad members simultaneously."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Get Training Sessions (To populate the Session Dropdown)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_COACH}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/coaches/me/attendance/sessions?date=2026-10-24",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "coaches", "me", "attendance", "sessions"],
+          "query": [
+            {
+              "key": "date",
+              "value": "2026-10-24",
+              "description": "Filter sessions by date (YYYY-MM-DD)"
+            },
+            {
+              "key": "month",
+              "value": "2026-10",
+              "description": "Filter sessions by month (YYYY-MM)",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Returns all training sessions assigned to this coach for the selected date or month, used to populate the session dropdown selector."
+      },
+      "response": []
+    }
+  ]
+}

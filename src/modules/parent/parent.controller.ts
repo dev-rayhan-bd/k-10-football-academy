@@ -97,3 +97,26 @@ export const getMatchReports = catchAsync(async (req: Request, res: Response) =>
     data: result,
   });
 });
+
+export const getChildTrainingSessions = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await parentService.getChildTrainingSessions(userId, req.query as any);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Child training sessions fetched successfully',
+    data: result,
+  });
+});
+
+export const submitParentRsvp = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const sessionId = req.params.sessionId || req.body.sessionId;
+  const result = await parentService.submitParentRsvp(userId, sessionId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});

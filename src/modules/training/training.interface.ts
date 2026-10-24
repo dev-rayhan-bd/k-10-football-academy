@@ -45,6 +45,8 @@ export interface ITrainingAttendance {
   rsvpStatus?: RsvpStatus;
   notes?: string;
   markedBy?: Types.ObjectId;
+  signInTime?: string;
+  signOutTime?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

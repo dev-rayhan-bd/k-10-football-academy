@@ -8,6 +8,8 @@ import {
   createCoachTestimonialZodSchema,
   updateCoachTestimonialZodSchema,
   submitPlayerEvaluationZodSchema,
+  coachAttendanceTickZodSchema,
+  coachAttendanceBulkZodSchema,
 } from './coach.validation';
 import {
   getMyCoachCV,
@@ -40,6 +42,9 @@ import {
   getPlayerEvaluationDetails,
   submitPlayerEvaluation,
   getPlayerEvaluationPdfData,
+  tickPlayerAttendance,
+  bulkUpdateCoachAttendance,
+  getCoachTrainingSessions,
 } from './coach.controller';
 import { getCoachAllGameReports } from '@/modules/player/game-report.controller';
 
@@ -134,6 +139,45 @@ router.patch(
   '/me/players/:playerId/fitness-status',
   auth('COACH', 'SUPER_ADMIN'),
   updatePlayerFitnessStatus,
+);
+
+// ==========================================
+// COACH ATTENDANCE (FAST TICK / SIGN IN / SIGN OUT)
+// ==========================================
+router.get('/me/attendance/sessions', auth('COACH', 'SUPER_ADMIN'), getCoachTrainingSessions);
+router.post(
+  '/me/attendance/tick',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(coachAttendanceTickZodSchema),
+  tickPlayerAttendance,
+);
+router.patch(
+  '/me/attendance/tick',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(coachAttendanceTickZodSchema),
+  tickPlayerAttendance,
+);
+router.patch(
+  '/me/players/:playerId/attendance',
+  auth('COACH', 'SUPER_ADMIN'),
+  (req, _res, next) => {
+    req.body.playerId = req.params.playerId;
+    next();
+  },
+  validateRequest(coachAttendanceTickZodSchema),
+  tickPlayerAttendance,
+);
+router.post(
+  '/me/attendance/bulk',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(coachAttendanceBulkZodSchema),
+  bulkUpdateCoachAttendance,
+);
+router.put(
+  '/me/attendance/bulk',
+  auth('COACH', 'SUPER_ADMIN'),
+  validateRequest(coachAttendanceBulkZodSchema),
+  bulkUpdateCoachAttendance,
 );
 
 // Unified PATCH for profile & CV sections

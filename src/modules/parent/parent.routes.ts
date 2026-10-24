@@ -6,6 +6,7 @@ import {
   linkChildZodSchema,
   createParentMatchReportZodSchema,
   switchProfileZodSchema,
+  parentRsvpZodSchema,
 } from './parent.validation';
 import {
   createParentProfile,
@@ -17,11 +18,45 @@ import {
   getMatchReports,
   switchProfile,
   switchToParent,
+  getChildTrainingSessions,
+  submitParentRsvp,
 } from './parent.controller';
 
 import { upload } from '@/middlewares/multer';
 
 const router = Router();
+
+// ==========================================
+// PARENT TRAINING SESSIONS & RSVP (TWO-WAY ATTENDANCE)
+// ==========================================
+router.get(
+  '/training-sessions',
+  auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'),
+  getChildTrainingSessions,
+);
+router.get(
+  '/me/training-sessions',
+  auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'),
+  getChildTrainingSessions,
+);
+router.post(
+  '/sessions/:sessionId/rsvp',
+  auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'),
+  validateRequest(parentRsvpZodSchema),
+  submitParentRsvp,
+);
+router.patch(
+  '/sessions/:sessionId/rsvp',
+  auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'),
+  validateRequest(parentRsvpZodSchema),
+  submitParentRsvp,
+);
+router.post(
+  '/attendance/rsvp',
+  auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'),
+  validateRequest(parentRsvpZodSchema),
+  submitParentRsvp,
+);
 
 router.post(
   '/switch-profile',

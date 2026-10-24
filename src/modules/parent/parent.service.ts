@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 import { env } from '@/config/env';
 import { UserModel } from '@/modules/user/user.model';
 import { PlayerProfile } from '@/modules/player/player.model';
+import { Team } from '@/modules/academy/academy.model';
+import { TrainingSession, TrainingAttendance } from '@/modules/training/training.model';
 import { IParentProfile, IParentMatchReport } from './parent.interface';
 import { ParentProfile, ParentChild, ParentMatchReport } from './parent.model';
 
@@ -366,6 +368,235 @@ export class ParentService {
 
   async getMatchReports(parentId: string) {
     return ParentMatchReport.find({ parentId }).populate('childPlayerId', 'fullName position');
+  }
+
+  /**
+   * Get training sessions for parent's linked child/children
+   * Includes session info and current RSVP status (CONFIRMED / DECLINED / PENDING)
+   */
+  async getChildTrainingSessions(
+    userId: string,
+    query: { childPlayerId?: string; date?: string; upcomingOnly?: string } = {},
+  ) {
+    const targetParentIds: any[] = [userId];
+    if (Types.ObjectId.isValid(userId)) {
+      const parentProfile = await ParentProfile.findOne({
+        $or: [{ _id: userId }, { userId }],
+      });
+      if (parentProfile) {
+        targetParentIds.push(parentProfile._id);
+        targetParentIds.push(parentProfile.userId);
+      }
+    }
+
+    const linkFilter: any = { parentId: { $in: targetParentIds } };
+    if (query.childPlayerId && Types.ObjectId.isValid(query.childPlayerId)) {
+      linkFilter.childPlayerId = query.childPlayerId;
+    }
+
+    const links = await ParentChild.find(linkFilter)
+      .populate('childPlayerId', 'fullName position profileImage jerseyNumber')
+      .lean();
+
+    if (links.length === 0) {
+      return { total: 0, sessions: [] };
+    }
+
+    const childPlayerIds = links.map((l: any) => l.childPlayerId?._id || l.childPlayerId);
+    const childMap = new Map<string, any>();
+    links.forEach((l: any) => {
+      const p = l.childPlayerId;
+      if (p?._id) childMap.set(p._id.toString(), p);
+    });
+
+    // Find teams containing these children
+    const teams = await Team.find({
+      playerIds: { $in: childPlayerIds },
+    })
+      .select('_id teamName ageGroup playerIds')
+      .lean();
+
+    const teamIds = teams.map((t) => t._id);
+
+    // Find training sessions for these teams
+    const sessionFilter: any = { teamId: { $in: teamIds } };
+
+    if (query.date) {
+      const startOfDay = new Date(query.date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(query.date);
+      endOfDay.setHours(23, 59, 59, 999);
+      sessionFilter.sessionDate = { $gte: startOfDay, $lte: endOfDay };
+    } else if (query.upcomingOnly !== 'false') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      sessionFilter.sessionDate = { $gte: today };
+    }
+
+    const sessions = await TrainingSession.find(sessionFilter)
+      .populate('teamId', 'teamName ageGroup playerIds')
+      .populate('coachId', 'fullName title profileImage')
+      .sort({ sessionDate: 1, startTime: 1 })
+      .lean();
+
+    if (sessions.length === 0) {
+      return { total: 0, sessions: [] };
+    }
+
+    const sessionIds = sessions.map((s) => s._id);
+
+    // Fetch existing attendance records for these children across these sessions
+    const attendances = await TrainingAttendance.find({
+      sessionId: { $in: sessionIds },
+      playerId: { $in: childPlayerIds },
+    }).lean();
+
+    const attMap = new Map<string, any>();
+    attendances.forEach((a) => {
+      const key = `${a.sessionId.toString()}_${a.playerId.toString()}`;
+      attMap.set(key, a);
+    });
+
+    const results: any[] = [];
+
+    sessions.forEach((s: any) => {
+      const team = (s.teamId && typeof s.teamId === 'object' ? s.teamId : {}) as any;
+      const coach = (s.coachId && typeof s.coachId === 'object' ? s.coachId : {}) as any;
+      const teamPlayerIdStrs = (team.playerIds || []).map((id: any) => id.toString());
+
+      // For each child in this team
+      childPlayerIds.forEach((cId: any) => {
+        const cIdStr = cId.toString();
+        if (teamPlayerIdStrs.includes(cIdStr)) {
+          const childObj = childMap.get(cIdStr) || {};
+          const att = attMap.get(`${s._id.toString()}_${cIdStr}`);
+
+          const rsvpStatus = (att?.rsvpStatus || 'PENDING').toUpperCase();
+          const coachStatus = (att?.status || att?.attendanceStatus || 'UNMARKED').toUpperCase();
+          const isAttended = coachStatus === 'PRESENT' || coachStatus === 'LATE';
+
+          results.push({
+            sessionId: s._id,
+            sessionName: s.sessionName || s.sessionTitle || 'Training Session',
+            sessionDate: s.sessionDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            timeRange: `${s.startTime} - ${s.endTime}`,
+            trainingLocation: s.trainingLocation || s.locationField || 'Main Field',
+            sessionType: s.sessionType,
+            focusArea: s.focusArea,
+            team: {
+              _id: team._id,
+              teamName: team.teamName || '',
+              ageGroup: team.ageGroup || '',
+            },
+            coach: {
+              _id: coach._id,
+              name: coach.fullName || 'Head Coach',
+              avatar: coach.profileImage || '',
+            },
+            child: {
+              playerId: cId,
+              fullName: childObj.fullName || 'Athlete',
+              position: childObj.position || '',
+              avatar: childObj.profileImage || '',
+              jerseyNumber: childObj.jerseyNumber ? `#${childObj.jerseyNumber}` : '',
+            },
+            rsvp: {
+              status: rsvpStatus, // 'CONFIRMED' (Yes) | 'DECLINED' (No) | 'PENDING'
+              isConfirmed: rsvpStatus === 'CONFIRMED',
+              notes: att?.notes || '',
+              confirmedAt: att?.updatedAt || null,
+            },
+            actualAttendance: {
+              status: coachStatus, // 'PRESENT' | 'LATE' | 'ABSENT' | 'UNMARKED'
+              isAttended,
+              markedAt: att?.signInTime || null,
+            },
+          });
+        }
+      });
+    });
+
+    return {
+      total: results.length,
+      sessions: results,
+    };
+  }
+
+  /**
+   * Submit Parent Attendance RSVP (Will Attend: CONFIRMED / Cannot Attend: DECLINED)
+   */
+  async submitParentRsvp(
+    userId: string,
+    sessionId: string,
+    payload: {
+      childPlayerId: string;
+      rsvpStatus: 'CONFIRMED' | 'DECLINED' | 'PENDING';
+      notes?: string;
+    },
+  ) {
+    const targetParentIds: any[] = [userId];
+    if (Types.ObjectId.isValid(userId)) {
+      const parentProfile = await ParentProfile.findOne({
+        $or: [{ _id: userId }, { userId }],
+      });
+      if (parentProfile) {
+        targetParentIds.push(parentProfile._id);
+        targetParentIds.push(parentProfile.userId);
+      }
+    }
+
+    // Authorization check: Verify parent is linked to this child
+    const linkExists = await ParentChild.findOne({
+      parentId: { $in: targetParentIds },
+      childPlayerId: payload.childPlayerId,
+    });
+    if (!linkExists) {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'You are not authorized to manage this child athlete',
+      );
+    }
+
+    const session = await TrainingSession.findById(sessionId);
+    if (!session) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Training session not found');
+    }
+
+    const rsvpStatus = payload.rsvpStatus.toUpperCase();
+
+    const attendance = await TrainingAttendance.findOneAndUpdate(
+      {
+        sessionId: session._id,
+        $or: [{ playerId: payload.childPlayerId }, { childPlayerId: payload.childPlayerId }],
+      },
+      {
+        $set: {
+          sessionId: session._id,
+          playerId: payload.childPlayerId,
+          childPlayerId: payload.childPlayerId,
+          rsvpStatus,
+          notes: payload.notes || '',
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    return {
+      message:
+        rsvpStatus === 'CONFIRMED'
+          ? 'Attendance confirmed: child will attend this session'
+          : rsvpStatus === 'DECLINED'
+            ? 'Attendance declined: child will not attend this session'
+            : 'Attendance status updated',
+      sessionId: session._id,
+      sessionName: session.sessionName || session.sessionTitle,
+      sessionDate: session.sessionDate,
+      childPlayerId: payload.childPlayerId,
+      rsvpStatus: attendance.rsvpStatus,
+      notes: attendance.notes || '',
+    };
   }
 }
 

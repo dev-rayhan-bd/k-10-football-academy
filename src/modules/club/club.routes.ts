@@ -18,6 +18,7 @@ import {
   getFavourites,
   getScoutingBoard,
   toggleScoutingFavourite,
+  shareScoutingProfile,
   getClubCvsLibrary,
   toggleLikePlayerCv,
   sharePlayerCv,
@@ -42,6 +43,7 @@ router.patch('/profile', auth('CLUB', 'SUPER_ADMIN'), upload.any() as any, updat
 // ==========================================
 router.get('/scouting-board', auth('CLUB', 'SUPER_ADMIN'), getScoutingBoard);
 router.post('/scouting-board/favourite', auth('CLUB', 'SUPER_ADMIN'), toggleScoutingFavourite);
+router.post('/scouting-board/share', auth('CLUB', 'SUPER_ADMIN'), shareScoutingProfile);
 
 // ==========================================
 // 3. CVS LIBRARY (SCREENSHOT 3)

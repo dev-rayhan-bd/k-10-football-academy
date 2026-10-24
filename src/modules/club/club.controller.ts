@@ -156,6 +156,17 @@ export const toggleScoutingFavourite = catchAsync(async (req: Request, res: Resp
   });
 });
 
+export const shareScoutingProfile = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.shareScoutingProfile(userId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
 // ==========================================
 // CVS LIBRARY (SCREENSHOT 3)
 // ==========================================

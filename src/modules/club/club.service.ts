@@ -335,10 +335,100 @@ export class ClubService {
       };
     });
 
+    const playerPage = Math.max(1, Number(query.playerPage || query.page) || 1);
+    const playerLimit = Math.max(1, Math.min(100, Number(query.playerLimit || query.limit) || 10));
+    const coachPage = Math.max(1, Number(query.coachPage || query.page) || 1);
+    const coachLimit = Math.max(1, Math.min(100, Number(query.coachLimit || query.limit) || 10));
+
+    const totalPlayers = processedPlayers.length;
+    const paginatedPlayers = processedPlayers.slice(
+      (playerPage - 1) * playerLimit,
+      playerPage * playerLimit,
+    );
+
+    const totalCoaches = processedCoaches.length;
+    const paginatedCoaches = processedCoaches.slice(
+      (coachPage - 1) * coachLimit,
+      coachPage * coachLimit,
+    );
+
     return {
-      players: processedPlayers,
-      coaches: processedCoaches,
+      players: paginatedPlayers,
+      coaches: paginatedCoaches,
+      meta: {
+        players: {
+          page: playerPage,
+          limit: playerLimit,
+          total: totalPlayers,
+          totalPages: Math.ceil(totalPlayers / playerLimit) || 1,
+        },
+        coaches: {
+          page: coachPage,
+          limit: coachLimit,
+          total: totalCoaches,
+          totalPages: Math.ceil(totalCoaches / coachLimit) || 1,
+        },
+      },
     };
+  }
+
+  async shareScoutingProfile(
+    userId: string,
+    payload: { targetType: 'PLAYER' | 'COACH'; targetId: string },
+  ) {
+    const club = await this.resolveClub(userId);
+    const { targetType, targetId } = payload;
+    if (!targetType || !['PLAYER', 'COACH'].includes(targetType)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'targetType must be PLAYER or COACH');
+    }
+    if (!targetId || !Types.ObjectId.isValid(targetId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid target ID');
+    }
+
+    const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+
+    if (targetType === 'PLAYER') {
+      const player = await PlayerProfile.findById(targetId);
+      if (!player) throw new AppError(StatusCodes.NOT_FOUND, 'Player not found');
+
+      const profiles = club.sharedPlayerProfiles || [];
+      const existingIndex = profiles.findIndex((s) => s.playerId?.toString() === targetId);
+
+      let updatedShareCount = 1;
+      if (existingIndex > -1) {
+        profiles[existingIndex].shareCount = (profiles[existingIndex].shareCount || 1) + 1;
+        profiles[existingIndex].sharedAt = new Date();
+        updatedShareCount = profiles[existingIndex].shareCount;
+      } else {
+        profiles.push({
+          playerId: new Types.ObjectId(targetId),
+          sharedAt: new Date(),
+          shareCount: 1,
+        });
+      }
+
+      club.sharedPlayerProfiles = profiles;
+      await club.save();
+
+      return {
+        shareableUrl: `${baseUrl}/players/share/${targetId}`,
+        targetType: 'PLAYER',
+        targetId,
+        shareCount: updatedShareCount,
+        message: 'Player profile share link generated successfully',
+      };
+    } else {
+      const coach = await CoachProfile.findById(targetId);
+      if (!coach) throw new AppError(StatusCodes.NOT_FOUND, 'Coach not found');
+
+      return {
+        shareableUrl: `${baseUrl}/coaches/share/${targetId}`,
+        targetType: 'COACH',
+        targetId,
+        shareCount: 1,
+        message: 'Coach profile share link generated successfully',
+      };
+    }
   }
 
   async toggleScoutingFavourite(

@@ -23,6 +23,7 @@ import {
   updatePlayerStyles,
   updateClubHistory,
   addClubHistoryItem,
+  updateClubHistoryItem,
   deleteClubHistoryItem,
   updatePitchMap,
   addMatchRecord,
@@ -102,6 +103,7 @@ router.patch(
   updateClubHistory,
 );
 router.post('/me/clubs', auth(), upload.any() as any, addClubHistoryItem);
+router.patch('/me/clubs/:clubId', auth(), upload.any() as any, updateClubHistoryItem);
 router.delete('/me/clubs/:clubId', auth(), deleteClubHistoryItem);
 router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
 router.get('/me/matches', auth(), getMatchRecords);
@@ -196,6 +198,12 @@ router.post(
   auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
   upload.any() as any,
   addClubHistoryItem,
+);
+router.patch(
+  '/:playerId/clubs/:clubId',
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  upload.any() as any,
+  updateClubHistoryItem,
 );
 router.delete(
   '/:playerId/clubs/:clubId',

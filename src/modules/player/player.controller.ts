@@ -346,6 +346,77 @@ export const addClubHistoryItem = catchAsync(async (req: Request, res: Response)
   });
 });
 
+export const updateClubHistoryItem = catchAsync(async (req: Request, res: Response) => {
+  const playerId = resolvePlayerId(req);
+  if (!playerId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+
+  const clubId = req.params.clubId || req.params.id;
+  if (!clubId) {
+    throw new AppError(400, 'Club ID or name is required');
+  }
+
+  const payload: any = { ...req.body };
+  delete payload.data;
+
+  if (req.body?.data) {
+    let parsedData: any = {};
+    if (typeof req.body.data === 'string') {
+      try {
+        parsedData = JSON.parse(req.body.data);
+      } catch {
+        try {
+          const cleaned = req.body.data.replace(/,\s*([}\]])/g, '$1');
+          parsedData = JSON.parse(cleaned);
+        } catch {
+          throw new AppError(400, "Invalid JSON format in 'data' field");
+        }
+      }
+    } else if (typeof req.body.data === 'object' && req.body.data !== null) {
+      parsedData = req.body.data;
+    }
+
+    if (parsedData && typeof parsedData === 'object') {
+      Object.keys(parsedData).forEach((key) => {
+        if (parsedData[key] !== undefined && parsedData[key] !== '') {
+          payload[key] = parsedData[key];
+        }
+      });
+    }
+  }
+
+  if (req.file) {
+    payload.logoUrl = await uploadToStorage(req.file, 'club_crests');
+  }
+
+  if (req.files && Array.isArray(req.files)) {
+    for (const file of req.files as Express.Multer.File[]) {
+      if (
+        file.fieldname === 'logo' ||
+        file.fieldname === 'logoUrl' ||
+        file.fieldname === 'clubLogo' ||
+        file.fieldname === 'image' ||
+        file.fieldname === 'file'
+      ) {
+        payload.logoUrl = await uploadToStorage(file, 'club_crests');
+      }
+    }
+  }
+
+  if (payload.clubName || payload.name || payload.club) {
+    payload.clubName = payload.clubName || payload.name || payload.club;
+  }
+
+  const result = await playerService.updateClubHistoryItem(playerId, clubId, payload);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Club in history updated successfully',
+    data: result,
+  });
+});
+
 export const deleteClubHistoryItem = catchAsync(async (req: Request, res: Response) => {
   const playerId = resolvePlayerId(req);
   if (!playerId) {

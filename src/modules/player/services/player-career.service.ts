@@ -286,6 +286,110 @@ export class PlayerCareerService {
     };
   }
 
+  async updateClubHistoryItem(playerId: string, clubId: string, payload: any) {
+    const profile = await this.getOrCreateProfile(playerId);
+    if (!profile) {
+      throw new AppError(404, 'Player profile not found');
+    }
+
+    const clubIndex = (profile.clubHistory || []).findIndex(
+      (c: any) =>
+        c._id?.toString() === clubId ||
+        c.id === clubId ||
+        c.clubName?.toLowerCase() === decodeURIComponent(clubId).toLowerCase(),
+    );
+
+    if (clubIndex === -1) {
+      throw new AppError(404, 'Club not found in career history');
+    }
+
+    const existingClub = profile.clubHistory![clubIndex];
+
+    const clubName = payload.clubName !== undefined ? payload.clubName : existingClub.clubName;
+    const fromStr =
+      payload.from !== undefined
+        ? String(payload.from)
+        : existingClub.from !== undefined
+          ? String(existingClub.from)
+          : '';
+    const toStr =
+      payload.to !== undefined
+        ? String(payload.to)
+        : existingClub.to !== undefined
+          ? String(existingClub.to)
+          : '';
+
+    let isCurrent = payload.isCurrent !== undefined ? payload.isCurrent : existingClub.isCurrent;
+    if (typeof isCurrent === 'string') {
+      isCurrent = isCurrent.toLowerCase() === 'true';
+    }
+    if (toStr.toLowerCase() === 'present') {
+      isCurrent = true;
+    }
+
+    let period = payload.period !== undefined ? payload.period : existingClub.period;
+    if (payload.from !== undefined || payload.to !== undefined || payload.isCurrent !== undefined) {
+      period = `${fromStr || ''} - ${toStr || (isCurrent ? 'Present' : '')}`;
+    }
+
+    let logoUrl = existingClub.logoUrl;
+    if (payload.logoUrl) {
+      if (existingClub.logoUrl && existingClub.logoUrl !== payload.logoUrl) {
+        deleteFromStorage(existingClub.logoUrl).catch(() => {});
+      }
+      logoUrl = payload.logoUrl;
+    }
+
+    const updatedItem = {
+      _id: existingClub._id,
+      clubName,
+      logoUrl,
+      from: fromStr || undefined,
+      to: toStr || (isCurrent ? 'Present' : undefined),
+      period: period || '',
+      isCurrent: Boolean(isCurrent),
+    };
+
+    const prospectiveHistory = [...profile.clubHistory!];
+    prospectiveHistory[clubIndex] = updatedItem;
+
+    validateClubHistoryTimeline(prospectiveHistory);
+
+    if (updatedItem.isCurrent) {
+      profile.clubHistory!.forEach((c: any, idx: number) => {
+        if (idx !== clubIndex) {
+          c.isCurrent = false;
+          if (c.to && String(c.to).toLowerCase() === 'present') {
+            c.to = updatedItem.from || String(new Date().getFullYear());
+            c.period = `${c.from || ''} - ${c.to}`;
+          }
+        }
+      });
+      profile.currentClub = updatedItem.clubName;
+      if (updatedItem.logoUrl) {
+        profile.clubLogo = updatedItem.logoUrl;
+      }
+    } else if (existingClub.isCurrent && !updatedItem.isCurrent) {
+      if (profile.currentClub === existingClub.clubName) {
+        const nextCurrent = prospectiveHistory.find(
+          (c: any, idx: number) => idx !== clubIndex && c.isCurrent,
+        );
+        profile.currentClub = nextCurrent ? nextCurrent.clubName : '';
+        profile.clubLogo = nextCurrent?.logoUrl || '';
+      }
+    }
+
+    profile.clubHistory![clubIndex] = updatedItem;
+    await profile.save();
+    await playerCacheService.invalidatePlayerCache(profile._id, profile.userId);
+
+    return {
+      playerId: profile._id,
+      updatedClub: profile.clubHistory![clubIndex],
+      clubHistory: profile.clubHistory,
+    };
+  }
+
   async deleteClubHistoryItem(playerId: string, clubId: string) {
     const profile = await this.getOrCreateProfile(playerId);
     if (!profile) {

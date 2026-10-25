@@ -757,6 +757,10 @@ export class PlayerService {
     return playerCareerService.addClubHistoryItem(playerId, clubItem);
   }
 
+  async updateClubHistoryItem(playerId: string, clubId: string, payload: any) {
+    return playerCareerService.updateClubHistoryItem(playerId, clubId, payload);
+  }
+
   async deleteClubHistoryItem(playerId: string, clubId: string) {
     return playerCareerService.deleteClubHistoryItem(playerId, clubId);
   }

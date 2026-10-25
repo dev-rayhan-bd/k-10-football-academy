@@ -329,7 +329,7 @@ export const reviewSuccessStory = catchAsync(async (req: Request, res: Response)
 
 export const getAgentDashboard = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId || (req as any).user.id;
-  const result = await agentService.getAgentDashboard(userId);
+  const result = await agentService.getAgentDashboard(userId, req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,

@@ -93,7 +93,66 @@ export const updateClubHistoryZodSchema = z.object({
           isCurrent: z.union([z.boolean(), z.string()]).optional(),
         }),
       )
-      .max(6, 'Maximum 6 clubs allowed in career timeline'),
+      .max(6, 'Maximum 6 clubs allowed in career timeline')
+      .refine(
+        (items) => {
+          const presentCount = items.filter((item) => {
+            const isCurr =
+              item.isCurrent === true || String(item.isCurrent).toLowerCase() === 'true';
+            const toPresent = String(item.to || '').toLowerCase() === 'present';
+            return isCurr || toPresent;
+          }).length;
+          return presentCount <= 1;
+        },
+        {
+          message:
+            'A player cannot have multiple current clubs. Only one club can have isCurrent: true or to: "Present".',
+        },
+      )
+      .refine(
+        (items) => {
+          const currentYear = new Date().getFullYear();
+          const parsed = items.map((item) => {
+            let startYear: number | null = null;
+            let endYear: number | null = null;
+            if (item.from !== undefined && item.from !== null && String(item.from).trim()) {
+              const m = String(item.from).match(/\b(19\d\d|20\d\d)\b/);
+              if (m) startYear = parseInt(m[1], 10);
+            }
+            const isCurr =
+              item.isCurrent === true || String(item.isCurrent).toLowerCase() === 'true';
+            const toPresent = String(item.to || '').toLowerCase() === 'present';
+            if (isCurr || toPresent) {
+              endYear = currentYear;
+            } else if (item.to !== undefined && item.to !== null && String(item.to).trim()) {
+              const m = String(item.to).match(/\b(19\d\d|20\d\d)\b/);
+              if (m) endYear = parseInt(m[1], 10);
+            }
+            return { clubName: item.clubName, startYear, endYear };
+          });
+
+          for (let i = 0; i < parsed.length; i++) {
+            for (let j = i + 1; j < parsed.length; j++) {
+              const a = parsed[i];
+              const b = parsed[j];
+              if (a.startYear && a.endYear && b.startYear && b.endYear) {
+                if (
+                  a.startYear === b.startYear ||
+                  (a.startYear < b.startYear && b.startYear < a.endYear) ||
+                  (b.startYear < a.startYear && a.startYear < b.endYear)
+                ) {
+                  return false;
+                }
+              }
+            }
+          }
+          return true;
+        },
+        {
+          message:
+            'Career timeline overlap detected: clubs cannot have overlapping years in career history.',
+        },
+      ),
   }),
 });
 

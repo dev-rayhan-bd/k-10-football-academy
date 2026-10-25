@@ -17,6 +17,7 @@ router.get('/plans', getPlans);
 
 router.post('/subscribe', auth(), validateRequest(subscribeZodSchema), subscribe);
 router.get('/verify-payment', auth(), verifyPayment);
+router.post('/verify-payment', auth(), verifyPayment);
 router.get('/my-subscription', auth(), getUserSubscription);
 
 export const SubscriptionRoutes = router;

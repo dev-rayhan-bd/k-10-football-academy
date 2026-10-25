@@ -37,7 +37,7 @@ const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
     trainingPhilosophy: { type: String },
     currentPlan: {
       type: String,
-      enum: ['FREE', 'BASIC', 'PRO', 'PREMIUM'],
+      enum: ['FREE', 'BASIC', 'PRO', 'PREMIUM', 'ELITE'],
       default: 'FREE',
     },
     maxTeams: { type: Number, default: 1 },

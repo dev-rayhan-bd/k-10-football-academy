@@ -157,6 +157,28 @@ export const getScoutingBoard = catchAsync(async (req: Request, res: Response) =
   });
 });
 
+export const getScoutingBoardPlayers = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.getScoutingBoardPlayers(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Scouting board players fetched successfully',
+    data: result,
+  });
+});
+
+export const getScoutingBoardCoaches = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await clubService.getScoutingBoardCoaches(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Scouting board coaches fetched successfully',
+    data: result,
+  });
+});
+
 export const toggleScoutingFavourite = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
   const result = await clubService.toggleScoutingFavourite(userId, req.body);
@@ -225,6 +247,18 @@ export const getClubSuccessStories = catchAsync(async (req: Request, res: Respon
     statusCode: 200,
     success: true,
     message: 'Success stories fetched successfully',
+    data: result,
+  });
+});
+
+export const getClubSuccessStoryById = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const userRole = (req as any).user.role;
+  const result = await clubService.getClubSuccessStoryById(userId, req.params.id, userRole);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Success story fetched successfully',
     data: result,
   });
 });
@@ -330,6 +364,18 @@ export const deleteClubSuccessStory = catchAsync(async (req: Request, res: Respo
     statusCode: 200,
     success: true,
     message: result.message,
+    data: result,
+  });
+});
+
+export const reviewClubSuccessStory = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status, adminReviewNotes } = req.body;
+  const result = await clubService.reviewClubSuccessStory(id, status, adminReviewNotes);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: `Club success story ${status ? status.toLowerCase() : 'reviewed'} successfully`,
     data: result,
   });
 });

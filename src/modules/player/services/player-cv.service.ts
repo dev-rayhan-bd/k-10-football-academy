@@ -24,7 +24,7 @@ export class PlayerCvService {
       if (cached) {
         // Track club viewing asynchronously without blocking response
         playerCvViewTrackerService.trackClubInterest(cached, viewer);
-        return cached;
+        return this.applySafeguarding(cached, viewer);
       }
     }
 
@@ -52,7 +52,7 @@ export class PlayerCvService {
       await redisCache.set(`CACHE:PLAYER:CV:USER:${uId}`, finalProfile, 300);
     }
 
-    return finalProfile;
+    return this.applySafeguarding(finalProfile, viewer);
   }
 
   async getCVProfile(id: string, viewer?: { userId?: string; role?: string }) {
@@ -66,7 +66,7 @@ export class PlayerCvService {
     if (cacheKey) {
       const cached = await redisCache.get<any>(cacheKey);
       if (cached) {
-        return cached;
+        return this.applySafeguarding(cached, viewer);
       }
     }
 
@@ -77,8 +77,88 @@ export class PlayerCvService {
     return this.getProfileById(userId);
   }
 
-  async addClubInterest(playerId: string, data: { clubName: string; logoUrl?: string }) {
-    return playerCvViewTrackerService.addClubInterest(playerId, data);
+  async addClubInterest(
+    playerId: string,
+    data: { clubName?: string; agentName?: string; logoUrl?: string },
+  ) {
+    return playerCvViewTrackerService.addClubInterest(playerId, data as any);
+  }
+
+  /**
+   * Applies K10 Child Safeguarding & Data Protection rules
+   * Ensures that unapproved viewers, Football Agents, and Clubs cannot access private contact details
+   * of minors under 18 years old directly. All recruitment inquiries for minors must go through
+   * the platform's authorized communication process or parent/guardian consent.
+   */
+  applySafeguarding(profile: any, viewer?: { userId?: string; role?: string }): any {
+    if (!profile) return profile;
+
+    const viewerUserId = viewer?.userId?.toString();
+    const viewerRole = viewer?.role ? String(viewer.role).toUpperCase() : null;
+    const playerUserId =
+      profile.userId?._id?.toString() ||
+      profile.userId?.toString() ||
+      profile.user?._id?.toString();
+    const profileId = profile._id?.toString() || profile.playerId?.toString();
+
+    // Privileged access: Super Admin, Admin, and the player himself see full details
+    const isSelf = Boolean(
+      viewerUserId && (viewerUserId === playerUserId || viewerUserId === profileId),
+    );
+    const isAdmin = viewerRole === 'SUPER_ADMIN' || viewerRole === 'ADMIN';
+
+    if (isSelf || isAdmin) {
+      return profile;
+    }
+
+    // Determine if player is a minor (< 18)
+    let age = profile.age !== undefined && profile.age !== null ? Number(profile.age) : undefined;
+    if ((age === undefined || isNaN(age)) && profile.dateOfBirth) {
+      const dob = new Date(profile.dateOfBirth);
+      if (!isNaN(dob.getTime())) {
+        const today = new Date();
+        let calcAge = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          calcAge--;
+        }
+        age = Math.max(0, calcAge);
+      }
+    }
+
+    const isMinor = (age !== undefined && age > 0 && age < 18) || Boolean(profile.isMinor);
+
+    // Deep clone shallow properties to avoid mutating cached object in Redis
+    const sanitized = { ...profile };
+
+    if (isMinor) {
+      sanitized.phone = 'Protected (Minor / Contact via Platform)';
+      sanitized.email = 'Protected (Minor / Contact via Platform)';
+      if (sanitized.user && typeof sanitized.user === 'object') {
+        sanitized.user = {
+          ...sanitized.user,
+          phone: 'Protected (Minor / Contact via Platform)',
+          email: 'Protected (Minor / Contact via Platform)',
+        };
+      }
+      sanitized.safeguarding = {
+        isMinor: true,
+        isProtected: true,
+        guardianConsentRequired: true,
+        safeguardingNotice:
+          'This athlete is a minor under 18. Personal contact details are protected under K10 child safeguarding policy. Recruitment interest and inquiries must be initiated through the platform authorized communication process.',
+        authorizedContactMethod: 'PLATFORM_MESSAGING',
+      };
+    } else if (viewerRole === 'AGENT' || viewerRole === 'CLUB') {
+      sanitized.safeguarding = {
+        isMinor: false,
+        isProtected: false,
+        guardianConsentRequired: false,
+        authorizedContactMethod: 'PLATFORM_MESSAGING',
+      };
+    }
+
+    return sanitized;
   }
 }
 

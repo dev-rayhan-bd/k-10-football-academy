@@ -127,6 +127,78 @@ export class AcademyService {
     };
   }
 
+  async getAcademyFeatureAccess(academyId: Types.ObjectId | string, currentPlan: string = 'FREE') {
+    const isElite = currentPlan === 'ELITE' || currentPlan === 'PREMIUM';
+
+    // Count teams, coaches, players
+    const [teamsCount, teams] = await Promise.all([
+      Team.countDocuments({ academyId }),
+      Team.find({ academyId }).select('coachIds playerIds').lean(),
+    ]);
+
+    const coachSet = new Set<string>();
+    const playerSet = new Set<string>();
+    teams.forEach((t: any) => {
+      (t.coachIds || []).forEach((id: any) => coachSet.add(id.toString()));
+      (t.playerIds || []).forEach((id: any) => playerSet.add(id.toString()));
+    });
+
+    const currentCoaches = coachSet.size;
+    const currentPlayers = playerSet.size;
+
+    const maxTeams = isElite ? 9999 : 1;
+    const maxCoaches = isElite ? 9999 : 1;
+    const maxPlayers = isElite ? 9999 : 16;
+
+    const upgradeMessage =
+      'Upgrade to the K10 Elite Plan to unlock this feature. The Elite Plan gives your Academy access to advanced team management, tournament and event creation, online store management, game report commissions, player profile transfers, and additional exclusive benefits.';
+
+    return {
+      tier: isElite ? 'ELITE' : 'FREE',
+      currentPlan: isElite ? 'ELITE' : 'FREE',
+      isElite,
+      limits: {
+        teams: {
+          allowed: maxTeams,
+          current: teamsCount,
+          canCreate: isElite || teamsCount < 1,
+        },
+        coaches: {
+          allowed: maxCoaches,
+          current: currentCoaches,
+          canAdd: isElite || currentCoaches < 1,
+        },
+        players: {
+          allowed: maxPlayers,
+          current: currentPlayers,
+          canAdd: isElite || currentPlayers < 16,
+        },
+      },
+      features: {
+        additionalTeams: {
+          isLocked: !isElite && teamsCount >= 1,
+          message: upgradeMessage,
+        },
+        tournamentsAndEvents: {
+          isLocked: !isElite,
+          message: upgradeMessage,
+        },
+        onlineStore: {
+          isLocked: !isElite,
+          message: upgradeMessage,
+        },
+        gameReportCommissions: {
+          isLocked: !isElite,
+          message: upgradeMessage,
+        },
+        playerTransfers: {
+          isLocked: !isElite,
+          message: upgradeMessage,
+        },
+      },
+    };
+  }
+
   async getProfileById(id: string) {
     let profile = null;
     if (Types.ObjectId.isValid(id)) {
@@ -137,7 +209,12 @@ export class AcademyService {
     if (!profile) {
       throw new AppError(404, 'Academy profile not found');
     }
-    return this.formatAcademyProfileResponse(profile);
+    const formatted = this.formatAcademyProfileResponse(profile);
+    const featureAccess = await this.getAcademyFeatureAccess(profile._id, profile.currentPlan);
+    return {
+      ...formatted,
+      plan: featureAccess,
+    };
   }
 
   async getMyProfile(userId: string) {
@@ -174,7 +251,16 @@ export class AcademyService {
         throw new AppError(404, 'Academy profile not found for this user');
       }
     }
-    return this.formatAcademyProfileResponse(profile);
+    const safeProfile = profile as any;
+    const formatted = this.formatAcademyProfileResponse(safeProfile);
+    const featureAccess = await this.getAcademyFeatureAccess(
+      safeProfile._id,
+      safeProfile.currentPlan,
+    );
+    return {
+      ...formatted,
+      plan: featureAccess,
+    };
   }
 
   async updateMyProfile(userId: string, payload: any) {
@@ -437,15 +523,19 @@ export class AcademyService {
         ? `You are using ${usedTeams} out of ${maxTeams} available team slot. Upgrade your plan for more.`
         : `You are using ${usedTeams} out of ${maxTeams} available team slots. You have ${maxTeams - usedTeams} slot(s) remaining.`;
 
+    const featureAccess = await this.getAcademyFeatureAccess(academy._id, academy.currentPlan);
+
     return {
       summary: {
         totalTeams,
         totalCoaches,
         totalPlayers,
         totalRosterMembers,
+        maxCoaches: featureAccess.limits.coaches.allowed,
+        maxPlayers: featureAccess.limits.players.allowed,
       },
       teamCapacity: {
-        currentPlan,
+        currentPlan: featureAccess.currentPlan,
         usedTeams,
         maxTeams: isUnlimited ? null : maxTeams,
         isUnlimited,
@@ -455,6 +545,7 @@ export class AcademyService {
         upgradeRequired: !isUnlimited && isLimitReached,
         message,
       },
+      plan: featureAccess,
       teams: formattedTeams,
     };
   }
@@ -543,23 +634,13 @@ export class AcademyService {
     // Plan capacity check
     const existingTeamsCount = await Team.countDocuments({ academyId: academy._id });
     const currentPlan = academy.currentPlan || 'FREE';
-    const isPremium = currentPlan === 'PREMIUM';
-    const isUnlimited = isPremium || (academy.maxTeams !== undefined && academy.maxTeams >= 99999);
+    const isElite = currentPlan === 'ELITE' || currentPlan === 'PREMIUM';
 
-    if (!isUnlimited) {
-      const planLimits: Record<string, number> = {
-        FREE: 1,
-        BASIC: 3,
-        PRO: 5,
-        PREMIUM: 999999,
-      };
-      const maxTeams =
-        academy.maxTeams && academy.maxTeams > 0 ? academy.maxTeams : planLimits[currentPlan] || 1;
-
-      if (existingTeamsCount >= maxTeams) {
+    if (!isElite) {
+      if (existingTeamsCount >= 1) {
         throw new AppError(
           StatusCodes.FORBIDDEN,
-          `Team capacity limit reached for your ${currentPlan} plan (${existingTeamsCount}/${maxTeams}). Upgrade to Premium for unlimited teams.`,
+          'Upgrade to the K10 Elite Plan to unlock this feature. The Elite Plan gives your Academy access to advanced team management, tournament and event creation, online store management, game report commissions, player profile transfers, and additional exclusive benefits.',
         );
       }
     }
@@ -567,11 +648,24 @@ export class AcademyService {
     const coachIds = (payload.coachIds || []).map((id) => new Types.ObjectId(id));
     const playerIds = (payload.playerIds || []).map((id) => new Types.ObjectId(id));
 
-    if (coachIds.length > 2) {
-      throw new AppError(StatusCodes.BAD_REQUEST, 'Maximum 2 coaches allowed per team');
+    const maxCoaches = isElite ? 2 : 1;
+    const maxPlayers = isElite ? 18 : 16;
+
+    if (coachIds.length > maxCoaches) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        isElite
+          ? `Maximum ${maxCoaches} coaches allowed per team`
+          : 'Free Plan allows a maximum of 1 coach. Upgrade to the K10 Elite Plan to assign additional coaches.',
+      );
     }
-    if (playerIds.length > 18) {
-      throw new AppError(StatusCodes.BAD_REQUEST, 'Maximum 18 players allowed per team');
+    if (playerIds.length > maxPlayers) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        isElite
+          ? `Maximum ${maxPlayers} players allowed per team`
+          : 'Free Plan allows a maximum of 16 players. Upgrade to the K10 Elite Plan to register additional players.',
+      );
     }
 
     const ageGroup =
@@ -1148,10 +1242,17 @@ export class AcademyService {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Coach is already assigned to this team');
     }
 
-    if (currentCoachIds.length >= 2) {
+    const academy = await AcademyProfile.findById(team.academyId);
+    const currentPlan = academy?.currentPlan || 'FREE';
+    const isElite = currentPlan === 'ELITE' || currentPlan === 'PREMIUM';
+    const maxCoaches = isElite ? 2 : 1;
+
+    if (currentCoachIds.length >= maxCoaches) {
       throw new AppError(
-        StatusCodes.BAD_REQUEST,
-        'Maximum 2 coaches allowed per team. Please remove an existing coach first.',
+        StatusCodes.FORBIDDEN,
+        isElite
+          ? 'Maximum 2 coaches allowed per team. Please remove an existing coach first.'
+          : 'Free Plan allows a maximum of 1 coach. Upgrade to the K10 Elite Plan to assign additional coaches.',
       );
     }
 
@@ -1357,10 +1458,17 @@ export class AcademyService {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Player is already assigned to this team');
     }
 
-    if (currentPlayerIds.length >= 18) {
+    const academy = await AcademyProfile.findById(team.academyId);
+    const currentPlan = academy?.currentPlan || 'FREE';
+    const isElite = currentPlan === 'ELITE' || currentPlan === 'PREMIUM';
+    const maxPlayers = isElite ? 18 : 16;
+
+    if (currentPlayerIds.length >= maxPlayers) {
       throw new AppError(
-        StatusCodes.BAD_REQUEST,
-        'Maximum 18 players allowed per team. Team roster is full.',
+        StatusCodes.FORBIDDEN,
+        isElite
+          ? 'Maximum 18 players allowed per team. Team roster is full.'
+          : 'Free Plan allows a maximum of 16 players. Upgrade to the K10 Elite Plan to register additional players.',
       );
     }
 
@@ -2832,6 +2940,15 @@ export class AcademyService {
 
   async createTransferRequest(user: any, payload: any) {
     const academy = await this.resolveUserAcademy(user);
+
+    const currentPlan = academy.currentPlan || 'FREE';
+    const isElite = currentPlan === 'ELITE' || currentPlan === 'PREMIUM';
+    if (!isElite && user.role !== 'SUPER_ADMIN') {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Upgrade to the K10 Elite Plan to unlock this feature. The Elite Plan gives your Academy access to advanced team management, tournament and event creation, online store management, game report commissions, player profile transfers, and additional exclusive benefits.',
+      );
+    }
 
     // 1. Resolve athlete/player: supports playerId or athleteName/fullName/name
     let player = null;
@@ -5264,6 +5381,15 @@ export class AcademyService {
 
   async createExtraEvent(user: any, payload: any, academyIdentifier?: string) {
     const academy = await this.resolveUserAcademy(user, academyIdentifier);
+
+    const currentPlan = academy.currentPlan || 'FREE';
+    const isElite = currentPlan === 'ELITE' || currentPlan === 'PREMIUM';
+    if (!isElite && user.role !== 'SUPER_ADMIN') {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Upgrade to the K10 Elite Plan to unlock this feature. The Elite Plan gives your Academy access to advanced team management, tournament and event creation, online store management, game report commissions, player profile transfers, and additional exclusive benefits.',
+      );
+    }
 
     const event = new ExtraEvent({
       academyId: academy._id,

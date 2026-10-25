@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { validateRequest } from '@/middlewares/validateRequest';
 import { auth, optionalAuth } from '@/middlewares/auth.middleware';
 import { upload } from '@/middlewares/multer';
+import { gateClubOrAgentIfAuthenticated } from '@/middlewares/clubAgentGate.middleware';
 import {
   createCoachProfileZodSchema,
   updateCoachProfileZodSchema,
@@ -55,12 +56,12 @@ const router = Router();
 // ==========================================
 router.post(
   '/',
-  auth(),
+  auth('COACH', 'SUPER_ADMIN'),
   upload.any() as any,
   validateRequest(createCoachProfileZodSchema),
   createCoachProfile,
 );
-router.get('/', getAllCoachProfiles);
+router.get('/', optionalAuth(), gateClubOrAgentIfAuthenticated(), getAllCoachProfiles);
 
 // ==========================================
 // PLAYER CV VALIDATION BY REGISTERED COACH
@@ -183,54 +184,54 @@ router.put(
 // Unified PATCH for profile & CV sections
 router.patch(
   '/me',
-  auth(),
+  auth('COACH', 'SUPER_ADMIN'),
   upload.any() as any,
   validateRequest(updateCoachProfileZodSchema),
   updateMyCoachProfile,
 );
 
-router.post('/me/revalidation', auth(), requestRevalidation);
+router.post('/me/revalidation', auth('COACH', 'SUPER_ADMIN'), requestRevalidation);
 
 // Club item delete
-router.delete('/me/clubs/:clubId', auth(), deleteMyClub);
+router.delete('/me/clubs/:clubId', auth('COACH', 'SUPER_ADMIN'), deleteMyClub);
 
 // ==========================================
 // 3. CERTIFICATES & DOCUMENTS (DEDICATED CRUD)
 // ==========================================
-router.get('/me/documents', auth(), getMyDocuments);
-router.post('/me/documents', auth(), upload.any() as any, uploadMyDocument);
-router.delete('/me/documents/:docId', auth(), deleteMyDocument);
+router.get('/me/documents', auth('COACH', 'SUPER_ADMIN'), getMyDocuments);
+router.post('/me/documents', auth('COACH', 'SUPER_ADMIN'), upload.any() as any, uploadMyDocument);
+router.delete('/me/documents/:docId', auth('COACH', 'SUPER_ADMIN'), deleteMyDocument);
 
 // ==========================================
 // 4. TESTIMONIALS (DEDICATED CRUD)
 // ==========================================
-router.get('/me/testimonials', auth(), getMyTestimonials);
+router.get('/me/testimonials', auth('COACH', 'SUPER_ADMIN'), getMyTestimonials);
 router.post(
   '/me/testimonials',
-  auth(),
+  auth('COACH', 'SUPER_ADMIN'),
   upload.any() as any,
   validateRequest(createCoachTestimonialZodSchema),
   addMyTestimonial,
 );
 router.patch(
   '/me/testimonials/:testimonialId',
-  auth(),
+  auth('COACH', 'SUPER_ADMIN'),
   upload.any() as any,
   validateRequest(updateCoachTestimonialZodSchema),
   updateMyTestimonial,
 );
-router.delete('/me/testimonials/:testimonialId', auth(), deleteMyTestimonial);
+router.delete('/me/testimonials/:testimonialId', auth('COACH', 'SUPER_ADMIN'), deleteMyTestimonial);
 
 // ==========================================
 // 5. PUBLIC / ID-BASED ROUTES
 // ==========================================
-router.get('/share/:id', optionalAuth(), getCoachCV);
-router.get('/:id/cv', optionalAuth(), getCoachCV);
-router.get('/:id/analytics', optionalAuth(), getCoachAnalytics);
-router.get('/:id', optionalAuth(), getCoachProfile);
+router.get('/share/:id', optionalAuth(), gateClubOrAgentIfAuthenticated(), getCoachCV);
+router.get('/:id/cv', optionalAuth(), gateClubOrAgentIfAuthenticated(), getCoachCV);
+router.get('/:id/analytics', optionalAuth(), gateClubOrAgentIfAuthenticated(), getCoachAnalytics);
+router.get('/:id', optionalAuth(), gateClubOrAgentIfAuthenticated(), getCoachProfile);
 router.patch(
   '/:id',
-  auth(),
+  auth('COACH', 'SUPER_ADMIN'),
   upload.any() as any,
   validateRequest(updateCoachProfileZodSchema),
   updateCoachProfile,
@@ -241,7 +242,7 @@ router.get('/:coachId/formations', getTacticalFormations);
 router.get('/:coachId/testimonials', getTestimonials);
 router.post(
   '/:coachId/testimonials',
-  auth(),
+  auth('COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
   upload.any() as any,
   validateRequest(createCoachTestimonialZodSchema),
   addTestimonial,

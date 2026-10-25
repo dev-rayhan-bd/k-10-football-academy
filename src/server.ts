@@ -2,6 +2,7 @@ import { Server } from 'http';
 import app from './app';
 import { env } from '@/config/env';
 import { connectDB, disconnectDB } from '@/config/db';
+import { seedSuperAdmin } from '@/db/seedAdmin';
 import { initBackgroundJobs } from '@/jobs';
 import { logger } from '@/utils/logger';
 
@@ -11,6 +12,9 @@ async function bootstrap() {
   try {
     // 1. Connect to Database
     await connectDB();
+
+    // Auto-seed Super Admin if not present
+    await seedSuperAdmin();
 
     // 2. Initialize BullMQ Background Workers (Only if Redis is configured)
     if ((process.env.REDIS_HOST && process.env.REDIS_HOST !== '127.0.0.1') || !process.env.RENDER) {

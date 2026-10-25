@@ -6,6 +6,119 @@ import { PlayerProfile } from '../player.model';
 import { playerCacheService } from './player-cache.service';
 import { uploadToStorage, deleteFromStorage } from '@/utils/fileUpload.utils';
 
+export function validateClubHistoryTimeline(clubHistory: any[]): void {
+  const currentYear = new Date().getFullYear();
+
+  // 1. Check for single current club
+  let currentClubsCount = 0;
+  for (const item of clubHistory) {
+    const isCurr = item.isCurrent === true || String(item.isCurrent).toLowerCase() === 'true';
+    const toPresent =
+      String(item.to || '')
+        .trim()
+        .toLowerCase() === 'present';
+    if (isCurr || toPresent) {
+      currentClubsCount++;
+    }
+  }
+
+  if (currentClubsCount > 1) {
+    throw new AppError(
+      400,
+      'A player cannot have multiple current clubs. Only one club in clubHistory can have isCurrent: true or to: "Present".',
+    );
+  }
+
+  // 2. Parse parsed intervals and validate range & overlaps
+  const parsedIntervals: Array<{
+    clubName: string;
+    startYear: number;
+    endYear: number;
+    isCurrent: boolean;
+    toLabel: string;
+  }> = [];
+
+  for (const item of clubHistory) {
+    const clubName = item.clubName || 'Unknown Club';
+    const isCurr = item.isCurrent === true || String(item.isCurrent).toLowerCase() === 'true';
+    const toPresent =
+      String(item.to || '')
+        .trim()
+        .toLowerCase() === 'present';
+
+    let startYear: number | null = null;
+    let endYear: number | null = null;
+
+    if (item.from !== undefined && item.from !== null && String(item.from).trim()) {
+      const match = String(item.from).match(/\b(19\d\d|20\d\d)\b/);
+      if (match) startYear = parseInt(match[1], 10);
+    }
+
+    if (isCurr || toPresent) {
+      endYear = currentYear;
+    } else if (item.to !== undefined && item.to !== null && String(item.to).trim()) {
+      const match = String(item.to).match(/\b(19\d\d|20\d\d)\b/);
+      if (match) endYear = parseInt(match[1], 10);
+    }
+
+    // Fallback to period string if from/to not parsed
+    if ((!startYear || !endYear) && item.period) {
+      const years = Array.from(String(item.period).matchAll(/\b(19\d\d|20\d\d)\b/g)).map((m) =>
+        parseInt(m[0], 10),
+      );
+      if (!startYear && years.length > 0) startYear = years[0];
+      if (!endYear) {
+        if (String(item.period).toLowerCase().includes('present')) {
+          endYear = currentYear;
+        } else if (years.length > 1) {
+          endYear = years[years.length - 1];
+        }
+      }
+    }
+
+    if (startYear !== null && endYear !== null) {
+      if (startYear > endYear) {
+        throw new AppError(
+          400,
+          `Invalid year range for '${clubName}': start year (${startYear}) cannot be greater than end year (${isCurr || toPresent ? 'Present' : endYear}).`,
+        );
+      }
+
+      parsedIntervals.push({
+        clubName,
+        startYear,
+        endYear,
+        isCurrent: Boolean(isCurr || toPresent),
+        toLabel: isCurr || toPresent ? 'Present' : String(endYear),
+      });
+    }
+  }
+
+  // 3. Overlap detection between any two intervals
+  for (let i = 0; i < parsedIntervals.length; i++) {
+    for (let j = i + 1; j < parsedIntervals.length; j++) {
+      const a = parsedIntervals[i];
+      const b = parsedIntervals[j];
+
+      // Two clubs conflict if:
+      // a) They both start in the same year: startA === startB
+      // b) Club b starts during club a's tenure: startA < startB && startB < endA
+      // c) Club a starts during club b's tenure: startB < startA && startA < endB
+      const hasConflict =
+        a.startYear === b.startYear ||
+        (a.startYear < b.startYear && b.startYear < a.endYear) ||
+        (b.startYear < a.startYear && a.startYear < b.endYear);
+
+      if (hasConflict) {
+        throw new AppError(
+          400,
+          `Career timeline overlap detected: '${a.clubName}' (${a.startYear} - ${a.toLabel}) and '${b.clubName}' (${b.startYear} - ${b.toLabel}) cannot have overlapping years.`,
+        );
+      }
+    }
+  }
+}
+
 export class PlayerCareerService {
   private async getOrCreateProfile(playerId: string) {
     let profile = await PlayerProfile.findOne({
@@ -66,6 +179,8 @@ export class PlayerCareerService {
       throw new AppError(404, 'Player profile not found');
     }
 
+    validateClubHistoryTimeline(clubHistory);
+
     const mappedHistory = clubHistory.map((item: any) => {
       let isCurrent = item.isCurrent;
       if (typeof isCurrent === 'string') {
@@ -80,13 +195,13 @@ export class PlayerCareerService {
 
       let period = item.period;
       if (!period && (fromStr || toStr)) {
-        period = `${fromStr || ''} - ${toStr || 'Present'}`;
+        period = `${fromStr || ''} - ${toStr || (isCurrent ? 'Present' : '')}`;
       }
 
       return {
         ...item,
         from: fromStr || undefined,
-        to: toStr || undefined,
+        to: toStr || (isCurrent ? 'Present' : undefined),
         period: period || '',
         isCurrent: Boolean(isCurrent),
       };
@@ -143,9 +258,15 @@ export class PlayerCareerService {
       isCurrent: Boolean(isCurrent),
     };
 
+    validateClubHistoryTimeline([...profile.clubHistory, normalizedItem]);
+
     if (normalizedItem.isCurrent) {
       profile.clubHistory.forEach((c: any) => {
         c.isCurrent = false;
+        if (c.to && String(c.to).toLowerCase() === 'present') {
+          c.to = normalizedItem.from || String(new Date().getFullYear());
+          c.period = `${c.from || ''} - ${c.to}`;
+        }
       });
       profile.currentClub = normalizedItem.clubName;
       if (normalizedItem.logoUrl) {

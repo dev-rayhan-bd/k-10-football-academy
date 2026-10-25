@@ -52,17 +52,21 @@ import {
 } from './game-report.controller';
 
 import { upload } from '@/middlewares/multer';
+import {
+  gateClubOrAgentIfAuthenticated,
+  requireClubOrAgentAccess,
+} from '@/middlewares/clubAgentGate.middleware';
 
 const router = Router();
 
 router.post(
   '/',
-  auth(),
+  auth('PLAYER', 'SUPER_ADMIN', 'COACH', 'ACADEMY'),
   upload.any() as any,
   validateRequest(createPlayerProfileZodSchema),
   createPlayerProfile,
 );
-router.get('/', getAllPlayerProfiles);
+router.get('/', optionalAuth(), gateClubOrAgentIfAuthenticated(), getAllPlayerProfiles);
 router.get('/me', auth(), getPlayerProfile);
 router.get('/me/cv', auth(), getPlayerCV);
 router.get('/me/analytics', auth(), getPlayerAnalytics);
@@ -106,13 +110,13 @@ router.post('/me/matches', auth(), validateRequest(createMatchRecordZodSchema), 
 // Dedicated Game Report Flows (Screen 1 & 2 vs Screen 3, 4, 5)
 router.post(
   '/me/game-reports/self',
-  auth(),
+  auth('PLAYER', 'SUPER_ADMIN'),
   validateRequest(createMatchRecordZodSchema),
   createSelfGameReport,
 );
 router.post(
   '/me/game-reports/request-coach',
-  auth(),
+  auth('PLAYER', 'SUPER_ADMIN', 'PARENT'),
   validateRequest(requestCoachGameReportZodSchema),
   requestCoachGameReport,
 );
@@ -139,12 +143,12 @@ router.patch('/me/documents/:documentId', auth(), upload.any() as any, updatePla
 router.put('/me/documents/:documentId', auth(), upload.any() as any, updatePlayerDocument);
 router.delete('/me/documents/:documentId', auth(), deletePlayerDocument);
 
-router.get('/share/:id', optionalAuth(), getPlayerCV);
-router.get('/:id/cv', optionalAuth(), getPlayerCV);
-router.get('/:id', optionalAuth(), getPlayerProfile);
+router.get('/share/:id', optionalAuth(), gateClubOrAgentIfAuthenticated(), getPlayerCV);
+router.get('/:id/cv', optionalAuth(), gateClubOrAgentIfAuthenticated(), getPlayerCV);
+router.get('/:id', optionalAuth(), gateClubOrAgentIfAuthenticated(), getPlayerProfile);
 router.patch(
   '/:id',
-  auth(),
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
   upload.any() as any,
   validateRequest(updatePlayerProfileZodSchema),
   updatePlayerProfile,
@@ -212,7 +216,12 @@ router.post(
   addMatchRecord,
 );
 router.get('/:playerId/matches', optionalAuth(), getMatchRecords);
-router.post('/:playerId/interest', auth('SUPER_ADMIN', 'CLUB', 'COACH', 'PLAYER'), addClubInterest);
+router.post(
+  '/:playerId/interest',
+  auth('SUPER_ADMIN', 'CLUB', 'AGENT', 'COACH', 'PLAYER'),
+  requireClubOrAgentAccess(),
+  addClubInterest,
+);
 
 router.get('/:playerId/documents', optionalAuth(), getPlayerDocuments);
 router.post(

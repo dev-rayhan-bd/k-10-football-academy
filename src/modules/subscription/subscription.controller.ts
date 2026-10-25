@@ -37,7 +37,10 @@ export const subscribe = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const verifyPayment = catchAsync(async (req: Request, res: Response) => {
-  const sessionId = (req.query.session_id || req.query.sessionId) as string;
+  const sessionId = (req.query.session_id ||
+    req.query.sessionId ||
+    req.body?.sessionId ||
+    req.body?.session_id) as string;
   const result = await subscriptionService.verifyPayment(sessionId);
   sendResponse(res, {
     statusCode: result.success ? StatusCodes.OK : StatusCodes.BAD_REQUEST,

@@ -5,6 +5,7 @@ import { catchAsync } from '@/utils/catchAsync';
 import { ClubProfile } from '@/modules/club/club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
+import { UserModel } from '@/modules/user/user.model';
 
 /**
  * Gatekeeper Middleware for Professional Football Clubs and Football Agents
@@ -27,7 +28,11 @@ export const requireClubOrAgentAccess = () => {
 
     // Gatekeeping for Professional Football Clubs
     if (user.role === 'CLUB') {
-      const club = await ClubProfile.findOne({ userId: user.userId });
+      const [club, userDoc] = await Promise.all([
+        ClubProfile.findOne({ userId: user.userId }),
+        UserModel.findById(user.userId).select('verificationStatus isVerified').lean(),
+      ]);
+
       if (!club) {
         throw new AppError(
           StatusCodes.NOT_FOUND,
@@ -36,10 +41,23 @@ export const requireClubOrAgentAccess = () => {
       }
 
       // Step 1: Admin verification and approval check
-      if (club.verificationStatus !== 'APPROVED') {
+      const isClubApproved =
+        club.verificationStatus === 'APPROVED' ||
+        userDoc?.verificationStatus === 'APPROVED' ||
+        Boolean(userDoc?.isVerified);
+
+      if (!isClubApproved) {
         throw new AppError(
           StatusCodes.FORBIDDEN,
           'Access Restricted: Your club account is currently pending administrator verification and approval. K10 Administrator must review and approve your club credentials and authorization documents before dashboard and scouting access can be activated.',
+        );
+      }
+
+      // Auto-sync ClubProfile if UserModel is approved
+      if (club.verificationStatus !== 'APPROVED') {
+        await ClubProfile.updateOne(
+          { _id: club._id },
+          { $set: { verificationStatus: 'APPROVED', verifiedAt: new Date() } },
         );
       }
 
@@ -68,7 +86,11 @@ export const requireClubOrAgentAccess = () => {
 
     // Gatekeeping for Football Agents
     if (user.role === 'AGENT') {
-      const agent = await AgentProfile.findOne({ userId: user.userId });
+      const [agent, userDoc] = await Promise.all([
+        AgentProfile.findOne({ userId: user.userId }),
+        UserModel.findById(user.userId).select('verificationStatus isVerified').lean(),
+      ]);
+
       if (!agent) {
         throw new AppError(
           StatusCodes.NOT_FOUND,
@@ -77,10 +99,23 @@ export const requireClubOrAgentAccess = () => {
       }
 
       // Step 1: Admin verification and approval check
-      if (agent.verificationStatus !== 'APPROVED') {
+      const isAgentApproved =
+        agent.verificationStatus === 'APPROVED' ||
+        userDoc?.verificationStatus === 'APPROVED' ||
+        Boolean(userDoc?.isVerified);
+
+      if (!isAgentApproved) {
         throw new AppError(
           StatusCodes.FORBIDDEN,
           'Access Restricted: Your agent account is currently pending administrator verification and approval. K10 Administrator must verify your FIFA Football Agent license and credentials before dashboard access is activated.',
+        );
+      }
+
+      // Auto-sync AgentProfile if UserModel is approved
+      if (agent.verificationStatus !== 'APPROVED') {
+        await AgentProfile.updateOne(
+          { _id: agent._id },
+          { $set: { verificationStatus: 'APPROVED', verifiedAt: new Date() } },
         );
       }
 
@@ -108,5 +143,21 @@ export const requireClubOrAgentAccess = () => {
     }
 
     return next();
+  });
+};
+
+/**
+ * Optional Gatekeeper for public browsing routes (e.g. /players, /players/:id/cv, /coaches/:id)
+ * If the user is unauthenticated or has other roles (PLAYER, COACH, ADMIN), request proceeds normally.
+ * If the user is logged in as an AGENT or CLUB, enforces that they must be APPROVED and have an ACTIVE subscription.
+ */
+export const gateClubOrAgentIfAuthenticated = () => {
+  const gateMiddleware = requireClubOrAgentAccess();
+  return catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const user = req.user;
+    if (!user || (user.role !== 'CLUB' && user.role !== 'AGENT')) {
+      return next();
+    }
+    return gateMiddleware(req, res, next);
   });
 };

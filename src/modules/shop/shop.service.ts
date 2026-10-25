@@ -140,6 +140,23 @@ export class ShopService {
       }
     }
 
+    if (user?.role === 'ACADEMY' || academyId) {
+      const academyDoc = await AcademyProfile.findOne({
+        $or: [
+          ...(academyId ? [{ _id: academyId }] : []),
+          ...(user ? [{ userId: user._id || user.id }, { _id: user._id || user.id }] : []),
+        ],
+      });
+      const currentPlan = academyDoc?.currentPlan || 'FREE';
+      const isElite = currentPlan === 'ELITE' || currentPlan === 'PREMIUM';
+      if (academyDoc && !isElite && user?.role !== 'SUPER_ADMIN') {
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          'Upgrade to the K10 Elite Plan to unlock this feature. The Elite Plan gives your Academy access to advanced team management, tournament and event creation, online store management, game report commissions, player profile transfers, and additional exclusive benefits.',
+        );
+      }
+    }
+
     const newProduct = await ShopProduct.create({
       academyId,
       userId: user?._id || user?.id,

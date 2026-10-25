@@ -71,8 +71,8 @@ export interface IClubSuccessStory {
   date: Date;
   formattedDate?: string;
   coverImage?: string;
-  photo?: string;
   status: 'APPROVED' | 'PENDING' | 'REJECTED';
+  adminReviewNotes?: string;
   isDeleted: boolean;
   deletedAt?: Date | null;
   createdAt?: Date;

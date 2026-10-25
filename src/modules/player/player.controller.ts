@@ -56,17 +56,26 @@ export const getPlayerCV = catchAsync(async (req: Request, res: Response) => {
 
 export const addClubInterest = catchAsync(async (req: Request, res: Response) => {
   const playerId = req.params.playerId || req.params.id;
-  const result = await playerService.addClubInterest(playerId, req.body);
+  const caller = req.user;
+  const body = { ...req.body };
+  if (!body.clubName && !body.agentName) {
+    if (caller?.role === 'AGENT') {
+      body.agentName = (caller as any).name || 'Football Agent';
+    } else if (caller?.role === 'CLUB') {
+      body.clubName = (caller as any).name || 'Professional Club';
+    }
+  }
+  const result = await playerService.addClubInterest(playerId, body);
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Club interest recorded successfully',
+    message: 'Interest recorded successfully through authorized platform communication process',
     data: result,
   });
 });
 
 export const getAllPlayerProfiles = catchAsync(async (req: Request, res: Response) => {
-  const result = await playerService.getAllProfiles(req.query);
+  const result = await playerService.getAllProfiles(req.query, req.user);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -155,7 +164,7 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
   const targetId =
     req.params.id === 'me' || !req.params.id ? req.user?.userId || req.params.id : req.params.id;
 
-  const result = await playerService.updateProfile(targetId, payload);
+  const result = await playerService.updateProfile(targetId, payload, req.user);
   sendResponse(res, {
     statusCode: 200,
     success: true,

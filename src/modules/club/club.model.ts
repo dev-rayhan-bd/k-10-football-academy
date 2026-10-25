@@ -92,13 +92,13 @@ const ClubSuccessStorySchema = new Schema<IClubSuccessStoryDocument>(
     date: { type: Date, required: true, default: Date.now },
     formattedDate: { type: String },
     coverImage: { type: String, default: '' },
-    photo: { type: String, default: '' },
     status: {
       type: String,
       enum: ['APPROVED', 'PENDING', 'REJECTED'],
-      default: 'APPROVED',
+      default: 'PENDING',
       index: true,
     },
+    adminReviewNotes: { type: String, default: '' },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
   },
@@ -113,12 +113,6 @@ ClubSuccessStorySchema.pre('save', function (next) {
     } catch {
       // ignore
     }
-  }
-  if (!this.coverImage && this.photo) {
-    this.coverImage = this.photo;
-  }
-  if (!this.photo && this.coverImage) {
-    this.photo = this.coverImage;
   }
   next();
 });

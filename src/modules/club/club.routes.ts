@@ -17,15 +17,19 @@ import {
   addFavourite,
   getFavourites,
   getScoutingBoard,
+  getScoutingBoardPlayers,
+  getScoutingBoardCoaches,
   toggleScoutingFavourite,
   shareScoutingProfile,
   getClubCvsLibrary,
   toggleLikePlayerCv,
   sharePlayerCv,
   getClubSuccessStories,
+  getClubSuccessStoryById,
   createClubSuccessStory,
   updateClubSuccessStory,
   deleteClubSuccessStory,
+  reviewClubSuccessStory,
   getClubAnalytics,
   recordPlayerView,
   getClubDashboard,
@@ -65,19 +69,31 @@ router.patch(
 // ==========================================
 router.get(
   '/scouting-board',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
   requireClubOrAgentAccess(),
   getScoutingBoard,
 );
+router.get(
+  '/scouting-board/players',
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  getScoutingBoardPlayers,
+);
+router.get(
+  '/scouting-board/coaches',
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
+  requireClubOrAgentAccess(),
+  getScoutingBoardCoaches,
+);
 router.post(
   '/scouting-board/favourite',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
   requireClubOrAgentAccess(),
   toggleScoutingFavourite,
 );
 router.post(
   '/scouting-board/share',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
   requireClubOrAgentAccess(),
   shareScoutingProfile,
 );
@@ -87,19 +103,19 @@ router.post(
 // ==========================================
 router.get(
   '/cvs-library',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
   requireClubOrAgentAccess(),
   getClubCvsLibrary,
 );
 router.post(
   '/cvs-library/:playerId/like',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
   requireClubOrAgentAccess(),
   toggleLikePlayerCv,
 );
 router.post(
   '/cvs-library/:playerId/share',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'AGENT', 'SUPER_ADMIN'),
   requireClubOrAgentAccess(),
   sharePlayerCv,
 );
@@ -109,30 +125,37 @@ router.post(
 // ==========================================
 router.get(
   '/success-stories',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'SUPER_ADMIN', 'ADMIN'),
   requireClubOrAgentAccess(),
   getClubSuccessStories,
 );
+router.get(
+  '/success-stories/:id',
+  auth('CLUB', 'SUPER_ADMIN', 'ADMIN'),
+  requireClubOrAgentAccess(),
+  getClubSuccessStoryById,
+);
 router.post(
   '/success-stories',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'SUPER_ADMIN', 'ADMIN'),
   requireClubOrAgentAccess(),
   upload.any() as any,
   createClubSuccessStory,
 );
 router.patch(
   '/success-stories/:id',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'SUPER_ADMIN', 'ADMIN'),
   requireClubOrAgentAccess(),
   upload.any() as any,
   updateClubSuccessStory,
 );
 router.delete(
   '/success-stories/:id',
-  auth('CLUB', 'SUPER_ADMIN'),
+  auth('CLUB', 'SUPER_ADMIN', 'ADMIN'),
   requireClubOrAgentAccess(),
   deleteClubSuccessStory,
 );
+router.patch('/success-stories/:id/status', auth('SUPER_ADMIN', 'ADMIN'), reviewClubSuccessStory);
 
 // ==========================================
 // 5. CLUB ANALYTICS (SCREENSHOTS 2 & 3)

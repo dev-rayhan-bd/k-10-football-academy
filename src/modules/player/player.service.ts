@@ -16,7 +16,7 @@ import { playerStatsService, computeProfileCompletion } from './services/player-
 import { playerCvService } from './services/player-cv.service';
 import { playerAttributeService } from './services/player-attribute.service';
 import { playerMatchService } from './services/player-match.service';
-import { playerCareerService } from './services/player-career.service';
+import { playerCareerService, validateClubHistoryTimeline } from './services/player-career.service';
 import { playerMediaService } from './services/player-media.service';
 import { playerAnalyticsService } from './services/player-analytics.service';
 import { videoQueue } from '@/jobs/queues/video.queue';
@@ -88,7 +88,10 @@ export class PlayerService {
     return playerCvService.getProfileByUserId(userId);
   }
 
-  async getAllProfiles(query: Record<string, unknown> = {}) {
+  async getAllProfiles(
+    query: Record<string, unknown> = {},
+    viewer?: { userId?: string; role?: string },
+  ) {
     const queryObj = { ...query };
 
     // Support number conversions for Mongoose matching
@@ -122,8 +125,13 @@ export class PlayerService {
       .paginate()
       .fields();
 
-    const result = await playerQuery.modelQuery;
+    const rawResult = await playerQuery.modelQuery;
     const meta = await playerQuery.countTotal();
+
+    const result = rawResult.map((p: any) => {
+      const obj = p.toObject ? p.toObject() : p;
+      return playerCvService.applySafeguarding(obj, viewer);
+    });
 
     return {
       meta,
@@ -131,7 +139,14 @@ export class PlayerService {
     };
   }
 
-  async updateProfile(id: string, payload: any) {
+  async updateProfile(id: string, payload: any, caller?: { userId?: string; role?: string }) {
+    if (caller?.role === 'AGENT' || caller?.role === 'CLUB') {
+      throw new AppError(
+        403,
+        'Football Agents and Professional Clubs are restricted to view-only access and cannot create or modify player CVs, evaluations, or profiles.',
+      );
+    }
+
     let existing = await PlayerProfile.findOne({ $or: [{ _id: id }, { userId: id }] });
     if (!existing) {
       if (Types.ObjectId.isValid(id)) {
@@ -155,6 +170,15 @@ export class PlayerService {
     }
     if (!existing) {
       throw new AppError(404, 'Player profile not found');
+    }
+
+    // Role ownership check: Player role can only update their own profile
+    if (
+      caller?.role === 'PLAYER' &&
+      caller.userId &&
+      existing.userId.toString() !== caller.userId
+    ) {
+      throw new AppError(403, 'You do not have permission to modify another player profile');
     }
 
     if (payload.phone) {
@@ -362,6 +386,8 @@ export class PlayerService {
     }
 
     if (Array.isArray(payload.clubHistory)) {
+      validateClubHistoryTimeline(payload.clubHistory);
+
       payload.clubHistory = payload.clubHistory.map((item: any) => {
         let isCurrent = item.isCurrent;
         if (typeof isCurrent === 'string') {
@@ -376,13 +402,13 @@ export class PlayerService {
 
         let period = item.period;
         if (!period && (fromStr || toStr)) {
-          period = `${fromStr || ''} - ${toStr || 'Present'}`;
+          period = `${fromStr || ''} - ${toStr || (isCurrent ? 'Present' : '')}`;
         }
 
         return {
           ...item,
           from: fromStr || undefined,
-          to: toStr || undefined,
+          to: toStr || (isCurrent ? 'Present' : undefined),
           period: period || '',
           isCurrent: Boolean(isCurrent),
         };

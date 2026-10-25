@@ -3,13 +3,13 @@ import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { env } from '@/config/env';
 import { User } from '@/modules/user/user.model';
-import { PlayerProfile } from '@/modules/player/player.model';
+import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { Media } from '@/modules/media/media.model';
 import { Notification } from '@/modules/notification/notification.model';
-import { Team } from '@/modules/academy/academy.model';
 import { IClubProfile, IClubAchievement, IClubFavourite } from './club.interface';
 import { ClubProfile, ClubAchievement, ClubFavourite, ClubSuccessStory } from './club.model';
+import { AgentProfile } from '@/modules/agent/agent.model';
 
 export class ClubService {
   formatClubProfileResponse(profile: any, fallbackUser?: any) {
@@ -85,8 +85,8 @@ export class ClubService {
         name: user.name || '',
         clubType: 'Club',
         establishedYear: new Date().getFullYear(),
-        country: '',
-        league: '',
+        country: user.country || 'International',
+        league: (user as any).league || 'General',
         contactPhone: user.phone || '',
         contactEmail: user.email || '',
       });
@@ -433,6 +433,282 @@ export class ClubService {
     };
   }
 
+  // ==========================================
+  // DEDICATED SCOUTING BOARD: ALL PLAYERS (FILTERING + PAGINATION)
+  // ==========================================
+  async getScoutingBoardPlayers(userId: string, query: any = {}) {
+    const club = await this.resolveClub(userId);
+    const position = query.position ? String(query.position).toUpperCase().trim() : null;
+    const country = query.country ? String(query.country).trim() : null;
+    const minAge = query.minAge !== undefined && query.minAge !== '' ? Number(query.minAge) : null;
+    const maxAge = query.maxAge !== undefined && query.maxAge !== '' ? Number(query.maxAge) : null;
+    const status = query.status ? String(query.status).toUpperCase().trim() : null;
+    const searchTerm = query.searchTerm ? String(query.searchTerm).trim() : null;
+    const sortBy = query.sortBy ? String(query.sortBy) : 'overallRating';
+    const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
+
+    const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const playerShareBase = (
+      env.SCOUTING_BOARD_SHARE_PLAYER ||
+      process.env.SCOUTING_BOARD_SHARE_PLAYER ||
+      `${baseUrl}/players/share`
+    ).replace(/\/$/, '');
+
+    // Fetch club favourites
+    const playerFavourites = await ClubFavourite.find({
+      $or: [
+        { clubId: club._id, targetType: 'PLAYER' },
+        ...(club.userId ? [{ clubId: club.userId, targetType: 'PLAYER' }] : []),
+      ],
+    }).select('targetPlayerId');
+
+    const favPlayerIdSet = new Set(
+      playerFavourites.map((f: any) => f.targetPlayerId?.toString()).filter(Boolean),
+    );
+    (club.likedPlayerIds || []).forEach((id: any) => favPlayerIdSet.add(id.toString()));
+
+    // Build Player Query
+    const playerQuery: any = {};
+    if (position && position !== 'ALL' && position !== 'ALL POSITIONS') {
+      playerQuery.position = new RegExp(position, 'i');
+    }
+    if (country && country !== 'ALL' && country !== 'ALL COUNTRIES' && country !== 'COUNTRY') {
+      playerQuery.country = new RegExp(country, 'i');
+    }
+    if (searchTerm) {
+      const searchRegex = new RegExp(searchTerm, 'i');
+      playerQuery.$or = [
+        { fullName: searchRegex },
+        { currentClub: searchRegex },
+        { position: searchRegex },
+        { country: searchRegex },
+        { academy: searchRegex },
+      ];
+    }
+    if (status && status !== 'ALL' && status !== 'ALL STATUS') {
+      if (['ACTIVE', 'INJURED'].includes(status)) {
+        playerQuery.fitnessStatus = status;
+      } else if (['GOLD', 'SILVER', 'BRONZE'].includes(status)) {
+        playerQuery.cvTier = status;
+      }
+    }
+
+    const rawPlayers = await PlayerProfile.find(playerQuery)
+      .select(
+        '_id fullName avatar profileImage position currentClub academy country dateOfBirth age overallRating cvTier fitnessStatus status',
+      )
+      .sort({ [sortBy]: sortOrder, createdAt: -1 })
+      .lean();
+
+    // Map match records for these players
+    const playerIds = rawPlayers.map((p: any) => p._id);
+    const matchAggregates = await MatchRecord.aggregate([
+      { $match: { playerId: { $in: playerIds } } },
+      {
+        $group: {
+          _id: '$playerId',
+          matches: { $sum: 1 },
+          goals: { $sum: { $ifNull: ['$goals', 0] } },
+          assists: { $sum: { $ifNull: ['$assists', 0] } },
+        },
+      },
+    ]);
+    const statsMap = new Map<string, { matches: number; goals: number; assists: number }>();
+    matchAggregates.forEach((m) => {
+      statsMap.set(m._id.toString(), {
+        matches: m.matches || 0,
+        goals: m.goals || 0,
+        assists: m.assists || 0,
+      });
+    });
+
+    let processedPlayers = rawPlayers.map((p: any) => {
+      let age = typeof p.age === 'number' ? p.age : null;
+      if (p.dateOfBirth) {
+        const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
+        age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+      }
+
+      const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
+      const tier: 'GOLD' | 'SILVER' | 'BRONZE' =
+        p.cvTier || (rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE');
+      const pid = p._id.toString();
+      const currentStatus =
+        p.fitnessStatus || (p.status === 'ACTIVE' || p.status === 'INJURED' ? p.status : 'ACTIVE');
+      const stats = statsMap.get(pid) || { matches: 0, goals: 0, assists: 0 };
+      const formattedTier = tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase();
+
+      return {
+        id: p._id,
+        playerId: p._id,
+        name: p.fullName || '',
+        position: (p.position || '').toUpperCase(),
+        avatar: p.profileImage || p.avatar || null,
+        rating: (rating / 10).toFixed(1),
+        rawRating: rating,
+        club: p.currentClub || p.academy || 'Free Agent',
+        country: p.country || '',
+        age,
+        matches: stats.matches,
+        goals: stats.goals,
+        assists: stats.assists,
+        status: formattedTier,
+        statusBadge: formattedTier,
+        tier,
+        cvTier: tier,
+        fitnessStatus: currentStatus,
+        isFavourite: favPlayerIdSet.has(pid),
+        isLiked: favPlayerIdSet.has(pid),
+        shareableUrl: `${playerShareBase}/${p._id}`,
+      };
+    });
+
+    if (minAge !== null) {
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age >= minAge : false));
+    }
+    if (maxAge !== null) {
+      processedPlayers = processedPlayers.filter((p) => (p.age !== null ? p.age <= maxAge : false));
+    }
+
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
+    const total = processedPlayers.length;
+    const paginatedPlayers = processedPlayers.slice((page - 1) * limit, page * limit);
+
+    // Summary cards (matches Image 2 stats)
+    const activeCount = processedPlayers.filter((p) => p.status === 'ACTIVE').length;
+    const injuredCount = processedPlayers.filter((p) => p.status === 'INJURED').length;
+    const avgRatingVal =
+      total > 0
+        ? (processedPlayers.reduce((sum, p) => sum + (p.rawRating || 0), 0) / total / 10).toFixed(1)
+        : '0.0';
+
+    return {
+      summary: {
+        totalPlayers: total,
+        avgRating: Number(avgRatingVal),
+        active: activeCount,
+        injured: injuredCount,
+      },
+      players: paginatedPlayers,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  // ==========================================
+  // DEDICATED SCOUTING BOARD: ALL COACHES (FILTERING + PAGINATION)
+  // ==========================================
+  async getScoutingBoardCoaches(userId: string, query: any = {}) {
+    const club = await this.resolveClub(userId);
+    const role = query.role ? String(query.role).trim() : null;
+    const country = query.country ? String(query.country).trim() : null;
+    const speciality = query.speciality ? String(query.speciality).trim() : null;
+    const status = query.status ? String(query.status).trim() : null;
+    const searchTerm = query.searchTerm ? String(query.searchTerm).trim() : null;
+    const sortBy = query.sortBy ? String(query.sortBy) : 'yearsExperience';
+    const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
+
+    const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const coachShareBase = (
+      env.SCOUTING_BOARD_SHARE_COACH ||
+      process.env.SCOUTING_BOARD_SHARE_COACH ||
+      `${baseUrl}/coach/share`
+    ).replace(/\/$/, '');
+
+    // Fetch coach favourites
+    const coachFavourites = await ClubFavourite.find({
+      $or: [
+        { clubId: club._id, targetType: 'COACH' },
+        ...(club.userId ? [{ clubId: club.userId, targetType: 'COACH' }] : []),
+      ],
+    }).select('targetCoachId');
+
+    const favCoachIdSet = new Set(
+      coachFavourites.map((f: any) => f.targetCoachId?.toString()).filter(Boolean),
+    );
+
+    // Build Coach Query
+    const coachQuery: any = {};
+    if (role && role !== 'ALL' && role !== 'ALL ROLES') {
+      coachQuery.$or = [{ title: new RegExp(role, 'i') }, { academyRole: new RegExp(role, 'i') }];
+    }
+    if (country && country !== 'ALL' && country !== 'ALL COUNTRIES' && country !== 'COUNTRY') {
+      coachQuery.$or = [
+        { birthCountry: new RegExp(country, 'i') },
+        { location: new RegExp(country, 'i') },
+        { country: new RegExp(country, 'i') },
+      ];
+    }
+    if (speciality && speciality !== 'ALL' && speciality !== 'SPECIALITY') {
+      coachQuery.speciality = new RegExp(speciality, 'i');
+    }
+    if (status && status !== 'ALL' && status !== 'ALL STATUS') {
+      coachQuery.status = new RegExp(`^${status}$`, 'i');
+    }
+    if (searchTerm) {
+      const searchRegex = new RegExp(searchTerm, 'i');
+      coachQuery.$or = [
+        { fullName: searchRegex },
+        { title: searchRegex },
+        { academyRole: searchRegex },
+        { speciality: searchRegex },
+        { currentClub: searchRegex },
+        { birthCountry: searchRegex },
+        { location: searchRegex },
+      ];
+    }
+
+    const rawCoaches = await CoachProfile.find(coachQuery)
+      .select(
+        '_id fullName title academyRole speciality currentClub birthCountry location country yearsExperience status profileImage',
+      )
+      .sort({ [sortBy]: sortOrder, createdAt: -1 })
+      .lean();
+
+    const processedCoaches = rawCoaches.map((c: any) => {
+      const cid = c._id.toString();
+      const yrs = typeof c.yearsExperience === 'number' ? c.yearsExperience : 0;
+      let coachStatus = c.status || 'AVAILABLE';
+      if (coachStatus === 'ACTIVE') coachStatus = 'AVAILABLE';
+
+      return {
+        id: c._id,
+        coachId: c._id,
+        name: c.fullName || '',
+        avatar: c.profileImage || null,
+        role: (c.title || c.academyRole || 'HEAD COACH').toUpperCase(),
+        speciality: c.speciality || 'General',
+        club: c.currentClub || 'Available',
+        country: c.birthCountry || c.location || c.country || '',
+        experience: yrs ? `${yrs} yrs` : '0 yrs',
+        yearsExperience: yrs,
+        status: coachStatus,
+        isFavourite: favCoachIdSet.has(cid),
+        shareableUrl: `${coachShareBase}/${c._id}`,
+      };
+    });
+
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
+    const total = processedCoaches.length;
+    const paginatedCoaches = processedCoaches.slice((page - 1) * limit, page * limit);
+
+    return {
+      coaches: paginatedCoaches,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
   async shareScoutingProfile(
     userId: string,
     payload: { targetType: 'PLAYER' | 'COACH'; targetId: string },
@@ -608,11 +884,53 @@ export class ClubService {
       sharedMap.set(s.playerId.toString(), s.shareCount || 1);
     });
 
+    const isLikedFilter = query.liked === 'true' || tab === 'LIKED';
+    const isSharedFilter = query.shared === 'true' || tab === 'SHARED';
+
     const playerQuery: any = {};
-    if (tab === 'LIKED') {
-      playerQuery._id = { $in: Array.from(favPlayerIdSet).map((id) => new Types.ObjectId(id)) };
-    } else if (tab === 'SHARED') {
-      playerQuery._id = { $in: Array.from(sharedMap.keys()).map((id) => new Types.ObjectId(id)) };
+    if (isLikedFilter) {
+      const likedIds = Array.from(favPlayerIdSet).map((id) => new Types.ObjectId(id));
+      if (likedIds.length === 0) {
+        return {
+          metrics: {
+            allCvs: { label: 'ALL CVS', count: await PlayerProfile.countDocuments({}) },
+            likedCvs: { label: 'LIKED CVS', count: 0 },
+            profilesShared: {
+              label: 'PROFILES SHARED',
+              count: sharedProfiles.reduce((sum: number, s: any) => sum + (s.shareCount || 1), 0),
+            },
+          },
+          currentTab: 'LIKED',
+          meta: {
+            page: 1,
+            limit: Number(query.limit) || 10,
+            total: 0,
+            totalPages: 1,
+          },
+          data: [],
+        };
+      }
+      playerQuery._id = { $in: likedIds };
+    } else if (isSharedFilter) {
+      const sharedIds = Array.from(sharedMap.keys()).map((id) => new Types.ObjectId(id));
+      if (sharedIds.length === 0) {
+        return {
+          metrics: {
+            allCvs: { label: 'ALL CVS', count: await PlayerProfile.countDocuments({}) },
+            likedCvs: { label: 'LIKED CVS', count: favPlayerIdSet.size },
+            profilesShared: { label: 'PROFILES SHARED', count: 0 },
+          },
+          currentTab: 'SHARED',
+          meta: {
+            page: 1,
+            limit: Number(query.limit) || 10,
+            total: 0,
+            totalPages: 1,
+          },
+          data: [],
+        };
+      }
+      playerQuery._id = { $in: sharedIds };
     }
 
     if (position && position !== 'ALL' && position !== 'ALL POSITIONS') {
@@ -663,7 +981,10 @@ export class ClubService {
         age,
         status: tier,
         isLiked: favPlayerIdSet.has(pid),
+        isShared: sharedMap.has(pid),
         shareCount: sharedMap.get(pid) || 0,
+        sharedWith: 'Other Members',
+        sharedStatus: (sharedMap.get(pid) || 0) > 0 ? 'Viewed' : 'Not Viewed',
         shareableUrl: `${playerShareBase}/${pid}`,
       };
     });
@@ -788,6 +1109,8 @@ export class ClubService {
     club.sharedPlayerProfiles = profiles;
     await club.save();
 
+    await AgentProfile.findOneAndUpdate({ userId }, { $inc: { cvsSharedCount: 1 } });
+
     const totalProfilesShared = profiles.reduce((sum, s) => sum + (s.shareCount || 1), 0);
 
     return {
@@ -828,17 +1151,52 @@ export class ClubService {
         totalPages: Math.ceil(total / limit) || 1,
       },
       data: stories.map((s) => ({
-        id: s._id,
         _id: s._id,
         storyTitle: s.storyTitle,
         category: s.category,
         date: s.date,
-        formattedDate: s.formattedDate || new Date(s.date).toISOString().split('T')[0],
-        coverImage: s.coverImage || s.photo || '',
-        photo: s.photo || s.coverImage || '',
+        formattedDate:
+          s.formattedDate || (s.date ? new Date(s.date).toISOString().split('T')[0] : ''),
+        coverImage: s.coverImage || '',
         status: s.status,
+        statusLabel:
+          s.status === 'APPROVED' ? 'Approved' : s.status === 'REJECTED' ? 'Rejected' : 'Pending',
+        adminReviewNotes: s.adminReviewNotes || '',
         createdAt: s.createdAt,
       })),
+    };
+  }
+
+  async getClubSuccessStoryById(userId: string, storyId: string, userRole?: string) {
+    let story: any;
+    if (userRole && ['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+      story = await ClubSuccessStory.findOne({ _id: storyId, isDeleted: false });
+    } else {
+      const club = await this.resolveClub(userId);
+      story = await ClubSuccessStory.findOne({ _id: storyId, clubId: club._id, isDeleted: false });
+    }
+    if (!story) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Success story not found');
+    }
+
+    return {
+      _id: story._id,
+      storyTitle: story.storyTitle,
+      category: story.category,
+      date: story.date,
+      formattedDate:
+        story.formattedDate || (story.date ? new Date(story.date).toISOString().split('T')[0] : ''),
+      coverImage: story.coverImage || '',
+      status: story.status,
+      statusLabel:
+        story.status === 'APPROVED'
+          ? 'Approved'
+          : story.status === 'REJECTED'
+            ? 'Rejected'
+            : 'Pending',
+      adminReviewNotes: story.adminReviewNotes || '',
+      createdAt: story.createdAt,
+      updatedAt: story.updatedAt,
     };
   }
 
@@ -853,26 +1211,40 @@ export class ClubService {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Category is required');
     }
 
+    const img = payload.coverImage || payload.photo || payload.image || '';
+
     const story = await ClubSuccessStory.create({
       clubId: club._id,
       storyTitle,
       category,
       date: payload.date ? new Date(payload.date) : new Date(),
-      coverImage: payload.coverImage || payload.photo || '',
-      photo: payload.photo || payload.coverImage || '',
-      status: payload.status || 'APPROVED',
+      coverImage: img,
+      status: 'PENDING',
+      adminReviewNotes: '',
     });
 
+    // Notify admins of new club success story submitted for review
+    const admins = await User.find({ role: { $in: ['SUPER_ADMIN', 'ADMIN'] } }).select('_id role');
+    for (const admin of admins) {
+      await Notification.create({
+        recipientId: admin._id,
+        recipientRole: admin.role,
+        title: 'New Club Success Story Submitted for Approval',
+        message: `${club.name || 'A Football Club'} has submitted a new success story "${storyTitle}" for review and approval.`,
+        type: 'STORY',
+        data: { clubId: club._id, storyId: story._id },
+      });
+    }
+
     return {
-      id: story._id,
       _id: story._id,
       storyTitle: story.storyTitle,
       category: story.category,
       date: story.date,
       formattedDate: story.formattedDate,
       coverImage: story.coverImage,
-      photo: story.photo,
       status: story.status,
+      statusLabel: 'Pending',
       createdAt: story.createdAt,
     };
   }
@@ -888,37 +1260,63 @@ export class ClubService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Success story not found');
     }
 
-    if (payload.storyTitle || payload.title) {
-      story.storyTitle = payload.storyTitle || payload.title;
-    }
-    if (payload.category) {
-      story.category = payload.category;
-    }
-    if (payload.date) {
-      story.date = new Date(payload.date);
-    }
-    if (payload.coverImage || payload.photo) {
-      story.coverImage = payload.coverImage || payload.photo;
-      story.photo = payload.photo || payload.coverImage;
-    }
-    if (payload.status) {
-      story.status = payload.status;
+    if (payload.storyTitle || payload.title) story.storyTitle = payload.storyTitle || payload.title;
+    if (payload.category) story.category = payload.category;
+    if (payload.date) story.date = new Date(payload.date);
+    if (payload.coverImage || payload.photo || payload.image) {
+      story.coverImage = payload.coverImage || payload.photo || payload.image;
     }
 
+    // Editing re-submits for approval
+    story.status = 'PENDING';
     await story.save();
 
     return {
-      id: story._id,
       _id: story._id,
       storyTitle: story.storyTitle,
       category: story.category,
       date: story.date,
       formattedDate: story.formattedDate,
       coverImage: story.coverImage,
-      photo: story.photo,
       status: story.status,
+      statusLabel: 'Pending',
       createdAt: story.createdAt,
     };
+  }
+
+  async reviewClubSuccessStory(
+    storyId: string,
+    status: 'APPROVED' | 'REJECTED',
+    adminReviewNotes?: string,
+  ) {
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Status must be APPROVED or REJECTED');
+    }
+    const story = await ClubSuccessStory.findByIdAndUpdate(
+      storyId,
+      { status, adminReviewNotes: adminReviewNotes || '' },
+      { new: true },
+    );
+    if (!story) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Success story not found');
+    }
+
+    const club = await ClubProfile.findById(story.clubId);
+    if (club && club.userId) {
+      await Notification.create({
+        recipientId: club.userId,
+        recipientRole: 'CLUB',
+        title: status === 'APPROVED' ? 'Success Story Approved!' : 'Success Story Review Update',
+        message:
+          status === 'APPROVED'
+            ? `Your success story "${story.storyTitle}" has been approved and is now live!`
+            : `Your success story "${story.storyTitle}" was rejected.${adminReviewNotes ? ` Reason: ${adminReviewNotes}` : ''}`,
+        type: 'STORY',
+        data: { storyId: story._id, status },
+      });
+    }
+
+    return story;
   }
 
   async deleteClubSuccessStory(userId: string, storyId: string) {
@@ -1222,6 +1620,7 @@ export class ClubService {
 
     if (isNewSessionView) {
       club.viewedPlayerProfiles = views;
+      club.profileViews = (club.profileViews || 0) + 1;
       await club.save();
 
       // Synchronize with Player Profile views & interested clubs
@@ -1243,6 +1642,7 @@ export class ClubService {
     return {
       playerId,
       viewsCount: updatedCount,
+      totalProfileViews: club.profileViews,
       uniqueProfilesViewed: views.length,
       isNewSessionView,
       message: isNewSessionView
@@ -1462,46 +1862,99 @@ export class ClubService {
       },
     ];
 
-    // 4. Coaches & Players Section (Real Teams & Real Coaches)
-    const teams = await Team.find({
-      $or: [{ academyId: club._id }, { teamName: new RegExp(club.name, 'i') }],
-    })
-      .select('teamName ageGroup playersCount status')
-      .lean();
+    // 4. Coaches & Players Section (Platform Talent: Top 5 Registered Players & Top 5 Registered Coaches)
+    const [platformPlayers, platformCoaches] = await Promise.all([
+      PlayerProfile.find({})
+        .select(
+          '_id fullName profileImage avatar position overallRating currentClub academy country age dateOfBirth status fitnessStatus',
+        )
+        .sort({ overallRating: -1, createdAt: -1 })
+        .limit(5)
+        .lean(),
+      CoachProfile.find({})
+        .select(
+          '_id fullName profileImage title academyRole speciality currentClub yearsExperience status birthCountry country',
+        )
+        .sort({ yearsExperience: -1, createdAt: -1 })
+        .limit(5)
+        .lean(),
+    ]);
 
-    const formattedTeams = teams.map((t: any) => ({
-      id: t._id,
-      teamName: t.teamName,
-      ageGroup: t.ageGroup,
-      scout: club.name,
-      players: t.playersCount || 0,
-      status: t.status || 'ACTIVE',
-    }));
+    // Aggregate match stats for the 5 dashboard players
+    const dashPlayerIds = platformPlayers.map((p: any) => p._id);
+    const dashMatchAggregates = await MatchRecord.aggregate([
+      { $match: { playerId: { $in: dashPlayerIds } } },
+      {
+        $group: {
+          _id: '$playerId',
+          matches: { $sum: 1 },
+          goals: { $sum: { $ifNull: ['$goals', 0] } },
+          assists: { $sum: { $ifNull: ['$assists', 0] } },
+        },
+      },
+    ]);
+    const dashStatsMap = new Map<string, { matches: number; goals: number; assists: number }>();
+    dashMatchAggregates.forEach((m) => {
+      dashStatsMap.set(m._id.toString(), {
+        matches: m.matches || 0,
+        goals: m.goals || 0,
+        assists: m.assists || 0,
+      });
+    });
 
-    const clubCoaches = await CoachProfile.find({
-      $or: [
-        { currentClub: new RegExp(`^${club.name}$`, 'i') },
-        { currentClub: new RegExp(club.name, 'i') },
-      ],
-    })
-      .select('fullName title speciality currentClub yearsExperience status profileImage')
-      .lean();
+    const formattedPlayers = platformPlayers.map((p: any) => {
+      let age = typeof p.age === 'number' ? p.age : null;
+      if (p.dateOfBirth) {
+        const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
+        age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+      }
+      const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
+      const stats = dashStatsMap.get(p._id.toString()) || { matches: 0, goals: 0, assists: 0 };
+      const currentStatus =
+        p.fitnessStatus || (p.status === 'ACTIVE' || p.status === 'INJURED' ? p.status : 'ACTIVE');
 
-    const formattedCoaches = clubCoaches.map((c: any) => ({
+      return {
+        id: p._id,
+        playerId: p._id,
+        name: p.fullName || '',
+        avatar: p.profileImage || p.avatar || null,
+        position: (p.position || '').toUpperCase(),
+        rating: (rating / 10).toFixed(1),
+        rawRating: rating,
+        club: p.currentClub || p.academy || 'Free Agent',
+        country: p.country || '',
+        age,
+        matches: stats.matches,
+        goals: stats.goals,
+        assists: stats.assists,
+        status: currentStatus,
+        fitnessStatus: currentStatus,
+        shareableUrl: `${playerShareBase}/${p._id}`,
+      };
+    });
+
+    const formattedCoaches = platformCoaches.map((c: any) => ({
       id: c._id,
       coachId: c._id,
       name: c.fullName || '',
       avatar: c.profileImage || null,
-      role: c.title || c.speciality || 'Head Coach',
-      team: c.currentClub || club.name,
+      role: (c.title || c.academyRole || 'HEAD COACH').toUpperCase(),
+      speciality: c.speciality || 'General',
+      team: c.currentClub || 'Available',
+      club: c.currentClub || 'Available',
+      country: c.birthCountry || c.country || '',
       experience: `${c.yearsExperience || 0} yrs`,
-      status: c.status || 'ACTIVE',
+      yearsExperience: c.yearsExperience || 0,
+      status: c.status || 'AVAILABLE',
+      shareableUrl: `${coachShareBase}/${c._id}`,
     }));
 
     // 5. Favourites (Favourite Players & Favourite Coaches)
     const favPlayerDocs = await ClubFavourite.find({
-      clubId: club._id,
-      targetType: 'PLAYER',
+      $or: [
+        { clubId: club._id, targetType: 'PLAYER' },
+        ...(club.userId ? [{ clubId: club.userId, targetType: 'PLAYER' }] : []),
+      ],
     })
       .populate({
         path: 'targetPlayerId',
@@ -1511,17 +1964,54 @@ export class ClubService {
       .sort({ createdAt: -1 })
       .lean();
 
-    const favouritePlayers = favPlayerDocs
-      .filter((f: any) => f.targetPlayerId)
-      .map((f: any) => {
-        const p = f.targetPlayerId;
+    const seenPlayerIds = new Set<string>();
+    const favouritePlayers: any[] = [];
+
+    favPlayerDocs.forEach((f: any) => {
+      const p = f.targetPlayerId;
+      if (!p) return;
+      const pid = p._id.toString();
+      if (seenPlayerIds.has(pid)) return;
+      seenPlayerIds.add(pid);
+
+      let age = typeof p.age === 'number' ? p.age : null;
+      if (p.dateOfBirth) {
+        const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
+        age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+      }
+      const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
+      favouritePlayers.push({
+        id: p._id,
+        playerId: p._id,
+        name: p.fullName || '',
+        avatar: p.profileImage || p.avatar || null,
+        position: (p.position || '').toUpperCase(),
+        rating: (rating / 10).toFixed(1),
+        club: p.currentClub || p.academy || '',
+        country: p.country || '',
+        age,
+        shareableUrl: `${playerShareBase}/${p._id}`,
+      });
+    });
+
+    // Also include any likedPlayerIds from ClubProfile that might not have a ClubFavourite doc
+    const likedIds = (club.likedPlayerIds || []).map((id: any) => id.toString());
+    const missingLikedIds = likedIds.filter((id: string) => !seenPlayerIds.has(id));
+    if (missingLikedIds.length > 0) {
+      const missingPlayers = await PlayerProfile.find({ _id: { $in: missingLikedIds } })
+        .select(
+          '_id fullName avatar profileImage position overallRating currentClub academy country dateOfBirth age',
+        )
+        .lean();
+
+      missingPlayers.forEach((p: any) => {
         let age = typeof p.age === 'number' ? p.age : null;
         if (p.dateOfBirth) {
           const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
           age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
         }
         const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
-        return {
+        favouritePlayers.push({
           id: p._id,
           playerId: p._id,
           name: p.fullName || '',
@@ -1532,12 +2022,15 @@ export class ClubService {
           country: p.country || '',
           age,
           shareableUrl: `${playerShareBase}/${p._id}`,
-        };
+        });
       });
+    }
 
     const favCoachDocs = await ClubFavourite.find({
-      clubId: club._id,
-      targetType: 'COACH',
+      $or: [
+        { clubId: club._id, targetType: 'COACH' },
+        ...(club.userId ? [{ clubId: club.userId, targetType: 'COACH' }] : []),
+      ],
     })
       .populate({
         path: 'targetCoachId',
@@ -1547,23 +2040,29 @@ export class ClubService {
       .sort({ createdAt: -1 })
       .lean();
 
-    const favouriteCoaches = favCoachDocs
-      .filter((f: any) => f.targetCoachId)
-      .map((f: any) => {
-        const c = f.targetCoachId;
-        return {
-          id: c._id,
-          coachId: c._id,
-          name: c.fullName || '',
-          avatar: c.profileImage || null,
-          role: c.title || c.speciality || 'Coach',
-          speciality: c.speciality || 'General',
-          club: c.currentClub || '',
-          country: c.birthCountry || '',
-          experience: `${c.yearsExperience || 0} yrs`,
-          shareableUrl: `${coachShareBase}/${c._id}`,
-        };
+    const seenCoachIds = new Set<string>();
+    const favouriteCoaches: any[] = [];
+
+    favCoachDocs.forEach((f: any) => {
+      const c = f.targetCoachId;
+      if (!c) return;
+      const cid = c._id.toString();
+      if (seenCoachIds.has(cid)) return;
+      seenCoachIds.add(cid);
+
+      favouriteCoaches.push({
+        id: c._id,
+        coachId: c._id,
+        name: c.fullName || '',
+        avatar: c.profileImage || null,
+        role: c.title || c.speciality || 'Coach',
+        speciality: c.speciality || 'General',
+        club: c.currentClub || '',
+        country: c.birthCountry || '',
+        experience: `${c.yearsExperience || 0} yrs`,
+        shareableUrl: `${coachShareBase}/${c._id}`,
       });
+    });
 
     // 6. Media Gallery (Images & Videos from common Media collection)
     const mediaItems = await Media.find({
@@ -1587,45 +2086,79 @@ export class ClubService {
     const images = formattedMedia.filter((m: any) => m.mediaType === 'IMAGE');
     const videos = formattedMedia.filter((m: any) => m.mediaType === 'VIDEO');
 
-    // 7. Recent Activity (Notifications + Club interactions)
-    const notifications = await Notification.find({
-      recipientId: club.userId,
-    })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
+    // 7. Recent Activity (Notifications + Club Favourites + Profile Views + CV Shares)
+    const [notifications, recentFavs] = await Promise.all([
+      Notification.find({ recipientId: club.userId }).sort({ createdAt: -1 }).limit(10).lean(),
+      ClubFavourite.find({
+        $or: [{ clubId: club._id }, ...(club.userId ? [{ clubId: club.userId }] : [])],
+      })
+        .populate({ path: 'targetPlayerId', select: 'fullName position' })
+        .populate({ path: 'targetCoachId', select: 'fullName title speciality' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+    ]);
 
-    const activityList: any[] = notifications.map((n: any) => ({
-      id: n._id,
-      title: n.title,
-      description: n.message,
-      type: n.type || 'NOTIFICATION',
-      timeAgo: this.formatTimeAgo(n.createdAt),
-      createdAt: n.createdAt,
-    }));
+    const activityList: any[] = [];
 
-    if (activityList.length === 0) {
-      if (viewedList.length > 0) {
+    notifications.forEach((n: any) => {
+      activityList.push({
+        id: n._id,
+        title: n.title,
+        description: n.message,
+        type: n.type || 'NOTIFICATION',
+        timeAgo: this.formatTimeAgo(n.createdAt),
+        createdAt: n.createdAt,
+      });
+    });
+
+    recentFavs.forEach((fav: any) => {
+      if (fav.targetType === 'PLAYER' && fav.targetPlayerId) {
         activityList.push({
-          id: 'act-views',
-          title: 'Player profiles viewed',
-          description: `Club has reviewed ${viewedList.length} player profiles`,
-          type: 'VIEW',
-          timeAgo: this.formatTimeAgo(viewedList[0].viewedAt || new Date()),
-          createdAt: viewedList[0].viewedAt || new Date(),
+          id: fav._id,
+          title: 'Player added to favourites',
+          description: `Added ${fav.targetPlayerId.fullName || 'player'} to scouting favourites`,
+          type: 'FAVOURITE',
+          timeAgo: this.formatTimeAgo(fav.createdAt),
+          createdAt: fav.createdAt,
+        });
+      } else if (fav.targetType === 'COACH' && fav.targetCoachId) {
+        activityList.push({
+          id: fav._id,
+          title: 'Coach added to favourites',
+          description: `Added coach ${fav.targetCoachId.fullName || 'coach'} to scouting favourites`,
+          type: 'FAVOURITE',
+          timeAgo: this.formatTimeAgo(fav.createdAt),
+          createdAt: fav.createdAt,
         });
       }
-      if (sharedProfilesList.length > 0) {
-        activityList.push({
-          id: 'act-shares',
-          title: 'Player CV shared',
-          description: `Club shared ${totalSharedCount} player profiles`,
-          type: 'SHARE',
-          timeAgo: this.formatTimeAgo(sharedProfilesList[0].sharedAt || new Date()),
-          createdAt: sharedProfilesList[0].sharedAt || new Date(),
-        });
-      }
-    }
+    });
+
+    viewedList.slice(0, 5).forEach((v: any, idx: number) => {
+      activityList.push({
+        id: `act-view-${idx}`,
+        title: 'Player profile reviewed',
+        description: `Reviewed player CV profile on scouting board`,
+        type: 'VIEW',
+        timeAgo: this.formatTimeAgo(v.viewedAt || new Date()),
+        createdAt: v.viewedAt || new Date(),
+      });
+    });
+
+    sharedProfilesList.slice(0, 5).forEach((s: any, idx: number) => {
+      activityList.push({
+        id: `act-share-${idx}`,
+        title: 'Player CV shared',
+        description: `Shared player CV for recruitment evaluation`,
+        type: 'SHARE',
+        timeAgo: this.formatTimeAgo(s.sharedAt || new Date()),
+        createdAt: s.sharedAt || new Date(),
+      });
+    });
+
+    activityList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const finalActivityList = activityList.slice(0, 10);
 
     return {
       club: clubInfo,
@@ -1636,7 +2169,7 @@ export class ClubService {
         positionInterestDistribution,
       },
       coachesAndPlayers: {
-        players: formattedTeams,
+        players: formattedPlayers,
         coaches: formattedCoaches,
       },
       favourites: {
@@ -1650,7 +2183,7 @@ export class ClubService {
         totalImages: images.length,
         totalVideos: videos.length,
       },
-      recentActivity: activityList,
+      recentActivity: finalActivityList,
     };
   }
 }

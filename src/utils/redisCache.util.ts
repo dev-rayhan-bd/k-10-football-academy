@@ -47,14 +47,18 @@ export const redisCache = {
   },
 
   /**
-   * Invalidate all keys matching a wildcard pattern
+   * Invalidate all keys matching a wildcard pattern using non-blocking SCAN
    */
   async delByPattern(pattern: string): Promise<void> {
     try {
-      const keys = await redisClient.keys(pattern);
-      if (keys.length > 0) {
-        await redisClient.del(...keys);
-      }
+      let cursor = '0';
+      do {
+        const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = nextCursor;
+        if (keys.length > 0) {
+          await redisClient.del(...keys);
+        }
+      } while (cursor !== '0');
     } catch (err: any) {
       logger.warn(`[RedisCache] Failed to delete pattern "${pattern}": ${err.message}`);
     }

@@ -18,6 +18,13 @@ export const emailQueue = new Queue<IEmailJobData>(EMAIL_QUEUE_NAME, {
       type: 'exponential',
       delay: 1000,
     },
-    removeOnComplete: true,
+    removeOnComplete: {
+      count: 1000,
+      age: 24 * 3600, // 24 hours
+    },
+    removeOnFail: {
+      count: 5000,
+      age: 7 * 24 * 3600, // 7 days retention for debugging failed emails
+    },
   },
 });

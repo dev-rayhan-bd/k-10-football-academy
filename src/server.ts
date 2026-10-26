@@ -3,10 +3,12 @@ import app from './app';
 import { env } from '@/config/env';
 import { connectDB, disconnectDB } from '@/config/db';
 import { seedSuperAdmin } from '@/db/seedAdmin';
-import { initBackgroundJobs } from '@/jobs';
+import { initBackgroundJobs, closeBackgroundJobs } from '@/jobs';
+import { redisClient } from '@/config/redis';
 import { logger } from '@/utils/logger';
 
 let server: Server;
+let isShuttingDown = false;
 
 async function bootstrap() {
   try {
@@ -17,7 +19,11 @@ async function bootstrap() {
     await seedSuperAdmin();
 
     // 2. Initialize BullMQ Background Workers (Only if Redis is configured)
-    if ((process.env.REDIS_HOST && process.env.REDIS_HOST !== '127.0.0.1') || !process.env.RENDER) {
+    if (
+      (process.env.REDIS_HOST && process.env.REDIS_HOST !== '127.0.0.1') ||
+      process.env.REDIS_URL ||
+      !process.env.RENDER
+    ) {
       initBackgroundJobs();
     } else {
       logger.warn(
@@ -46,10 +52,26 @@ async function bootstrap() {
 bootstrap();
 
 // Graceful Shutdown & Unhandled Error Handling
-const exitHandler = () => {
+const exitHandler = async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
   if (server) {
     server.close(async () => {
       logger.info('HTTP Server closed');
+      try {
+        await closeBackgroundJobs();
+      } catch (err: any) {
+        logger.warn(`Failed closing background jobs: ${err.message}`);
+      }
+      try {
+        if (redisClient.status === 'ready' || redisClient.status === 'connecting') {
+          await redisClient.quit();
+          logger.info('Redis client disconnected gracefully');
+        }
+      } catch (err: any) {
+        logger.warn(`Failed disconnecting Redis: ${err.message}`);
+      }
       await disconnectDB();
       process.exit(0);
     });

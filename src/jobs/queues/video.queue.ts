@@ -20,6 +20,13 @@ export const videoQueue = new Queue<IVideoProcessingJobData>(VIDEO_QUEUE_NAME, {
       type: 'fixed',
       delay: 5000,
     },
-    removeOnComplete: false,
+    removeOnComplete: {
+      count: 500,
+      age: 24 * 3600, // 24 hours
+    },
+    removeOnFail: {
+      count: 1000,
+      age: 7 * 24 * 3600, // 7 days retention for failed video jobs
+    },
   },
 });

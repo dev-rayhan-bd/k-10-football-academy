@@ -44,6 +44,24 @@ export class UserService {
       delete (userData as any).accountManagedBy;
     } else if (userData.role === 'PLAYER') {
       userData.accountManagedBy = userData.accountManagedBy || 'ATHLETE';
+      if (userData.dateOfBirth) {
+        const birthDate = new Date(userData.dateOfBirth);
+        if (!isNaN(birthDate.getTime())) {
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const m = today.getMonth() - birthDate.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          if (age < 16) {
+            const msg =
+              'Players under 16 years old cannot register directly. An account must be created and managed by a parent or legal guardian.';
+            throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
+              { path: 'dateOfBirth', message: msg },
+            ]);
+          }
+        }
+      }
     } else {
       delete (userData as any).accountManagedBy;
     }

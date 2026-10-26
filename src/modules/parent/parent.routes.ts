@@ -11,7 +11,9 @@ import {
 import {
   createParentProfile,
   getParentProfile,
+  getAllParents,
   linkChild,
+  createChild,
   getChildren,
   getMyChildren,
   createMatchReport,
@@ -76,6 +78,13 @@ router.post('/switch-back', auth('PLAYER', 'PARENT', 'GUARDIAN', 'SUPER_ADMIN'),
 router.get('/my-children', auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'), getMyChildren);
 
 router.post(
+  '/create-child',
+  auth('SUPER_ADMIN', 'PARENT', 'GUARDIAN'),
+  upload.any() as any,
+  createChild,
+);
+
+router.post(
   '/link-child',
   auth('SUPER_ADMIN', 'PARENT', 'GUARDIAN'),
   validateRequest(linkChildZodSchema),
@@ -89,6 +98,7 @@ router.post(
   validateRequest(createParentProfileZodSchema),
   createParentProfile,
 );
+router.get('/', auth(), getAllParents);
 router.get('/:id', getParentProfile);
 
 router.post(

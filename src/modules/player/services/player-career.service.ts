@@ -23,10 +23,9 @@ export function validateClubHistoryTimeline(clubHistory: any[]): void {
   }
 
   if (currentClubsCount > 1) {
-    throw new AppError(
-      400,
-      'A player cannot have multiple current clubs. Only one club in clubHistory can have isCurrent: true or to: "Present".',
-    );
+    const msg =
+      "A player can only have one active current club. Please set an end year for the previous club or uncheck 'Current Club'.";
+    throw new AppError(400, msg, true, '', [{ path: 'isCurrent', message: msg }]);
   }
 
   // 2. Parse parsed intervals and validate range & overlaps
@@ -78,10 +77,8 @@ export function validateClubHistoryTimeline(clubHistory: any[]): void {
 
     if (startYear !== null && endYear !== null) {
       if (startYear > endYear) {
-        throw new AppError(
-          400,
-          `Invalid year range for '${clubName}': start year (${startYear}) cannot be greater than end year (${isCurr || toPresent ? 'Present' : endYear}).`,
-        );
+        const msg = `Invalid year range for '${clubName}': start year (${startYear}) cannot be greater than end year (${isCurr || toPresent ? 'Present' : endYear}).`;
+        throw new AppError(400, msg, true, '', [{ path: 'from', message: msg }]);
       }
 
       parsedIntervals.push({
@@ -110,10 +107,8 @@ export function validateClubHistoryTimeline(clubHistory: any[]): void {
         (b.startYear < a.startYear && a.startYear < b.endYear);
 
       if (hasConflict) {
-        throw new AppError(
-          400,
-          `Career timeline overlap detected: '${a.clubName}' (${a.startYear} - ${a.toLabel}) and '${b.clubName}' (${b.startYear} - ${b.toLabel}) cannot have overlapping years.`,
-        );
+        const msg = `Career timeline overlap detected: '${a.clubName}' (${a.startYear} - ${a.toLabel}) and '${b.clubName}' (${b.startYear} - ${b.toLabel}) cannot have overlapping years.`;
+        throw new AppError(400, msg, true, '', [{ path: 'period', message: msg }]);
       }
     }
   }
@@ -211,9 +206,13 @@ export class PlayerCareerService {
     const currentClubItem = profile.clubHistory.find((c: any) => c.isCurrent);
     if (currentClubItem) {
       profile.currentClub = currentClubItem.clubName;
+      if (!profile.academy) {
+        profile.academy = currentClubItem.clubName;
+      }
       if (currentClubItem.logoUrl) {
         profile.clubLogo = currentClubItem.logoUrl;
       }
+      await UserModel.findByIdAndUpdate(profile.userId, { currentClub: currentClubItem.clubName });
     }
     await profile.save();
     await playerCacheService.invalidatePlayerCache(profile._id, profile.userId);
@@ -258,7 +257,27 @@ export class PlayerCareerService {
       isCurrent: Boolean(isCurrent),
     };
 
-    validateClubHistoryTimeline([...profile.clubHistory, normalizedItem]);
+    const prospectiveHistory = (profile.clubHistory || []).map((c: any) => ({
+      _id: c._id,
+      clubName: c.clubName,
+      logoUrl: c.logoUrl,
+      from: c.from,
+      to: c.to,
+      period: c.period,
+      isCurrent: c.isCurrent,
+    }));
+
+    if (normalizedItem.isCurrent) {
+      prospectiveHistory.forEach((c: any) => {
+        if (c.isCurrent || (c.to && String(c.to).toLowerCase() === 'present')) {
+          c.isCurrent = false;
+          c.to = normalizedItem.from || String(new Date().getFullYear());
+          c.period = `${c.from || ''} - ${c.to}`;
+        }
+      });
+    }
+
+    validateClubHistoryTimeline([...prospectiveHistory, normalizedItem]);
 
     if (normalizedItem.isCurrent) {
       profile.clubHistory.forEach((c: any) => {
@@ -269,9 +288,13 @@ export class PlayerCareerService {
         }
       });
       profile.currentClub = normalizedItem.clubName;
+      if (!profile.academy) {
+        profile.academy = normalizedItem.clubName;
+      }
       if (normalizedItem.logoUrl) {
         profile.clubLogo = normalizedItem.logoUrl;
       }
+      await UserModel.findByIdAndUpdate(profile.userId, { currentClub: normalizedItem.clubName });
     }
     profile.clubHistory.push(normalizedItem);
     await profile.save();
@@ -366,9 +389,13 @@ export class PlayerCareerService {
         }
       });
       profile.currentClub = updatedItem.clubName;
+      if (!profile.academy) {
+        profile.academy = updatedItem.clubName;
+      }
       if (updatedItem.logoUrl) {
         profile.clubLogo = updatedItem.logoUrl;
       }
+      await UserModel.findByIdAndUpdate(profile.userId, { currentClub: updatedItem.clubName });
     } else if (existingClub.isCurrent && !updatedItem.isCurrent) {
       if (profile.currentClub === existingClub.clubName) {
         const nextCurrent = prospectiveHistory.find(

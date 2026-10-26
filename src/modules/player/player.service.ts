@@ -9,6 +9,7 @@ import {
   FifaCardStats,
 } from './player.model';
 import { PlayerEvaluation } from '@/modules/academy/academy.model';
+import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
 import { UserModel } from '../user/user.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 import { playerCacheService } from './services/player-cache.service';
@@ -181,17 +182,41 @@ export class PlayerService {
       throw new AppError(403, 'You do not have permission to modify another player profile');
     }
 
-    if (payload.phone) {
-      await UserModel.findByIdAndUpdate(existing.userId, { phone: payload.phone });
+    if (caller?.role === 'PARENT' || caller?.role === 'GUARDIAN') {
+      const parentProfile = await ParentProfile.findOne({
+        $or: [{ _id: caller.userId }, { userId: caller.userId }],
+      });
+      const validParentIds: any[] = [caller.userId];
+      if (parentProfile) {
+        validParentIds.push(parentProfile._id);
+        if (parentProfile.userId) validParentIds.push(parentProfile.userId);
+      }
+
+      const link = await ParentChild.findOne({
+        parentId: { $in: validParentIds },
+        childPlayerId: existing._id,
+      });
+
+      if (!link) {
+        throw new AppError(403, 'You do not have permission to modify this child profile');
+      }
     }
-    if (payload.fullName || payload.name) {
-      const nameVal = payload.fullName || payload.name;
-      payload.fullName = nameVal;
-      await UserModel.findByIdAndUpdate(existing.userId, { name: nameVal });
+
+    if (payload.preferredFoot) {
+      const footStr = String(payload.preferredFoot).toUpperCase();
+      if (footStr.includes('LEFT')) {
+        payload.preferredFoot = 'LEFT';
+      } else if (footStr.includes('BOTH')) {
+        payload.preferredFoot = 'BOTH';
+      } else {
+        payload.preferredFoot = 'RIGHT';
+      }
     }
-    if (payload.profileImage) {
-      await UserModel.findByIdAndUpdate(existing.userId, { avatar: payload.profileImage });
+
+    if (payload.academyLocation && !payload.academy) {
+      payload.academy = payload.academyLocation;
     }
+
     if (payload.dateOfBirth) {
       const dob = new Date(payload.dateOfBirth);
       if (!isNaN(dob.getTime())) {
@@ -216,6 +241,33 @@ export class PlayerService {
         payload.age = Math.max(0, calculatedAge);
       }
     }
+
+    if (payload.height !== undefined && payload.height !== '') {
+      payload.height = Number(payload.height);
+    }
+    if (payload.weight !== undefined && payload.weight !== '') {
+      payload.weight = Number(payload.weight);
+    }
+
+    const userUpdates: any = {};
+    if (payload.phone) userUpdates.phone = payload.phone;
+    if (payload.fullName || payload.name) {
+      const nameVal = payload.fullName || payload.name;
+      payload.fullName = nameVal;
+      userUpdates.name = nameVal;
+    }
+    if (payload.profileImage) userUpdates.avatar = payload.profileImage;
+    if (payload.dateOfBirth) userUpdates.dateOfBirth = payload.dateOfBirth;
+    if (payload.height !== undefined && payload.height !== '') userUpdates.height = payload.height;
+    if (payload.weight !== undefined && payload.weight !== '') userUpdates.weight = payload.weight;
+    if (payload.position) userUpdates.position = payload.position;
+    if (payload.currentClub || payload.academy) {
+      userUpdates.currentClub = payload.academy || payload.currentClub;
+    }
+    if (Object.keys(userUpdates).length > 0) {
+      await UserModel.findByIdAndUpdate(existing.userId, userUpdates);
+    }
+
     if (payload.academy && !payload.currentClub) {
       payload.currentClub = payload.academy;
     }
@@ -873,6 +925,103 @@ export class PlayerService {
         overallRating: player.overallRating,
       },
       evaluations,
+    };
+  }
+
+  // 10. Link Parent account for 16+ player
+  async linkParent(userId: string, payload: { parentEmail?: string; relationshipType?: string }) {
+    if (!payload.parentEmail || !String(payload.parentEmail).trim()) {
+      throw new AppError(400, 'parentEmail is required', true, '', [
+        { path: 'parentEmail', message: 'parentEmail is required' },
+      ]);
+    }
+
+    const normalizedEmail = String(payload.parentEmail).toLowerCase().trim();
+    const parentUser = await UserModel.findOne({
+      email: normalizedEmail,
+      role: { $in: ['PARENT', 'GUARDIAN'] },
+    });
+
+    if (!parentUser) {
+      throw new AppError(
+        404,
+        'Parent user not found with this email. Please ensure the parent is registered as PARENT or GUARDIAN.',
+        true,
+        '',
+        [{ path: 'parentEmail', message: 'Parent user not found with this email.' }],
+      );
+    }
+
+    let parentProfile = await ParentProfile.findOne({
+      $or: [{ _id: parentUser._id }, { userId: parentUser._id }],
+    });
+
+    if (!parentProfile) {
+      parentProfile = await ParentProfile.create({
+        userId: parentUser._id,
+        contactPhone: parentUser.phone || '+8801700000000',
+      });
+    }
+
+    const effectiveParentId = parentProfile ? parentProfile._id : parentUser._id;
+
+    const playerProfile = await PlayerProfile.findOne({
+      $or: [{ userId }, { _id: userId }],
+    });
+    if (!playerProfile) {
+      throw new AppError(404, 'Player profile not found');
+    }
+
+    const existingPlayerLink = await ParentChild.findOne({
+      childPlayerId: playerProfile._id,
+    });
+    if (existingPlayerLink) {
+      throw new AppError(400, 'You are already linked with a parent/guardian account.', true, '', [
+        { path: 'parentEmail', message: 'You are already linked with a parent/guardian account.' },
+      ]);
+    }
+
+    const existingParentLinksCount = await ParentChild.countDocuments({
+      parentId: effectiveParentId,
+    });
+    if (existingParentLinksCount >= 1) {
+      throw new AppError(
+        400,
+        'This parent is already linked with another child account.',
+        true,
+        '',
+        [
+          {
+            path: 'parentEmail',
+            message: 'This parent is already linked with another child account.',
+          },
+        ],
+      );
+    }
+
+    const relType =
+      payload.relationshipType &&
+      ['FATHER', 'MOTHER', 'GUARDIAN'].includes(payload.relationshipType.toUpperCase())
+        ? (payload.relationshipType.toUpperCase() as 'FATHER' | 'MOTHER' | 'GUARDIAN')
+        : 'FATHER';
+
+    const link = await ParentChild.create({
+      parentId: effectiveParentId,
+      childPlayerId: playerProfile._id,
+      relationshipType: relType,
+    });
+
+    await UserModel.findByIdAndUpdate(userId, {
+      accountManagedBy: 'PARENT',
+      isVerified: true,
+      verificationStatus: 'APPROVED',
+    });
+
+    return {
+      parentId: parentUser._id,
+      parentName: parentUser.name,
+      parentEmail: parentUser.email,
+      relationshipType: link.relationshipType,
     };
   }
 }

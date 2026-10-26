@@ -4,7 +4,13 @@ import { StatusCodes } from 'http-status-codes';
 import jwt from 'jsonwebtoken';
 import { env } from '@/config/env';
 import { UserModel } from '@/modules/user/user.model';
-import { PlayerProfile } from '@/modules/player/player.model';
+import {
+  PlayerProfile,
+  PlayerAttributes,
+  PlayerMentalAnalysis,
+  PlayerFullPotential,
+  FifaCardStats,
+} from '@/modules/player/player.model';
 import { Team } from '@/modules/academy/academy.model';
 import { TrainingSession, TrainingAttendance } from '@/modules/training/training.model';
 import { IParentProfile, IParentMatchReport } from './parent.interface';
@@ -65,6 +71,12 @@ export class ParentService {
       { expiresIn: env.JWT_REFRESH_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
     );
 
+    if (childUser.accountManagedBy === 'PARENT' && childUser.verificationStatus !== 'APPROVED') {
+      childUser.verificationStatus = 'APPROVED';
+      childUser.isVerified = true;
+      await childUser.save();
+    }
+
     const userObj = childUser.toObject();
     delete (userObj as any).password;
 
@@ -104,13 +116,16 @@ export class ParentService {
 
       const link = await ParentChild.findOne({
         $or: queryCandidates,
-      }).populate('parentId');
+      });
 
       if (link && link.parentId) {
-        const parentProf: any = link.parentId;
-        resolvedParentUserId = parentProf.userId
-          ? parentProf.userId.toString()
-          : parentProf._id.toString();
+        const rawParentId = link.parentId.toString();
+        const parentProf = await ParentProfile.findById(rawParentId);
+        if (parentProf && parentProf.userId) {
+          resolvedParentUserId = parentProf.userId.toString();
+        } else {
+          resolvedParentUserId = rawParentId;
+        }
       }
     }
 
@@ -293,18 +308,190 @@ export class ParentService {
       return existingLink;
     }
 
+    // Enforce 1-child limit per parent for now
+    const existingLinksCount = await ParentChild.countDocuments({
+      parentId: effectiveParentId,
+    });
+    if (existingLinksCount >= 1) {
+      const msg = 'A parent can only link or create one child account at this time.';
+      throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
+        { path: 'childPlayerId', message: msg },
+      ]);
+    }
+
     const link = await ParentChild.create({
       parentId: effectiveParentId,
       childPlayerId: resolvedPlayerProfile._id,
       relationshipType: payload.relationshipType,
     });
 
-    // Mark child account as managed by PARENT
+    // Mark child account as managed by PARENT and verified
     await UserModel.findByIdAndUpdate(resolvedPlayerProfile.userId, {
       accountManagedBy: 'PARENT',
+      isVerified: true,
+      verificationStatus: 'APPROVED',
     });
 
     return link;
+  }
+
+  async createChild(parentId: string, payload: any) {
+    const parent = await UserModel.findById(parentId);
+    if (!parent) throw new AppError(StatusCodes.NOT_FOUND, 'Parent user not found');
+
+    if (!payload.name || !String(payload.name).trim()) {
+      const msg = 'Child name is required';
+      throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [{ path: 'name', message: msg }]);
+    }
+
+    if (!payload.dateOfBirth) {
+      const msg = 'Child dateOfBirth is required';
+      throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
+        { path: 'dateOfBirth', message: msg },
+      ]);
+    }
+
+    const birthDate = new Date(payload.dateOfBirth);
+    if (isNaN(birthDate.getTime())) {
+      const msg = 'Valid dateOfBirth is required';
+      throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
+        { path: 'dateOfBirth', message: msg },
+      ]);
+    }
+
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    let parentProfile = await ParentProfile.findOne({
+      $or: [{ _id: parentId }, { userId: parentId }],
+    }).catch(() => null);
+
+    if (!parentProfile && Types.ObjectId.isValid(parentId)) {
+      parentProfile = await ParentProfile.create({
+        userId: parent._id,
+        contactPhone: parent.phone || '+8801700000000',
+      }).catch(() => null);
+    }
+
+    const effectiveParentId = parentProfile ? parentProfile._id : parent._id;
+
+    // Enforce 1-child limit per parent for now
+    const existingCount = await ParentChild.countDocuments({
+      parentId: effectiveParentId,
+    });
+    if (existingCount >= 1) {
+      const msg = 'A parent can only link or create one child account at this time.';
+      throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
+        { path: 'childPlayerId', message: msg },
+      ]);
+    }
+
+    let childEmail = payload.email ? String(payload.email).toLowerCase().trim() : '';
+    if (!childEmail) {
+      const cleanName = String(payload.name)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      childEmail = `child.${cleanName || 'player'}.${Date.now().toString().slice(-6)}@k10child.internal`;
+    }
+
+    const existingEmailUser = await UserModel.findOne({ email: childEmail });
+    if (existingEmailUser) {
+      const msg = 'Email address is already in use by another account';
+      throw new AppError(StatusCodes.CONFLICT, msg, true, '', [{ path: 'email', message: msg }]);
+    }
+
+    const childUser = await UserModel.create({
+      name: payload.name,
+      email: childEmail,
+      password: payload.password || 'Child@123456',
+      role: 'PLAYER',
+      accountManagedBy: 'PARENT',
+      isEmailVerified: true,
+      isVerified: true,
+      verificationStatus: 'APPROVED',
+      status: 'ACTIVE',
+      phone: payload.phone || parent.phone,
+      avatar: payload.avatar || '',
+      dateOfBirth: birthDate,
+      position: payload.position || 'Forward',
+      height:
+        payload.height !== undefined && payload.height !== '' ? Number(payload.height) : undefined,
+      weight:
+        payload.weight !== undefined && payload.weight !== '' ? Number(payload.weight) : undefined,
+      currentClub: payload.currentClub || '',
+    });
+
+    const playerProf = await PlayerProfile.create({
+      userId: childUser._id,
+      fullName: childUser.name,
+      position: childUser.position || 'Forward',
+      dateOfBirth: birthDate,
+      age: Math.max(0, age),
+      country: payload.country || parent.country || 'Bangladesh',
+      height: childUser.height,
+      weight: childUser.weight,
+      currentClub: childUser.currentClub || '',
+      profileImage: childUser.avatar || '',
+      profileCompletion: 40,
+    });
+
+    await PlayerAttributes.findOneAndUpdate(
+      { playerId: playerProf._id },
+      { playerId: playerProf._id },
+      { upsert: true, new: true },
+    );
+    await PlayerMentalAnalysis.findOneAndUpdate(
+      { playerId: playerProf._id },
+      { playerId: playerProf._id },
+      { upsert: true, new: true },
+    );
+    await PlayerFullPotential.findOneAndUpdate(
+      { playerId: playerProf._id },
+      { playerId: playerProf._id },
+      { upsert: true, new: true },
+    );
+    await FifaCardStats.findOneAndUpdate(
+      { playerId: playerProf._id },
+      { playerId: playerProf._id, overallRating: 50, position: playerProf.position },
+      { upsert: true, new: true },
+    );
+
+    childUser.playerId = playerProf._id.toString();
+    await childUser.save();
+
+    const link = await ParentChild.create({
+      parentId: effectiveParentId,
+      childPlayerId: playerProf._id,
+      relationshipType: payload.relationshipType || 'FATHER',
+    });
+
+    return {
+      childUser: {
+        id: childUser._id,
+        name: childUser.name,
+        email: childUser.email,
+        role: childUser.role,
+        accountManagedBy: childUser.accountManagedBy,
+        avatar: childUser.avatar,
+      },
+      playerProfile: {
+        id: playerProf._id,
+        fullName: playerProf.fullName,
+        position: playerProf.position,
+        age: playerProf.age,
+        dateOfBirth: playerProf.dateOfBirth,
+        currentClub: playerProf.currentClub,
+        profileImage: playerProf.profileImage,
+      },
+      link: {
+        id: link._id,
+        relationshipType: link.relationshipType,
+      },
+    };
   }
 
   async getChildren(parentId: string) {
@@ -323,7 +510,27 @@ export class ParentService {
       parentId: { $in: targetParentIds },
     }).populate({
       path: 'childPlayerId',
-      populate: { path: 'userId', select: 'name email avatar accountManagedBy' },
+      populate: {
+        path: 'userId',
+        select: 'name email avatar accountManagedBy isVerified verificationStatus',
+      },
+    });
+
+    const childPlayerIds = links.map((l: any) => l.childPlayerId?._id).filter(Boolean);
+    const childTeamIds = links.map((l: any) => l.childPlayerId?.teamId).filter(Boolean);
+
+    const teams = await Team.find({
+      $or: [{ _id: { $in: childTeamIds } }, { playerIds: { $in: childPlayerIds } }],
+    })
+      .populate('coachIds', 'fullName title profileImage')
+      .populate('academyId', 'name');
+
+    const teamByPlayerId = new Map<string, any>();
+    teams.forEach((t) => {
+      (t.playerIds || []).forEach((pid: any) => {
+        teamByPlayerId.set(pid.toString(), t);
+      });
+      teamByPlayerId.set(t._id.toString(), t);
     });
 
     return links.map((link: any) => {
@@ -336,7 +543,80 @@ export class ParentService {
           : '';
       const childPlayerId = child?._id ? child._id.toString() : link.childPlayerId.toString();
 
-      return {
+      // 1. Resolve current club: player's present club from clubHistory ALWAYS has priority
+      let currentClub = '';
+      if (Array.isArray(child?.clubHistory) && child.clubHistory.length > 0) {
+        const presentClubItem = child.clubHistory.find(
+          (c: any) =>
+            c.isCurrent === true ||
+            String(c.isCurrent).toLowerCase() === 'true' ||
+            String(c.to || '')
+              .trim()
+              .toLowerCase() === 'present',
+        );
+        if (presentClubItem && presentClubItem.clubName) {
+          currentClub = presentClubItem.clubName;
+        }
+      }
+      if (!currentClub) {
+        currentClub = child?.currentClub || childUser?.currentClub || child?.academy || '';
+      }
+
+      // 2. Resolve team & assigned coaches
+      const team =
+        teamByPlayerId.get(childPlayerId) ||
+        (child?.teamId ? teamByPlayerId.get(child.teamId.toString()) : null);
+
+      let coachesAssigned = '';
+      let assignedCoach: any = null;
+      const assignedCoaches: any[] = [];
+
+      if (team && Array.isArray(team.coachIds) && team.coachIds.length > 0) {
+        team.coachIds.forEach((c: any) => {
+          if (c) {
+            assignedCoaches.push({
+              id: c._id ? c._id.toString() : '',
+              name: c.fullName || c.title || 'Coach',
+              title: c.title || 'Head Coach',
+              profileImage: c.profileImage || '',
+            });
+          }
+        });
+        coachesAssigned = team.coachIds
+          .map((c: any) => c.fullName || c.title)
+          .filter(Boolean)
+          .join(', ');
+        if (assignedCoaches.length > 0) {
+          assignedCoach = assignedCoaches[0];
+        }
+      }
+      if (!coachesAssigned) {
+        coachesAssigned =
+          child?.coachesAssigned || child?.coachVerification?.coachName || child?.coachName || '';
+        if (coachesAssigned) {
+          assignedCoach = {
+            id: '',
+            name: coachesAssigned,
+            title: 'Coach',
+            profileImage: '',
+          };
+          assignedCoaches.push(assignedCoach);
+        }
+      }
+
+      // 3. Resolve academy
+      const academyName = child?.academy || (team?.academyId as any)?.name || '';
+
+      const isCvVerified = Boolean(
+        child?.isVerifiedByCoach || child?.coachVerification?.isVerified,
+      );
+      const isAccountVerified = Boolean(
+        childUser?.isVerified === true ||
+        childUser?.verificationStatus === 'APPROVED' ||
+        childUser?.accountManagedBy === 'PARENT',
+      );
+
+      const item: any = {
         linkId: link._id,
         relationshipType: link.relationshipType,
         childPlayerId,
@@ -345,12 +625,32 @@ export class ParentService {
         position: child?.position || 'Forward',
         profileImage: child?.profileImage || childUser?.avatar || '',
         cvTier: child?.cvTier || 'BRONZE',
+        isCvVerified,
+        isVerifiedByCoach: isCvVerified,
+        isVerified: isAccountVerified,
         overallRating: child?.overallRating ?? 50,
         age: child?.age || null,
         dateOfBirth: child?.dateOfBirth || null,
-        currentClub: child?.currentClub || '',
+        height: child?.height ?? childUser?.height ?? null,
+        weight: child?.weight ?? childUser?.weight ?? null,
+        preferredFoot: child?.preferredFoot || 'RIGHT',
+        currentClub,
         accountManagedBy: childUser?.accountManagedBy || 'PARENT',
       };
+
+      if (academyName) {
+        item.academy = academyName;
+        item.academyLocation = academyName;
+      }
+
+      if (coachesAssigned) {
+        item.coachesAssigned = coachesAssigned;
+        item.coachName = coachesAssigned;
+        item.assignedCoach = assignedCoach;
+        item.assignedCoaches = assignedCoaches;
+      }
+
+      return item;
     });
   }
 
@@ -376,8 +676,25 @@ export class ParentService {
    */
   async getChildTrainingSessions(
     userId: string,
-    query: { childPlayerId?: string; date?: string; upcomingOnly?: string } = {},
+    query: {
+      childPlayerId?: string;
+      date?: string;
+      upcomingOnly?: string;
+      pastOnly?: string;
+      type?: string;
+      page?: string | number;
+      limit?: string | number;
+    } = {},
   ) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Number(query.limit) > 0 ? Number(query.limit) : query.page ? 10 : 20;
+    const emptyMeta = {
+      page,
+      limit,
+      total: 0,
+      totalPage: 1,
+    };
+
     const targetParentIds: any[] = [userId];
     if (Types.ObjectId.isValid(userId)) {
       const parentProfile = await ParentProfile.findOne({
@@ -399,7 +716,22 @@ export class ParentService {
       .lean();
 
     if (links.length === 0) {
-      return { total: 0, sessions: [] };
+      return {
+        data: {
+          stats: {
+            attendanceRate: 0,
+            attendanceRateFormatted: '0%',
+            totalSessions: 0,
+            present: 0,
+            absent: 0,
+          },
+          upcomingSessions: [],
+          pastSessions: [],
+          total: 0,
+          sessions: [],
+        },
+        meta: emptyMeta,
+      };
     }
 
     const childPlayerIds = links.map((l: any) => l.childPlayerId?._id || l.childPlayerId);
@@ -427,10 +759,14 @@ export class ParentService {
       const endOfDay = new Date(query.date);
       endOfDay.setHours(23, 59, 59, 999);
       sessionFilter.sessionDate = { $gte: startOfDay, $lte: endOfDay };
-    } else if (query.upcomingOnly !== 'false') {
+    } else if (query.upcomingOnly === 'true') {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       sessionFilter.sessionDate = { $gte: today };
+    } else if (query.pastOnly === 'true') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      sessionFilter.sessionDate = { $lt: today };
     }
 
     const sessions = await TrainingSession.find(sessionFilter)
@@ -440,7 +776,22 @@ export class ParentService {
       .lean();
 
     if (sessions.length === 0) {
-      return { total: 0, sessions: [] };
+      return {
+        data: {
+          stats: {
+            attendanceRate: 0,
+            attendanceRateFormatted: '0%',
+            totalSessions: 0,
+            present: 0,
+            absent: 0,
+          },
+          upcomingSessions: [],
+          pastSessions: [],
+          total: 0,
+          sessions: [],
+        },
+        meta: emptyMeta,
+      };
     }
 
     const sessionIds = sessions.map((s) => s._id);
@@ -458,11 +809,22 @@ export class ParentService {
     });
 
     const results: any[] = [];
+    const upcomingSessions: any[] = [];
+    const pastSessions: any[] = [];
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    let presentCount = 0;
+    let absentCount = 0;
 
     sessions.forEach((s: any) => {
       const team = (s.teamId && typeof s.teamId === 'object' ? s.teamId : {}) as any;
       const coach = (s.coachId && typeof s.coachId === 'object' ? s.coachId : {}) as any;
       const teamPlayerIdStrs = (team.playerIds || []).map((id: any) => id.toString());
+      const sDate = new Date(s.sessionDate);
+      const isPast = sDate < todayStart;
+      const sessionCode = s.sessionCode || undefined;
 
       // For each child in this team
       childPlayerIds.forEach((cId: any) => {
@@ -475,14 +837,22 @@ export class ParentService {
           const coachStatus = (att?.status || att?.attendanceStatus || 'UNMARKED').toUpperCase();
           const isAttended = coachStatus === 'PRESENT' || coachStatus === 'LATE';
 
-          results.push({
+          if (isPast) {
+            if (isAttended) presentCount++;
+            else if (coachStatus === 'ABSENT') absentCount++;
+          }
+
+          const baseSession = {
             sessionId: s._id,
+            ...(sessionCode ? { sessionCode } : {}),
             sessionName: s.sessionName || s.sessionTitle || 'Training Session',
+            sessionTitle: s.sessionName || s.sessionTitle || 'Training Session',
             sessionDate: s.sessionDate,
             startTime: s.startTime,
             endTime: s.endTime,
             timeRange: `${s.startTime} - ${s.endTime}`,
-            trainingLocation: s.trainingLocation || s.locationField || 'Main Field',
+            trainingLocation: s.trainingLocation || s.locationField || 'Academy Field A',
+            location: s.trainingLocation || s.locationField || 'Academy Field A',
             sessionType: s.sessionType,
             focusArea: s.focusArea,
             team: {
@@ -495,6 +865,7 @@ export class ParentService {
               name: coach.fullName || 'Head Coach',
               avatar: coach.profileImage || '',
             },
+            coachName: coach.fullName || 'Head Coach',
             child: {
               playerId: cId,
               fullName: childObj.fullName || 'Athlete',
@@ -502,25 +873,86 @@ export class ParentService {
               avatar: childObj.profileImage || '',
               jerseyNumber: childObj.jerseyNumber ? `#${childObj.jerseyNumber}` : '',
             },
+            rsvpStatus,
             rsvp: {
-              status: rsvpStatus, // 'CONFIRMED' (Yes) | 'DECLINED' (No) | 'PENDING'
+              status: rsvpStatus,
               isConfirmed: rsvpStatus === 'CONFIRMED',
               notes: att?.notes || '',
               confirmedAt: att?.updatedAt || null,
             },
+            attendanceStatus: coachStatus,
             actualAttendance: {
-              status: coachStatus, // 'PRESENT' | 'LATE' | 'ABSENT' | 'UNMARKED'
+              status: coachStatus,
               isAttended,
               markedAt: att?.signInTime || null,
             },
-          });
+          };
+
+          results.push(baseSession);
+
+          if (isPast) {
+            pastSessions.push(baseSession);
+          } else {
+            upcomingSessions.push(baseSession);
+          }
         }
       });
     });
 
+    const totalPastMarked = presentCount + absentCount;
+    const attendanceRate =
+      totalPastMarked > 0
+        ? Math.round((presentCount / totalPastMarked) * 100)
+        : pastSessions.length > 0
+          ? Math.round((presentCount / pastSessions.length) * 100)
+          : results.length > 0
+            ? 100
+            : 0;
+
+    const total =
+      query.upcomingOnly === 'true'
+        ? upcomingSessions.length
+        : query.pastOnly === 'true'
+          ? pastSessions.length
+          : results.length;
+
+    const totalPage = Math.ceil(total / limit) || 1;
+    const startIndex = (page - 1) * limit;
+
+    const paginatedUpcoming =
+      query.upcomingOnly === 'true' || query.page || query.limit
+        ? upcomingSessions.slice(startIndex, startIndex + limit)
+        : upcomingSessions;
+
+    const paginatedPast =
+      query.pastOnly === 'true' || query.page || query.limit
+        ? pastSessions.slice(startIndex, startIndex + limit)
+        : pastSessions;
+
+    const paginatedSessions = results.slice(startIndex, startIndex + limit);
+
+    const meta = {
+      page,
+      limit,
+      total,
+      totalPage,
+    };
+
     return {
-      total: results.length,
-      sessions: results,
+      data: {
+        stats: {
+          attendanceRate,
+          attendanceRateFormatted: `${attendanceRate}%`,
+          totalSessions: pastSessions.length || results.length,
+          present: presentCount,
+          absent: absentCount,
+        },
+        upcomingSessions: query.pastOnly === 'true' ? [] : paginatedUpcoming,
+        pastSessions: query.upcomingOnly === 'true' ? [] : paginatedPast,
+        total,
+        sessions: paginatedSessions,
+      },
+      meta,
     };
   }
 
@@ -531,8 +963,8 @@ export class ParentService {
     userId: string,
     sessionId: string,
     payload: {
-      childPlayerId: string;
-      rsvpStatus: 'CONFIRMED' | 'DECLINED' | 'PENDING';
+      childPlayerId?: string;
+      rsvpStatus: string;
       notes?: string;
     },
   ) {
@@ -547,10 +979,21 @@ export class ParentService {
       }
     }
 
+    let targetChildPlayerId = payload.childPlayerId;
+    if (!targetChildPlayerId) {
+      const link = await ParentChild.findOne({ parentId: { $in: targetParentIds } });
+      if (link) {
+        targetChildPlayerId = link.childPlayerId.toString();
+      }
+    }
+    if (!targetChildPlayerId) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Child player ID is required');
+    }
+
     // Authorization check: Verify parent is linked to this child
     const linkExists = await ParentChild.findOne({
       parentId: { $in: targetParentIds },
-      childPlayerId: payload.childPlayerId,
+      childPlayerId: targetChildPlayerId,
     });
     if (!linkExists) {
       throw new AppError(
@@ -564,18 +1007,23 @@ export class ParentService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Training session not found');
     }
 
-    const rsvpStatus = payload.rsvpStatus.toUpperCase();
+    const norm = String(payload.rsvpStatus || 'CONFIRMED').toUpperCase();
+    const rsvpStatus = ['CONFIRMED', 'YES', 'CONFIRM'].includes(norm)
+      ? 'CONFIRMED'
+      : ['DECLINED', 'NO', 'DECLINE'].includes(norm)
+        ? 'DECLINED'
+        : 'PENDING';
 
     const attendance = await TrainingAttendance.findOneAndUpdate(
       {
         sessionId: session._id,
-        $or: [{ playerId: payload.childPlayerId }, { childPlayerId: payload.childPlayerId }],
+        $or: [{ playerId: targetChildPlayerId }, { childPlayerId: targetChildPlayerId }],
       },
       {
         $set: {
           sessionId: session._id,
-          playerId: payload.childPlayerId,
-          childPlayerId: payload.childPlayerId,
+          playerId: targetChildPlayerId,
+          childPlayerId: targetChildPlayerId,
           rsvpStatus,
           notes: payload.notes || '',
         },
@@ -593,9 +1041,75 @@ export class ParentService {
       sessionId: session._id,
       sessionName: session.sessionName || session.sessionTitle,
       sessionDate: session.sessionDate,
-      childPlayerId: payload.childPlayerId,
+      childPlayerId: targetChildPlayerId,
       rsvpStatus: attendance.rsvpStatus,
       notes: attendance.notes || '',
+    };
+  }
+
+  async getAllParents(query: any = {}) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
+
+    const filter: any = {
+      role: { $in: ['PARENT', 'GUARDIAN'] },
+      status: { $ne: 'BLOCKED' },
+    };
+
+    if (query.email) {
+      filter.email = new RegExp(String(query.email).trim(), 'i');
+    } else if (query.search) {
+      const sRegex = new RegExp(String(query.search).trim(), 'i');
+      filter.$or = [{ name: sRegex }, { email: sRegex }, { phone: sRegex }];
+    }
+
+    const total = await UserModel.countDocuments(filter);
+    const parentUsers = await UserModel.find(filter)
+      .select('_id name email phone avatar createdAt')
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    const parentUserIds = parentUsers.map((u) => u._id);
+    const parentProfiles = await ParentProfile.find({
+      userId: { $in: parentUserIds },
+    }).lean();
+
+    const profileByUserId = new Map<string, any>();
+    parentProfiles.forEach((p) => {
+      profileByUserId.set(p.userId.toString(), p);
+    });
+
+    const parentProfileIds = parentProfiles.map((p) => p._id);
+    const linkedLinks = await ParentChild.find({
+      parentId: { $in: [...parentProfileIds, ...parentUserIds] },
+    }).lean();
+
+    const linkedParentSet = new Set(linkedLinks.map((l) => l.parentId.toString()));
+
+    const data = parentUsers.map((p: any) => {
+      const prof = profileByUserId.get(p._id.toString());
+      const pProfId = prof ? prof._id.toString() : p._id.toString();
+      const isAlreadyLinked = linkedParentSet.has(pProfId) || linkedParentSet.has(p._id.toString());
+
+      return {
+        id: p._id,
+        name: p.name,
+        email: p.email,
+        phone: p.phone || '',
+        avatar: p.avatar || '',
+        isAvailableToLink: !isAlreadyLinked,
+      };
+    });
+
+    return {
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+      data,
     };
   }
 }

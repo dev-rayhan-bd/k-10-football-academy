@@ -56,7 +56,7 @@ export const globalErrorHandler: ErrorRequestHandler = (err, _req, res, _next) =
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
-    errorSources = [
+    errorSources = err.errorSources || [
       {
         path: '',
         message: err.message,
@@ -81,10 +81,10 @@ export const globalErrorHandler: ErrorRequestHandler = (err, _req, res, _next) =
 
   res.status(statusCode).json({
     success: false,
+    statusCode,
     message,
     errorSources,
-    err,
-    stack: env.NODE_ENV === 'development' ? err?.stack : null,
+    stack: env.NODE_ENV === 'development' ? err?.stack : undefined,
   });
 };
 

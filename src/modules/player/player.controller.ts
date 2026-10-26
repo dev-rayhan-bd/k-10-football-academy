@@ -794,3 +794,17 @@ export const getMyPlayerEvaluations = catchAsync(async (req: Request, res: Respo
     data: result,
   });
 });
+
+export const linkParent = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req.user as any)?.userId;
+  if (!userId) {
+    throw new AppError(400, 'Player ID is required or authenticate as a player');
+  }
+  const result = await playerService.linkParent(userId, req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Parent account linked successfully',
+    data: result,
+  });
+});

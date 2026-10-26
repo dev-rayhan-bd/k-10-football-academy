@@ -690,8 +690,25 @@ export class AcademyService {
     if (playerIds.length > 0) {
       await PlayerProfile.updateMany(
         { _id: { $in: playerIds } },
-        { $set: { teamId: newTeam._id, academyId: academy._id } },
+        {
+          $set: {
+            teamId: newTeam._id,
+            academyId: academy._id,
+            academy: academy.name,
+            currentClub: academy.name,
+          },
+        },
       );
+      const assignedPlayers = await PlayerProfile.find({ _id: { $in: playerIds } }).select(
+        'userId',
+      );
+      const userIds = assignedPlayers.map((p) => p.userId).filter(Boolean);
+      if (userIds.length > 0) {
+        await User.updateMany(
+          { _id: { $in: userIds } },
+          { $set: { academyId: academy._id, currentClub: academy.name } },
+        );
+      }
     }
 
     // Update assigned coaches
@@ -700,6 +717,21 @@ export class AcademyService {
         { _id: { $in: coachIds } },
         { $addToSet: { teamIds: newTeam._id }, $set: { academyId: academy._id } },
       );
+      if (playerIds.length > 0) {
+        const coachDocs = await CoachProfile.find({ _id: { $in: coachIds } }).select(
+          'fullName title',
+        );
+        const coachNames = coachDocs
+          .map((c) => c.fullName || c.title)
+          .filter(Boolean)
+          .join(', ');
+        if (coachNames) {
+          await PlayerProfile.updateMany(
+            { _id: { $in: playerIds } },
+            { $set: { coachesAssigned: coachNames, 'coachVerification.coachName': coachNames } },
+          );
+        }
+      }
     }
 
     return Team.findById(newTeam._id)
@@ -794,10 +826,28 @@ export class AcademyService {
         );
       }
       if (newPlayerIds.length > 0) {
+        const academy = await AcademyProfile.findById(team.academyId);
+        const academyName = academy?.name || '';
         await PlayerProfile.updateMany(
           { _id: { $in: newPlayerIds } },
-          { $set: { teamId: team._id, academyId: team.academyId } },
+          {
+            $set: {
+              teamId: team._id,
+              academyId: team.academyId,
+              ...(academyName ? { academy: academyName, currentClub: academyName } : {}),
+            },
+          },
         );
+        const assignedPlayers = await PlayerProfile.find({ _id: { $in: newPlayerIds } }).select(
+          'userId',
+        );
+        const userIds = assignedPlayers.map((p) => p.userId).filter(Boolean);
+        if (userIds.length > 0 && academyName) {
+          await User.updateMany(
+            { _id: { $in: userIds } },
+            { $set: { academyId: team.academyId, currentClub: academyName } },
+          );
+        }
       }
 
       team.playerIds = newPlayerIds;
@@ -806,6 +856,29 @@ export class AcademyService {
 
     team.totalMembers = (team.coachesCount || 0) + (team.playersCount || 0);
     await team.save();
+
+    const finalPlayerIds = team.playerIds || [];
+    const finalCoachIds = team.coachIds || [];
+    if (finalPlayerIds.length > 0) {
+      if (finalCoachIds.length > 0) {
+        const coachDocs = await CoachProfile.find({ _id: { $in: finalCoachIds } }).select(
+          'fullName title',
+        );
+        const coachNames = coachDocs
+          .map((c) => c.fullName || c.title)
+          .filter(Boolean)
+          .join(', ');
+        await PlayerProfile.updateMany(
+          { _id: { $in: finalPlayerIds } },
+          { $set: { coachesAssigned: coachNames, 'coachVerification.coachName': coachNames } },
+        );
+      } else {
+        await PlayerProfile.updateMany(
+          { _id: { $in: finalPlayerIds } },
+          { $unset: { coachesAssigned: 1, 'coachVerification.coachName': 1 } },
+        );
+      }
+    }
 
     return Team.findById(team._id)
       .populate(
@@ -1266,6 +1339,25 @@ export class AcademyService {
       $set: { academyId: team.academyId, ...(role ? { title: role } : {}) },
     });
 
+    const teamPlayerIds = team.playerIds || [];
+    if (teamPlayerIds.length > 0) {
+      const allCoaches = await CoachProfile.find({ _id: { $in: team.coachIds } }).select(
+        'fullName title',
+      );
+      const coachNamesStr = allCoaches
+        .map((c) => c.fullName || c.title)
+        .filter(Boolean)
+        .join(', ');
+      if (coachNamesStr) {
+        await PlayerProfile.updateMany(
+          { _id: { $in: teamPlayerIds } },
+          {
+            $set: { coachesAssigned: coachNamesStr, 'coachVerification.coachName': coachNamesStr },
+          },
+        );
+      }
+    }
+
     return {
       message: `${coach.fullName} assigned to ${team.teamName} successfully`,
       teamId: team._id,
@@ -1300,6 +1392,21 @@ export class AcademyService {
     await CoachProfile.findByIdAndUpdate(coachId, {
       $pull: { teamIds: team._id },
     });
+
+    const teamPlayerIds = team.playerIds || [];
+    if (teamPlayerIds.length > 0) {
+      const remainingCoaches = await CoachProfile.find({ _id: { $in: team.coachIds } }).select(
+        'fullName title',
+      );
+      const coachNamesStr = remainingCoaches
+        .map((c) => c.fullName || c.title)
+        .filter(Boolean)
+        .join(', ');
+      await PlayerProfile.updateMany(
+        { _id: { $in: teamPlayerIds } },
+        { $set: { coachesAssigned: coachNamesStr, 'coachVerification.coachName': coachNamesStr } },
+      );
+    }
 
     return {
       message: 'Coach removed from team successfully',
@@ -1477,9 +1584,46 @@ export class AcademyService {
     team.totalMembers = (team.coachesCount || 0) + (team.playersCount || 0);
     await team.save();
 
-    await PlayerProfile.findByIdAndUpdate(playerId, {
-      $set: { teamId: team._id, academyId: team.academyId },
-    });
+    const academyName = academy?.name || '';
+    let coachNamesStr = '';
+    if (team.coachIds && team.coachIds.length > 0) {
+      const coachDocs = await CoachProfile.find({ _id: { $in: team.coachIds } }).select(
+        'fullName title',
+      );
+      coachNamesStr = coachDocs
+        .map((c) => c.fullName || c.title)
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    const hasCurrentClub = (player.clubHistory || []).some(
+      (c: any) =>
+        c.isCurrent === true ||
+        String(c.isCurrent).toLowerCase() === 'true' ||
+        String(c.to || '')
+          .trim()
+          .toLowerCase() === 'present',
+    );
+
+    const updateSet: any = {
+      teamId: team._id,
+      academyId: team.academyId,
+      ...(academyName ? { academy: academyName } : {}),
+      ...(coachNamesStr
+        ? { coachesAssigned: coachNamesStr, 'coachVerification.coachName': coachNamesStr }
+        : {}),
+    };
+    if (!hasCurrentClub && academyName) {
+      updateSet.currentClub = academyName;
+    }
+
+    await PlayerProfile.findByIdAndUpdate(playerId, { $set: updateSet });
+    if (player.userId && academyName) {
+      await User.findByIdAndUpdate(player.userId, {
+        academyId: team.academyId,
+        ...(!hasCurrentClub ? { currentClub: academyName } : {}),
+      });
+    }
     await playerCacheService.invalidatePlayerCache(playerId, player.userId);
 
     let rating = player.overallRating || 85;

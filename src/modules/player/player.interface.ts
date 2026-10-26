@@ -42,6 +42,8 @@ export interface IPlayerProfile {
   academy?: string;
   academyId?: Types.ObjectId;
   teamId?: Types.ObjectId;
+  coachesAssigned?: string;
+  coachName?: string;
   fitnessStatus?: 'ACTIVE' | 'INJURED';
   contractUntil?: Date;
   marketValue?: number;

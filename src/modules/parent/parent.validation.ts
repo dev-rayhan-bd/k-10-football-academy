@@ -49,11 +49,9 @@ export const switchToParentZodSchema = z.object({
 export const parentRsvpZodSchema = z.object({
   body: z
     .object({
-      childPlayerId: z.string({ required_error: 'Child Player ID is required' }),
+      childPlayerId: z.string().optional(),
       sessionId: z.string().optional(),
-      rsvpStatus: z.enum(['CONFIRMED', 'DECLINED', 'PENDING'], {
-        required_error: 'rsvpStatus must be CONFIRMED, DECLINED, or PENDING',
-      }),
+      rsvpStatus: z.union([z.enum(['CONFIRMED', 'DECLINED', 'PENDING']), z.string()]),
       notes: z.string().optional(),
     })
     .passthrough(),

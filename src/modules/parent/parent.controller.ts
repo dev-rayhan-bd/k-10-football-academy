@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
+import { AppError } from '@/utils/AppError';
+import { uploadToStorage } from '@/utils/fileUpload.utils';
 import { parentService } from './parent.service';
 
 export const switchProfile = catchAsync(async (req: Request, res: Response) => {
@@ -47,6 +49,17 @@ export const getParentProfile = catchAsync(async (req: Request, res: Response) =
   });
 });
 
+export const getAllParents = catchAsync(async (req: Request, res: Response) => {
+  const result = await parentService.getAllParents(req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Parents fetched successfully',
+    data: result.data,
+    meta: result.meta,
+  });
+});
+
 export const linkChild = catchAsync(async (req: Request, res: Response) => {
   const parentId = (req as any).user?.userId || req.params.parentId;
   const result = await parentService.linkChild(parentId, req.body);
@@ -54,6 +67,63 @@ export const linkChild = catchAsync(async (req: Request, res: Response) => {
     statusCode: 201,
     success: true,
     message: 'Child linked successfully',
+    data: result,
+  });
+});
+
+export const createChild = catchAsync(async (req: Request, res: Response) => {
+  const parentId = (req as any).user?.userId || req.params.parentId;
+  const payload: any = { ...req.body };
+  delete payload.data;
+
+  if (req.body?.data) {
+    let parsedData: any = {};
+    if (typeof req.body.data === 'string') {
+      try {
+        parsedData = JSON.parse(req.body.data);
+      } catch {
+        try {
+          const cleaned = req.body.data.replace(/,\s*([}\]])/g, '$1');
+          parsedData = JSON.parse(cleaned);
+        } catch {
+          throw new AppError(400, "Invalid JSON format in 'data' field");
+        }
+      }
+    } else if (typeof req.body.data === 'object' && req.body.data !== null) {
+      parsedData = req.body.data;
+    }
+
+    if (parsedData && typeof parsedData === 'object') {
+      Object.keys(parsedData).forEach((key) => {
+        if (parsedData[key] !== undefined && parsedData[key] !== '') {
+          payload[key] = parsedData[key];
+        }
+      });
+    }
+  }
+
+  if (req.file) {
+    payload.avatar = await uploadToStorage(req.file, 'avatars');
+  }
+
+  if (req.files && Array.isArray(req.files)) {
+    for (const file of req.files as Express.Multer.File[]) {
+      if (
+        file.fieldname === 'avatar' ||
+        file.fieldname === 'profileImage' ||
+        file.fieldname === 'image' ||
+        file.fieldname === 'file'
+      ) {
+        payload.avatar = await uploadToStorage(file, 'avatars');
+      }
+    }
+  }
+
+  const result = await parentService.createChild(parentId, payload);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Child created and linked successfully',
     data: result,
   });
 });
@@ -105,7 +175,8 @@ export const getChildTrainingSessions = catchAsync(async (req: Request, res: Res
     statusCode: 200,
     success: true,
     message: 'Child training sessions fetched successfully',
-    data: result,
+    data: result.data,
+    meta: result.meta,
   });
 });
 

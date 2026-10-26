@@ -40,6 +40,7 @@ import {
   updatePlayerPotential,
   updatePlayerMental,
   getMyPlayerEvaluations,
+  linkParent,
 } from './player.controller';
 import {
   createSelfGameReport,
@@ -105,6 +106,7 @@ router.patch(
 router.post('/me/clubs', auth(), upload.any() as any, addClubHistoryItem);
 router.patch('/me/clubs/:clubId', auth(), upload.any() as any, updateClubHistoryItem);
 router.delete('/me/clubs/:clubId', auth(), deleteClubHistoryItem);
+router.post('/me/link-parent', auth('PLAYER', 'SUPER_ADMIN'), linkParent);
 router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
 router.get('/me/matches', auth(), getMatchRecords);
 router.post('/me/matches', auth(), validateRequest(createMatchRecordZodSchema), addMatchRecord);
@@ -150,7 +152,7 @@ router.get('/:id/cv', optionalAuth(), gateClubOrAgentIfAuthenticated(), getPlaye
 router.get('/:id', optionalAuth(), gateClubOrAgentIfAuthenticated(), getPlayerProfile);
 router.patch(
   '/:id',
-  auth('SUPER_ADMIN', 'COACH', 'PLAYER'),
+  auth('SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT', 'GUARDIAN'),
   upload.any() as any,
   validateRequest(updatePlayerProfileZodSchema),
   updatePlayerProfile,

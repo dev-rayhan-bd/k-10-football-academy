@@ -55,13 +55,33 @@ export const createOrderZodSchema = z.object({
     items: z
       .array(
         z.object({
-          productId: z.string().min(1),
-          quantity: z.number().min(1),
-          price: z.number().positive(),
+          productId: z.string().min(1, 'Product ID is required'),
+          quantity: z.number().int().min(1, 'Quantity must be at least 1'),
+          price: z.number().positive().optional(),
           size: z.string().optional(),
+          color: z.string().optional(),
         }),
       )
-      .min(1, 'Order must contain at least 1 item'),
-    totalAmount: z.number().positive(),
+      .optional(),
+    totalAmount: z.number().positive().optional(),
+    shippingAddress: z.string().optional(),
+    customerEmail: z.string().email().optional(),
+  }),
+});
+
+export const addToCartZodSchema = z.object({
+  body: z.object({
+    productId: z.string().min(1, 'Product ID is required'),
+    quantity: z.number().int().min(1, 'Quantity must be at least 1').default(1),
+    size: z.string().optional(),
+    color: z.string().optional(),
+  }),
+});
+
+export const updateCartItemZodSchema = z.object({
+  body: z.object({
+    quantity: z.number().int().min(0, 'Quantity cannot be negative').optional(),
+    size: z.string().optional(),
+    color: z.string().optional(),
   }),
 });

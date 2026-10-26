@@ -5,6 +5,7 @@ import { sendResponse } from '@/utils/sendResponse';
 import { gameReportService } from './services/game-report.service';
 import { academyService } from '@/modules/academy/academy.service';
 import { subscriptionService } from '@/modules/subscription/subscription.service';
+import { shopService } from '@/modules/shop/shop.service';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 
@@ -71,6 +72,8 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
     obj.metadata?.type === 'MEMBERSHIP_SUBSCRIPTION'
   ) {
     await subscriptionService.handleSubscriptionStripeWebhook(obj);
+  } else if (obj.metadata?.paymentType === 'SHOP_ORDER' || obj.metadata?.type === 'SHOP_ORDER') {
+    await shopService.handleShopOrderStripeWebhook(obj);
   } else {
     await gameReportService.handleStripeWebhook(event);
   }

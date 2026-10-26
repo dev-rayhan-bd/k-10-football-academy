@@ -29,7 +29,6 @@ export interface IShopProduct {
   title?: string;
   price?: number;
   description?: string;
-  image?: string;
   isAvailable?: boolean;
 
   createdAt?: Date;
@@ -53,8 +52,30 @@ export interface IShopOrder {
   totalAmount: number;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
+  stripeSessionId?: string;
+  stripePaymentIntentId?: string;
+  checkoutUrl?: string;
+  paidAt?: Date;
+  shippingAddress?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 export interface IShopOrderDocument extends IShopOrder, Document {}
+
+export interface IShopCartItem {
+  _id?: Types.ObjectId;
+  productId: Types.ObjectId;
+  quantity: number;
+  size?: string;
+  color?: string;
+}
+
+export interface IShopCart {
+  userId: Types.ObjectId;
+  items: IShopCartItem[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IShopCartDocument extends IShopCart, Document {}

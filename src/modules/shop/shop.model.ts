@@ -1,5 +1,5 @@
 import { Schema, model } from 'mongoose';
-import { IShopProductDocument, IShopOrderDocument } from './shop.interface';
+import { IShopProductDocument, IShopOrderDocument, IShopCartDocument } from './shop.interface';
 
 const ShopProductSchema = new Schema<IShopProductDocument>(
   {
@@ -32,7 +32,6 @@ const ShopProductSchema = new Schema<IShopProductDocument>(
     title: { type: String },
     price: { type: Number },
     description: { type: String },
-    image: { type: String },
     isAvailable: { type: Boolean, default: true },
   },
   { timestamps: true },
@@ -57,10 +56,8 @@ ShopProductSchema.pre('validate', function (next) {
     this.productDescription = this.description;
   }
 
-  if (this.productImage && !this.image) {
-    this.image = this.productImage;
-  } else if (this.image && !this.productImage) {
-    this.productImage = this.image;
+  if ((this as any).image && !this.productImage) {
+    this.productImage = (this as any).image;
   }
 
   if (this.isActive !== undefined && this.isAvailable === undefined) {
@@ -103,15 +100,42 @@ const ShopOrderSchema = new Schema<IShopOrderDocument>(
       type: String,
       enum: ['PENDING', 'PAID', 'FAILED'],
       default: 'PENDING',
+      index: true,
     },
     orderStatus: {
       type: String,
       enum: ['PROCESSING', 'SHIPPED', 'DELIVERED'],
       default: 'PROCESSING',
+      index: true,
     },
+    stripeSessionId: { type: String, index: true },
+    stripePaymentIntentId: { type: String, index: true },
+    checkoutUrl: { type: String },
+    paidAt: { type: Date },
+    shippingAddress: { type: String },
   },
   { timestamps: true },
 );
 
 export const ShopProduct = model<IShopProductDocument>('ShopProduct', ShopProductSchema);
 export const ShopOrder = model<IShopOrderDocument>('ShopOrder', ShopOrderSchema);
+
+const ShopCartItemSchema = new Schema(
+  {
+    productId: { type: Schema.Types.ObjectId, ref: 'ShopProduct', required: true },
+    quantity: { type: Number, required: true, min: 1, default: 1 },
+    size: { type: String, trim: true },
+    color: { type: String, trim: true },
+  },
+  { _id: true, timestamps: true },
+);
+
+const ShopCartSchema = new Schema<IShopCartDocument>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
+    items: [ShopCartItemSchema],
+  },
+  { timestamps: true },
+);
+
+export const ShopCart = model<IShopCartDocument>('ShopCart', ShopCartSchema);

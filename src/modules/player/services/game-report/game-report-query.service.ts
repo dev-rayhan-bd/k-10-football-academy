@@ -202,10 +202,10 @@ export class GameReportQueryService {
         pending: pendingCount,
       },
       reports,
-      pagination: {
-        total: pagination.total,
+      meta: {
         page: pagination.page,
         limit: pagination.limit,
+        total: pagination.total,
         totalPages: pagination.totalPage,
       },
     };

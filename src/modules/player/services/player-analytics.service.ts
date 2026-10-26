@@ -498,10 +498,10 @@ export class PlayerAnalyticsService {
       ...(matchPagination
         ? {
             matches: paginatedMatchesList,
-            pagination: {
-              total: matchPagination.total,
+            meta: {
               page: matchPagination.page,
               limit: matchPagination.limit,
+              total: matchPagination.total,
               totalPages: matchPagination.totalPage,
             },
           }

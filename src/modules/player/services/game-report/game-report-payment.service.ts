@@ -9,7 +9,9 @@ import { getCoachReportRequestEmailTemplate } from '@/utils/emailTemplates';
 import { logger } from '@/utils/logger';
 import { env } from '@/config/env';
 import { notificationService } from '@/modules/notification/notification.service';
-import { ParentChild } from '@/modules/parent/parent.model';
+import { ParentChild, ParentMatchReport } from '@/modules/parent/parent.model';
+import { parentService } from '@/modules/parent/parent.service';
+import { AcademyFinanceTransaction, AcademyProfile } from '@/modules/academy/academy.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { redisClient } from '@/config/redis';
 import { resolveOrCreatePlayerProfile } from './game-report.utils';
@@ -111,6 +113,10 @@ export class GameReportPaymentService {
       'coachReview.paymentStatus': 'UNPAID',
     });
 
+    const resolvedPrice = Number(
+      payload.coachReviewPrice || payload.price || payload.amount || 25.0,
+    );
+
     const draftData = {
       playerId: playerProfile._id,
       playerInfo: mergedPlayerInfo,
@@ -148,7 +154,7 @@ export class GameReportPaymentService {
         coachEmail: targetCoachEmail,
         coachName: targetCoachName || 'Coach',
         paymentStatus: 'UNPAID',
-        paymentAmount: 6.99,
+        paymentAmount: resolvedPrice,
         status: 'PENDING',
       },
     };
@@ -160,7 +166,7 @@ export class GameReportPaymentService {
       matchRecord = await MatchRecord.create(draftData);
     }
 
-    // Create Stripe Checkout Session for $6.99
+    // Create Stripe Checkout Session (paid directly to K10 platform)
     const stripe = getStripeClient();
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -168,7 +174,7 @@ export class GameReportPaymentService {
         {
           price_data: {
             currency: 'usd',
-            unit_amount: 699, // $6.99 in cents
+            unit_amount: Math.round(resolvedPrice * 100), // in cents
             product_data: {
               name: 'Professional Coach Game Report Evaluation',
               description: `Match analysis for ${playerProfile.fullName || 'Player'} (${resolvedHomeTeam} vs ${resolvedAwayTeam})`,
@@ -178,19 +184,21 @@ export class GameReportPaymentService {
         },
       ],
       metadata: {
+        reportType: 'MATCH_RECORD',
         reportId: matchRecord._id.toString(),
         playerId: playerProfile._id.toString(),
         coachEmail: targetCoachEmail,
       },
       payment_intent_data: {
         metadata: {
+          reportType: 'MATCH_RECORD',
           reportId: matchRecord._id.toString(),
           playerId: playerProfile._id.toString(),
           coachEmail: targetCoachEmail,
         },
       },
       customer_email: (await User.findById(playerProfile.userId))?.email || undefined,
-      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${matchRecord._id}`,
+      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${matchRecord._id}&type=MATCH_RECORD`,
       cancel_url: cancelUrl,
     });
 
@@ -202,7 +210,7 @@ export class GameReportPaymentService {
       reportId: matchRecord._id,
       checkoutUrl: session.url,
       sessionId: session.id,
-      amount: 6.99,
+      amount: resolvedPrice,
       status: 'AWAITING_PAYMENT',
     };
   }
@@ -267,6 +275,43 @@ export class GameReportPaymentService {
           { new: true, session },
         ).populate('playerId');
 
+        if (updatedRecord) {
+          const playerProfile = (updatedRecord.playerId as any) || {};
+          let academy = null;
+          if (playerProfile.academyId) {
+            academy = await AcademyProfile.findById(playerProfile.academyId).session(session);
+          }
+          if (!academy && (playerProfile.academy || playerProfile.currentClub)) {
+            const acadName = playerProfile.academy || playerProfile.currentClub;
+            academy = await AcademyProfile.findOne({
+              name: { $regex: new RegExp(`^${acadName}$`, 'i') },
+            }).session(session);
+          }
+
+          if (academy) {
+            const cost = updatedRecord.coachReview?.paymentAmount || 25.0;
+            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2));
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
+
+            await AcademyFinanceTransaction.findOneAndUpdate(
+              { reportId: updatedRecord._id },
+              {
+                academyId: academy._id,
+                playerId: playerProfile._id,
+                coachId: updatedRecord.coachReview?.coachId,
+                reportId: updatedRecord._id,
+                transactionType: 'Game Report',
+                cost,
+                commissionAcademy,
+                transactionDate: new Date(),
+                status: 'COMPLETED',
+                notes: `Stripe payment via K10 (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+              },
+              { upsert: true, new: true, session },
+            );
+          }
+        }
+
         await session.commitTransaction();
       } catch (txnError: any) {
         if (session.inTransaction()) {
@@ -303,6 +348,43 @@ export class GameReportPaymentService {
           },
           { new: true },
         ).populate('playerId');
+
+        if (updatedRecord) {
+          const playerProfile = (updatedRecord.playerId as any) || {};
+          let academy = null;
+          if (playerProfile.academyId) {
+            academy = await AcademyProfile.findById(playerProfile.academyId);
+          }
+          if (!academy && (playerProfile.academy || playerProfile.currentClub)) {
+            const acadName = playerProfile.academy || playerProfile.currentClub;
+            academy = await AcademyProfile.findOne({
+              name: { $regex: new RegExp(`^${acadName}$`, 'i') },
+            });
+          }
+
+          if (academy) {
+            const cost = updatedRecord.coachReview?.paymentAmount || 25.0;
+            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2));
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
+
+            await AcademyFinanceTransaction.findOneAndUpdate(
+              { reportId: updatedRecord._id },
+              {
+                academyId: academy._id,
+                playerId: playerProfile._id,
+                coachId: updatedRecord.coachReview?.coachId,
+                reportId: updatedRecord._id,
+                transactionType: 'Game Report',
+                cost,
+                commissionAcademy,
+                transactionDate: new Date(),
+                status: 'COMPLETED',
+                notes: `Stripe payment via K10 (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+              },
+              { upsert: true, new: true },
+            );
+          }
+        }
       }
 
       // 4. Concurrency Guard: If another process updated it first, exit idempotently
@@ -440,7 +522,20 @@ export class GameReportPaymentService {
       const obj = event.data?.object || {};
       let reportId = obj.metadata?.reportId;
 
+      if (obj.metadata?.reportType === 'PARENT_MATCH_REPORT' && reportId) {
+        await parentService.finalizePaidParentMatchReport(reportId, obj.id);
+        return { received: true };
+      }
+
       if (!reportId && obj.id) {
+        const parentFound = await ParentMatchReport.findOne({
+          $or: [{ transactionId: obj.id }, { transactionId: obj.payment_intent }],
+        });
+        if (parentFound) {
+          await parentService.finalizePaidParentMatchReport(parentFound._id.toString(), obj.id);
+          return { received: true };
+        }
+
         const found = await MatchRecord.findOne({
           $or: [
             { 'coachReview.transactionId': obj.id },

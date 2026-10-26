@@ -216,7 +216,8 @@ export interface IAcademyFeePaymentDocument extends IAcademyFeePayment, Document
 // ==========================================
 // FINANCE COMMITTEE INTERFACE (SCREENSHOT 2)
 // ==========================================
-export type FinanceTransactionType = 'Game Report' | 'CV Validation' | 'Commission' | string;
+export type FinanceTransactionType =
+  'Game Report' | 'Parent Match Report' | 'CV Validation' | 'Commission' | string;
 export type FinanceTransactionStatus = 'COMPLETED' | 'PENDING' | 'REJECTED';
 
 export interface IAcademyFinanceTransaction {

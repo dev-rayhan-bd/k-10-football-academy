@@ -1,7 +1,8 @@
 import { Document, Types } from 'mongoose';
 
 export type RelationshipType = 'FATHER' | 'MOTHER' | 'GUARDIAN';
-export type CoachReviewStatus = 'PENDING' | 'EVALUATED' | 'UNREQUESTED';
+export type CoachReviewStatus =
+  'PENDING' | 'EVALUATED' | 'UNREQUESTED' | 'AWAITING_PAYMENT' | 'REJECTED';
 
 export interface IParentProfile {
   userId: Types.ObjectId;
@@ -38,9 +39,14 @@ export interface IParentMatchReport {
   opponentTeam: string;
   matchDate: Date;
   plottedEventsJson?: string;
+  plottedCount?: number;
   coachReviewStatus: CoachReviewStatus;
   coachReviewPrice?: number;
   coachRating?: number;
+  paymentStatus?: 'UNPAID' | 'PAID' | 'FREE';
+  transactionId?: string;
+  checkoutUrl?: string | null;
+  paidAt?: Date;
   createdAt?: Date;
 }
 

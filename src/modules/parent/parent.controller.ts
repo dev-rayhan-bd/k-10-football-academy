@@ -149,7 +149,9 @@ export const getChildren = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const createMatchReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await parentService.createMatchReport(req.params.parentId, req.body);
+  const user = (req as any).user;
+  const parentId = user?.userId || user?._id || user?.id || req.params.parentId;
+  const result = await parentService.createMatchReport(parentId, req.body, user);
   sendResponse(res, {
     statusCode: 201,
     success: true,
@@ -159,12 +161,39 @@ export const createMatchReport = catchAsync(async (req: Request, res: Response) 
 });
 
 export const getMatchReports = catchAsync(async (req: Request, res: Response) => {
-  const result = await parentService.getMatchReports(req.params.parentId);
+  const user = (req as any).user;
+  const parentId = user?.userId || user?._id || user?.id || req.params.parentId;
+  const result = await parentService.getMatchReports(parentId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Match reports fetched successfully',
     data: result,
+  });
+});
+
+export const requestMatchReportReview = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const parentId = user?.userId || user?._id || user?.id || req.params.parentId;
+  const { reportId } = req.params;
+  const result = await parentService.requestMatchReportReview(parentId, reportId, req.body, user);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Match report review requested successfully',
+    data: result,
+  });
+});
+
+export const verifyMatchReportPayment = catchAsync(async (req: Request, res: Response) => {
+  const sessionId = (req.query.session_id || req.query.sessionId) as string | undefined;
+  const reportId = (req.query.reportId || req.query.report_id) as string | undefined;
+  const result = await parentService.verifyMatchReportPayment(sessionId, reportId);
+  sendResponse(res, {
+    statusCode: result.success ? 200 : 400,
+    success: result.success,
+    message: result.message,
+    data: result.report || null,
   });
 });
 
@@ -188,6 +217,17 @@ export const submitParentRsvp = catchAsync(async (req: Request, res: Response) =
     statusCode: 200,
     success: true,
     message: result.message,
+    data: result,
+  });
+});
+
+export const getParentOverview = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req.user as any)?.userId || (req.user as any)?._id;
+  const result = await parentService.getParentOverview(userId, req.query as any);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Parent overview dashboard fetched successfully',
     data: result,
   });
 });

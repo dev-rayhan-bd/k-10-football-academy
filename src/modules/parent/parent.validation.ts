@@ -21,15 +21,27 @@ export const linkChildZodSchema = z.object({
 });
 
 export const createParentMatchReportZodSchema = z.object({
-  body: z.object({
-    childPlayerId: z.string().min(1),
-    coachId: z.string().optional(),
-    opponentTeam: z.string().min(2),
-    matchDate: z.string().or(z.date()),
-    plottedEventsJson: z.string().optional(),
-    requestCoachReview: z.boolean().optional(),
-    coachReviewPrice: z.number().optional(),
-  }),
+  body: z
+    .object({
+      childPlayerId: z.string().min(1),
+      coachId: z.string().optional(),
+      opponentTeam: z.string().min(2),
+      matchDate: z.string().or(z.date()),
+      plottedEventsJson: z.string().optional(),
+      plottedEvents: z.array(z.any()).optional(),
+      requestCoachReview: z.boolean().optional(),
+      coachReviewPrice: z.number().optional(),
+    })
+    .passthrough(),
+});
+
+export const requestMatchReportReviewZodSchema = z.object({
+  body: z
+    .object({
+      coachId: z.string().optional(),
+      coachReviewPrice: z.number().optional(),
+    })
+    .optional(),
 });
 
 export const switchProfileZodSchema = z.object({

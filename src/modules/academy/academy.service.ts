@@ -29,7 +29,7 @@ import {
 } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { User } from '@/modules/user/user.model';
-import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
+import { ParentProfile, ParentChild, ParentMatchReport } from '@/modules/parent/parent.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { ClubProfile, ClubFavourite } from '@/modules/club/club.model';
 import { getStripeClient } from '@/config/stripe';
@@ -3094,10 +3094,13 @@ export class AcademyService {
       );
     }
 
-    // 1. Resolve athlete/player: supports playerId or athleteName/fullName/name
+    // 1. Resolve athlete/player: resolve directly by playerId (or fallback if userId)
     let player = null;
     if (payload.playerId && Types.ObjectId.isValid(payload.playerId)) {
       player = await PlayerProfile.findById(payload.playerId);
+      if (!player) {
+        player = await PlayerProfile.findOne({ userId: payload.playerId });
+      }
     }
     if (!player) {
       const searchName = (
@@ -3117,7 +3120,14 @@ export class AcademyService {
       }
     }
     if (!player) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'Athlete not found by the specified name or ID');
+      throw new AppError(StatusCodes.NOT_FOUND, 'Athlete not found by the specified ID');
+    }
+
+    // Resolve athlete name directly from PlayerProfile (or linked User if needed)
+    let athleteFullName = player.fullName;
+    if (!athleteFullName && player.userId) {
+      const playerUser = await User.findById(player.userId);
+      athleteFullName = playerUser?.name || 'Athlete';
     }
 
     // 2. Resolve target academy: supports targetAcademyId or targetAcademy (name)
@@ -3200,15 +3210,22 @@ export class AcademyService {
         recipientId: targetUserId,
         recipientRole: 'ACADEMY',
         title: 'New Transfer Request Received',
-        message: `${requesterName} from ${academy.name} has submitted a transfer request for athlete ${player.fullName}.`,
+        message: `${requesterName} from ${academy.name} has submitted a transfer request for athlete ${athleteFullName}.`,
         type: 'TRANSFER_REQUEST_RECEIVED',
         data: { transferRequestId: transfer._id, playerId: player._id },
       });
     }
 
+    const populatedTransfer = await TransferRequest.findById(transfer._id)
+      .populate('playerId', 'fullName position profileImage overallRating age country')
+      .populate('fromAcademyId', 'name logo city country')
+      .populate('toAcademyId', 'name logo city country')
+      .populate('fromTeamId', 'teamName ageGroup')
+      .populate('toTeamId', 'teamName ageGroup');
+
     return {
       message: 'Transfer request submitted successfully',
-      transfer,
+      transfer: populatedTransfer || transfer,
     };
   }
 
@@ -3665,14 +3682,6 @@ export class AcademyService {
         limit,
         total: totalCount,
         totalPages,
-      },
-      pagination: {
-        page,
-        limit,
-        total: totalCount,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
       },
       parents: paginatedParents,
     };
@@ -4664,6 +4673,36 @@ export class AcademyService {
           { upsert: true, new: true },
         );
       }
+
+      // Auto-sync any paid parent match reports of academy players
+      const parentReports = await ParentMatchReport.find({
+        childPlayerId: { $in: academyPlayerIds },
+        paymentStatus: 'PAID',
+      }).lean();
+
+      for (const pr of parentReports) {
+        const cost = pr.coachReviewPrice || 25.0;
+        const commissionAcademy = parseFloat((cost * 0.4).toFixed(2));
+        const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
+        const status = pr.coachReviewStatus === 'REJECTED' ? 'REJECTED' : 'COMPLETED';
+
+        await AcademyFinanceTransaction.findOneAndUpdate(
+          { reportId: pr._id },
+          {
+            academyId: academy._id,
+            playerId: pr.childPlayerId,
+            coachId: pr.coachId,
+            reportId: pr._id,
+            transactionType: 'Parent Match Report',
+            cost,
+            commissionAcademy,
+            transactionDate: pr.paidAt || pr.createdAt || new Date(),
+            status,
+            notes: `Paid to K10 via Stripe (${pr.transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+          },
+          { upsert: true, new: true },
+        );
+      }
     }
 
     const filter: any = { academyId: academy._id };
@@ -4718,7 +4757,7 @@ export class AcademyService {
           ? MatchRecord.countDocuments({ playerId: { $in: academyPlayerIds } })
           : AcademyFinanceTransaction.countDocuments({
               academyId: academy._id,
-              transactionType: { $regex: /Game Report/i },
+              transactionType: { $regex: /Game Report|Parent Match Report|Match Report/i },
             }),
         AcademyFinanceTransaction.countDocuments({
           academyId: academy._id,

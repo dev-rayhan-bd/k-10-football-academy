@@ -42,3 +42,60 @@ export const updateInvoiceStatus = catchAsync(async (req: Request, res: Response
     data: result,
   });
 });
+
+/**
+ * Parent Portal: Fees & Payments (Event Entry Fees Only)
+ */
+export const getParentEventFees = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const result = await invoiceService.getParentEventInvoices(user, req.query as any);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Event fee invoices fetched successfully',
+    data: result,
+  });
+});
+
+/**
+ * Parent Portal: Pay Event Entry Fee (Stripe Checkout)
+ */
+export const payEventFee = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const invoiceId = req.params.id || req.params.invoiceId;
+  const result = await invoiceService.payEventFeeInvoice(user, invoiceId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.alreadyPaid ? result.message : 'Stripe checkout session created successfully',
+    data: result,
+  });
+});
+
+/**
+ * Parent Portal: Verify Event Fee Payment
+ */
+export const verifyEventFeePayment = catchAsync(async (req: Request, res: Response) => {
+  const sessionId = (req.query.session_id || req.query.sessionId) as string | undefined;
+  const invoiceId = (req.query.invoiceId || req.query.invoice_id) as string | undefined;
+  const result = await invoiceService.verifyEventFeePayment(sessionId, invoiceId);
+  sendResponse(res, {
+    statusCode: result.success ? 200 : 400,
+    success: result.success,
+    message: result.message,
+    data: (result as any).invoice || null,
+  });
+});
+
+/**
+ * Parent / Academy / User: Download Official PDF Invoice
+ */
+export const downloadInvoicePdf = catchAsync(async (req: Request, res: Response) => {
+  const invoiceId = req.params.id || req.params.invoiceId;
+  const { buffer, filename } = await invoiceService.generateInvoicePdf(invoiceId);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', buffer.length);
+  res.send(buffer);
+});

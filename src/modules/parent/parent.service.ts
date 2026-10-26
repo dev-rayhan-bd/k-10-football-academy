@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { StatusCodes } from 'http-status-codes';
 import jwt from 'jsonwebtoken';
@@ -11,9 +11,21 @@ import {
   PlayerFullPotential,
   FifaCardStats,
 } from '@/modules/player/player.model';
-import { Team } from '@/modules/academy/academy.model';
+import {
+  Team,
+  AcademyFinanceTransaction,
+  AcademyProfile,
+  PlayerEvaluation,
+} from '@/modules/academy/academy.model';
 import { TrainingSession, TrainingAttendance } from '@/modules/training/training.model';
-import { IParentProfile, IParentMatchReport } from './parent.interface';
+import { CoachProfile } from '@/modules/coach/coach.model';
+import { AcademyInvoice } from '@/modules/invoice/invoice.model';
+import { getStripeClient } from '@/config/stripe';
+import { redisClient } from '@/config/redis';
+import { logger } from '@/utils/logger';
+import { notificationService } from '@/modules/notification/notification.service';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
+import { IParentProfile } from './parent.interface';
 import { ParentProfile, ParentChild, ParentMatchReport } from './parent.model';
 
 export class ParentService {
@@ -654,20 +666,674 @@ export class ParentService {
     });
   }
 
-  async createMatchReport(
-    parentId: string,
-    payload: Partial<IParentMatchReport> & { requestCoachReview?: boolean },
-  ) {
-    const status = payload.requestCoachReview ? 'PENDING' : 'UNPAID';
-    return ParentMatchReport.create({
-      ...payload,
-      parentId,
-      coachReviewStatus: status,
+  async createMatchReport(parentId: string, payload: any, user?: any) {
+    let effectiveParentId = parentId;
+    const targetParentIds: any[] = [parentId];
+    if (Types.ObjectId.isValid(parentId)) {
+      const parentProfile = await ParentProfile.findOne({
+        $or: [{ _id: parentId }, { userId: parentId }],
+      });
+      if (parentProfile) {
+        effectiveParentId = parentProfile._id.toString();
+        targetParentIds.push(parentProfile._id);
+        targetParentIds.push(parentProfile.userId);
+      }
+    }
+
+    const childPlayerId = payload.childPlayerId;
+    if (!childPlayerId || !Types.ObjectId.isValid(childPlayerId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Valid child player ID is required');
+    }
+
+    const player = await PlayerProfile.findOne({
+      $or: [{ _id: childPlayerId }, { userId: childPlayerId }],
     });
+    if (!player) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Athlete/Player profile not found');
+    }
+
+    // Security check: verify that ParentChild link exists between this parent and this child
+    const targetChildIds: any[] = [player._id];
+    if (player.userId) {
+      targetChildIds.push(player.userId);
+    }
+    if (Types.ObjectId.isValid(childPlayerId)) {
+      targetChildIds.push(new Types.ObjectId(childPlayerId));
+    }
+
+    const linkExists = await ParentChild.findOne({
+      parentId: { $in: targetParentIds },
+      childPlayerId: { $in: targetChildIds },
+    });
+
+    if (!linkExists && user?.role !== 'SUPER_ADMIN') {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Access denied. This child player is not linked to your parent account.',
+      );
+    }
+
+    let plottedEventsJson = payload.plottedEventsJson || '';
+    let plottedCount = 0;
+    if (Array.isArray(payload.plottedEvents)) {
+      plottedCount = payload.plottedEvents.length;
+      plottedEventsJson = JSON.stringify(payload.plottedEvents);
+    } else if (payload.plottedEventsJson) {
+      try {
+        const parsed = JSON.parse(payload.plottedEventsJson);
+        plottedCount = Array.isArray(parsed) ? parsed.length : 0;
+      } catch {
+        plottedCount = 0;
+      }
+    }
+
+    const coachReviewPrice = Number(payload.coachReviewPrice || 25);
+    const requestReview = Boolean(payload.requestCoachReview);
+
+    let coachObjectId = undefined;
+    if (payload.coachId && Types.ObjectId.isValid(payload.coachId)) {
+      coachObjectId = new Types.ObjectId(payload.coachId);
+    }
+
+    const report = await ParentMatchReport.create({
+      parentId: effectiveParentId,
+      childPlayerId: player._id,
+      coachId: coachObjectId,
+      opponentTeam: payload.opponentTeam || 'Opponent',
+      matchDate: new Date(payload.matchDate || Date.now()),
+      plottedEventsJson,
+      plottedCount,
+      coachReviewStatus: requestReview ? 'AWAITING_PAYMENT' : 'UNREQUESTED',
+      coachReviewPrice,
+      paymentStatus: 'UNPAID',
+    });
+
+    const reportObj: any = report.toObject();
+    reportObj.childPlayerId = player;
+    const clean = this.formatCleanMatchReport(reportObj);
+
+    if (requestReview) {
+      const checkoutData = await this.requestMatchReportReview(
+        parentId,
+        report._id.toString(),
+        {
+          coachReviewPrice,
+          coachId: payload.coachId,
+        },
+        user,
+      );
+      return {
+        ...clean,
+        checkoutUrl: checkoutData.checkoutUrl,
+        sessionId: checkoutData.sessionId,
+      };
+    }
+
+    return clean;
   }
 
   async getMatchReports(parentId: string) {
-    return ParentMatchReport.find({ parentId }).populate('childPlayerId', 'fullName position');
+    const targetParentIds: any[] = [parentId];
+    if (Types.ObjectId.isValid(parentId)) {
+      const parentProfile = await ParentProfile.findOne({
+        $or: [{ _id: parentId }, { userId: parentId }],
+      });
+      if (parentProfile) {
+        targetParentIds.push(parentProfile._id);
+        targetParentIds.push(parentProfile.userId);
+      }
+    }
+
+    const reports = await ParentMatchReport.find({
+      parentId: { $in: targetParentIds },
+    })
+      .populate('childPlayerId', 'fullName position profileImage overallRating age country')
+      .populate('coachId', 'name email avatar')
+      .sort({ matchDate: -1, createdAt: -1 })
+      .lean();
+
+    return reports.map((r: any) => {
+      const p = r.childPlayerId || {};
+      const opponentClean = (r.opponentTeam || 'Opponent').trim();
+      const opponentDisplay = opponentClean.toLowerCase().startsWith('vs')
+        ? opponentClean
+        : `vs ${opponentClean}`;
+
+      let parsedEvents: any[] = [];
+      if (Array.isArray(r.plottedEvents)) {
+        parsedEvents = r.plottedEvents;
+      } else if (r.plottedEventsJson) {
+        try {
+          const parsed = JSON.parse(r.plottedEventsJson);
+          if (Array.isArray(parsed)) parsedEvents = parsed;
+        } catch {
+          parsedEvents = [];
+        }
+      }
+
+      const goals = parsedEvents.filter(
+        (e: any) => String(e.type || e.eventType || '').toUpperCase() === 'GOAL',
+      ).length;
+
+      const assists = parsedEvents.filter(
+        (e: any) => String(e.type || e.eventType || '').toUpperCase() === 'ASSIST',
+      ).length;
+
+      const plottedCount = parsedEvents.length || r.plottedCount || 0;
+
+      const isEvaluated = r.coachReviewStatus === 'EVALUATED';
+      const isPaid = r.paymentStatus === 'PAID';
+      const isPendingReview = isPaid && !isEvaluated;
+
+      let actionText = `REQUEST REVIEW ($${(r.coachReviewPrice || 25).toFixed(2)})`;
+      if (isEvaluated) {
+        actionText = 'COACH EVALUATED';
+      } else if (isPendingReview) {
+        actionText = 'COACH EVALUATION PENDING';
+      }
+
+      return {
+        _id: r._id,
+        id: r._id,
+        opponentTeam: opponentDisplay,
+        rawOpponentTeam: r.opponentTeam,
+        matchDate: r.matchDate,
+        rating: r.coachRating !== undefined && r.coachRating !== null ? r.coachRating : 'N/A',
+        goals,
+        assists,
+        plottedCount,
+        plottedEvents: parsedEvents,
+        status: isEvaluated ? 'Verified' : 'Pending',
+        coachReviewStatus: r.coachReviewStatus || 'UNREQUESTED',
+        coachReviewPrice: r.coachReviewPrice || 25,
+        paymentStatus: r.paymentStatus || 'UNPAID',
+        checkoutUrl: isPaid ? null : r.checkoutUrl || null,
+        action: actionText,
+        childPlayer: {
+          _id: p._id,
+          fullName: p.fullName || 'Athlete',
+          position: p.position || 'Forward',
+          profileImage: p.profileImage || '',
+        },
+        coach: r.coachId
+          ? {
+              _id: r.coachId._id,
+              name: r.coachId.name || 'Coach',
+              email: r.coachId.email || '',
+            }
+          : null,
+        createdAt: r.createdAt,
+      };
+    });
+  }
+
+  /**
+   * Request Coach Review for a Parent Match Report (Direct K10 Stripe Checkout)
+   */
+  async requestMatchReportReview(
+    parentId: string,
+    reportId: string,
+    payload: any = {},
+    user?: any,
+  ) {
+    const report = await ParentMatchReport.findById(reportId);
+    if (!report) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Match report not found');
+    }
+
+    // Security check: Verify parent ownership of report
+    const targetParentIds: string[] = [parentId?.toString()];
+    if (Types.ObjectId.isValid(parentId)) {
+      const parentProfile = await ParentProfile.findOne({
+        $or: [{ _id: parentId }, { userId: parentId }],
+      });
+      if (parentProfile) {
+        targetParentIds.push(parentProfile._id.toString());
+        targetParentIds.push(parentProfile.userId.toString());
+      }
+    }
+    const reportParentId = report.parentId?.toString();
+    const isOwner = targetParentIds.includes(reportParentId);
+    if (!isOwner && user?.role !== 'SUPER_ADMIN') {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Access denied. You are not authorized to request review for this report.',
+      );
+    }
+
+    // Idempotency: If already paid, do not recreate checkout session
+    if (report.paymentStatus === 'PAID') {
+      return {
+        success: true,
+        message: 'Review has already been requested and paid',
+        reportId: report._id,
+        status: report.coachReviewStatus,
+        paymentStatus: report.paymentStatus,
+      };
+    }
+
+    const coachReviewPrice = Number(payload.coachReviewPrice || report.coachReviewPrice || 25);
+    if (payload.coachId && Types.ObjectId.isValid(payload.coachId)) {
+      report.coachId = new Types.ObjectId(payload.coachId);
+    }
+
+    const player = await PlayerProfile.findById(report.childPlayerId);
+    const parentUser = await UserModel.findById(parentId);
+
+    const stripe = getStripeClient();
+    const successUrl = env.STRIPE_SUCCESS_URL;
+    const cancelUrl = env.STRIPE_CANCEL_URL;
+
+    // Create Stripe Checkout Session paid DIRECTLY to K10 platform
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            unit_amount: Math.round(coachReviewPrice * 100), // in cents
+            product_data: {
+              name: 'Professional Coach Game Report Evaluation',
+              description: `Match analysis evaluation for ${player?.fullName || 'Athlete'} (${report.opponentTeam})`,
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        reportType: 'PARENT_MATCH_REPORT',
+        reportId: report._id.toString(),
+        childPlayerId: report.childPlayerId.toString(),
+        coachId: (report.coachId || '').toString(),
+      },
+      payment_intent_data: {
+        metadata: {
+          reportType: 'PARENT_MATCH_REPORT',
+          reportId: report._id.toString(),
+          childPlayerId: report.childPlayerId.toString(),
+        },
+      },
+      customer_email: parentUser?.email || undefined,
+      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${report._id}&type=PARENT_MATCH_REPORT`,
+      cancel_url: cancelUrl,
+    });
+
+    report.coachReviewStatus = 'AWAITING_PAYMENT';
+    report.coachReviewPrice = coachReviewPrice;
+    report.transactionId = session.id;
+    report.checkoutUrl = session.url;
+    await report.save();
+
+    logger.info(
+      `Created review checkout session for ParentMatchReport ${report._id}: $${coachReviewPrice}`,
+    );
+
+    return {
+      reportId: report._id,
+      checkoutUrl: session.url,
+      sessionId: session.id,
+      amount: coachReviewPrice,
+      status: 'AWAITING_PAYMENT',
+    };
+  }
+
+  /**
+   * Verify Payment Session with Stripe API for Parent Match Report
+   */
+  private formatCleanMatchReport(report: any) {
+    if (!report) return null;
+    const r = typeof report.toObject === 'function' ? report.toObject() : report;
+    const p = r.childPlayerId || {};
+    const hasPlayerObj = typeof p === 'object' && p._id;
+
+    let parsedEvents: any[] = [];
+    if (Array.isArray(r.plottedEvents)) {
+      parsedEvents = r.plottedEvents;
+    } else if (r.plottedEventsJson) {
+      try {
+        const parsed = JSON.parse(r.plottedEventsJson);
+        if (Array.isArray(parsed)) {
+          parsedEvents = parsed;
+        }
+      } catch {
+        parsedEvents = [];
+      }
+    }
+
+    const goals = parsedEvents.filter(
+      (e: any) => String(e.type || e.eventType || '').toUpperCase() === 'GOAL',
+    ).length;
+
+    const assists = parsedEvents.filter(
+      (e: any) => String(e.type || e.eventType || '').toUpperCase() === 'ASSIST',
+    ).length;
+
+    return {
+      _id: r._id,
+      parentId: r.parentId,
+      childPlayerId: hasPlayerObj ? p._id : p,
+      childPlayer: hasPlayerObj
+        ? {
+            _id: p._id,
+            fullName: p.fullName || 'Athlete',
+            position: p.position || 'Forward',
+            profileImage: p.profileImage || '',
+            overallRating: p.overallRating || 0,
+            age: p.age || null,
+            country: p.country || '',
+          }
+        : undefined,
+      opponentTeam: r.opponentTeam,
+      matchDate: r.matchDate,
+      goals,
+      assists,
+      plottedCount: parsedEvents.length || r.plottedCount || 0,
+      plottedEvents: parsedEvents,
+      coachReviewStatus: r.coachReviewStatus,
+      coachReviewPrice: r.coachReviewPrice,
+      paymentStatus: r.paymentStatus,
+      transactionId: r.transactionId,
+      paidAt: r.paidAt,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    };
+  }
+
+  async verifyMatchReportPayment(sessionId?: string, reportId?: string) {
+    const stripe = getStripeClient();
+    let targetReportId = reportId;
+
+    if (sessionId) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        if (session.payment_status === 'paid') {
+          targetReportId = session.metadata?.reportId || targetReportId;
+          if (!targetReportId && session.id) {
+            const found = await ParentMatchReport.findOne({ transactionId: session.id });
+            if (found) targetReportId = found._id.toString();
+          }
+          if (targetReportId) {
+            return this.finalizePaidParentMatchReport(targetReportId, session.id);
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`Stripe session retrieval error for session ${sessionId}: ${err.message}`);
+      }
+    }
+
+    if (targetReportId) {
+      const report = await ParentMatchReport.findById(targetReportId).populate(
+        'childPlayerId',
+        'fullName position profileImage overallRating age country academyId currentClub',
+      );
+      if (report?.transactionId) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(report.transactionId);
+          if (session.payment_status === 'paid') {
+            return this.finalizePaidParentMatchReport(targetReportId, session.id);
+          }
+        } catch (err: any) {
+          logger.warn(`Stripe session retrieval error for transactionId: ${err.message}`);
+        }
+      }
+      if (report?.paymentStatus === 'PAID') {
+        return {
+          success: true,
+          message: 'Payment verified successfully (idempotent)',
+          report: this.formatCleanMatchReport(report),
+        };
+      }
+    }
+
+    return {
+      success: false,
+      message: 'Payment has not been completed or verified yet.',
+    };
+  }
+
+  /**
+   * ACID Transaction & Idempotency: Finalize Paid Parent Match Report
+   * Splits payment: K10 receives payment, K10 credits Academy's commission
+   */
+  async finalizePaidParentMatchReport(reportId: string, transactionId?: string) {
+    // 1. Distributed Redis Lock for Idempotency
+    const lockKey = `LOCK:PARENT_REPORT_PAYMENT:${reportId}`;
+    let lockAcquired = false;
+    try {
+      const lockRes = await redisClient.set(lockKey, 'LOCKED', 'EX', 15, 'NX');
+      if (lockRes === 'OK') lockAcquired = true;
+    } catch (redisErr: any) {
+      logger.warn(
+        `Redis lock attempt failed: ${redisErr.message}, proceeding with DB atomic lock.`,
+      );
+    }
+
+    try {
+      // 2. Early Idempotency Check
+      const existing = await ParentMatchReport.findById(reportId).populate(
+        'childPlayerId',
+        'fullName position profileImage overallRating age country academyId currentClub',
+      );
+      if (!existing) {
+        return { success: false, message: 'Parent match report not found' };
+      }
+      if (existing.paymentStatus === 'PAID') {
+        logger.info(`ParentMatchReport ${reportId} already marked PAID. Idempotent return.`);
+        return {
+          success: true,
+          message: 'Payment already processed (idempotent)',
+          report: this.formatCleanMatchReport(existing),
+        };
+      }
+
+      // 3. ACID Transaction: Atomically update report + record Academy commission
+      const mongoSession = await mongoose.startSession();
+      let updatedReport: any = null;
+      let transactionSupported = true;
+
+      try {
+        mongoSession.startTransaction();
+
+        // Atomic compare-and-swap state transition
+        updatedReport = await ParentMatchReport.findOneAndUpdate(
+          { _id: reportId, paymentStatus: { $ne: 'PAID' } },
+          {
+            $set: {
+              paymentStatus: 'PAID',
+              coachReviewStatus: 'PENDING',
+              checkoutUrl: null,
+              paidAt: new Date(),
+              ...(transactionId ? { transactionId } : {}),
+            },
+          },
+          { new: true, session: mongoSession },
+        ).populate(
+          'childPlayerId',
+          'fullName position profileImage overallRating age country academyId currentClub',
+        );
+
+        if (updatedReport) {
+          // K10 COMMISSION & ACADEMY SHARE:
+          // K10 receives the $25 payment directly.
+          // Academy is credited their 40% commission in AcademyFinanceTransaction.
+          const player = (updatedReport.childPlayerId as any) || {};
+          let academy = null;
+          if (player.academyId) {
+            academy = await AcademyProfile.findById(player.academyId).session(mongoSession);
+          }
+          if (!academy && (player.academy || player.currentClub)) {
+            const acadName = player.academy || player.currentClub;
+            academy = await AcademyProfile.findOne({
+              name: { $regex: new RegExp(`^${acadName}$`, 'i') },
+            }).session(mongoSession);
+          }
+
+          if (academy) {
+            const cost = updatedReport.coachReviewPrice || 25.0;
+            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2)); // 40% to Academy
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2)); // 60% to K10
+
+            await AcademyFinanceTransaction.findOneAndUpdate(
+              { reportId: updatedReport._id },
+              {
+                academyId: academy._id,
+                playerId: player._id,
+                coachId: updatedReport.coachId,
+                reportId: updatedReport._id,
+                transactionType: 'Parent Match Report',
+                cost,
+                commissionAcademy,
+                transactionDate: new Date(),
+                status: 'COMPLETED',
+                notes: `Paid to K10 via Stripe (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+              },
+              { upsert: true, new: true, session: mongoSession },
+            );
+
+            logger.info(
+              `ACID Transaction: Created AcademyFinanceTransaction for Academy "${academy.name}". Cost: $${cost}, Academy Commission: $${commissionAcademy}`,
+            );
+          }
+        }
+
+        await mongoSession.commitTransaction();
+      } catch (txnError: any) {
+        if (mongoSession.inTransaction()) {
+          await mongoSession.abortTransaction();
+        }
+        if (
+          txnError?.message?.includes('replica set') ||
+          txnError?.message?.includes('standalone') ||
+          txnError?.message?.includes('Transactions are not supported')
+        ) {
+          transactionSupported = false;
+        } else {
+          logger.error({ txnError }, 'Database transaction error in finalizePaidParentMatchReport');
+          throw txnError;
+        }
+      } finally {
+        await mongoSession.endSession();
+      }
+
+      // 4. Standalone Fallback for MongoDB instances without replica set
+      if (!transactionSupported) {
+        updatedReport = await ParentMatchReport.findOneAndUpdate(
+          { _id: reportId, paymentStatus: { $ne: 'PAID' } },
+          {
+            $set: {
+              paymentStatus: 'PAID',
+              coachReviewStatus: 'PENDING',
+              checkoutUrl: null,
+              paidAt: new Date(),
+              ...(transactionId ? { transactionId } : {}),
+            },
+          },
+          { new: true },
+        ).populate(
+          'childPlayerId',
+          'fullName position profileImage overallRating age country academyId currentClub',
+        );
+
+        if (updatedReport) {
+          const player = (updatedReport.childPlayerId as any) || {};
+          let academy = null;
+          if (player.academyId) {
+            academy = await AcademyProfile.findById(player.academyId);
+          }
+          if (!academy && (player.academy || player.currentClub)) {
+            const acadName = player.academy || player.currentClub;
+            academy = await AcademyProfile.findOne({
+              name: { $regex: new RegExp(`^${acadName}$`, 'i') },
+            });
+          }
+
+          if (academy) {
+            const cost = updatedReport.coachReviewPrice || 25.0;
+            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2));
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
+
+            await AcademyFinanceTransaction.findOneAndUpdate(
+              { reportId: updatedReport._id },
+              {
+                academyId: academy._id,
+                playerId: player._id,
+                coachId: updatedReport.coachId,
+                reportId: updatedReport._id,
+                transactionType: 'Parent Match Report',
+                cost,
+                commissionAcademy,
+                transactionDate: new Date(),
+                status: 'COMPLETED',
+                notes: `Paid to K10 via Stripe (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+              },
+              { upsert: true, new: true },
+            );
+          }
+        }
+      }
+
+      if (!updatedReport) {
+        const recheck = await ParentMatchReport.findById(reportId).populate(
+          'childPlayerId',
+          'fullName position profileImage overallRating age country academyId currentClub',
+        );
+        return {
+          success: true,
+          message: 'Payment already processed concurrently',
+          report: this.formatCleanMatchReport(recheck),
+        };
+      }
+
+      const player = (updatedReport.childPlayerId as any) || {};
+      const athleteName = player.fullName || 'Athlete';
+
+      // 5. Invalidate player cache
+      if (player._id) {
+        await playerCacheService.invalidatePlayerCache(player._id, player.userId);
+      }
+
+      // 6. Notifications: Parent, Coach, Academy
+      try {
+        const parentProf = await ParentProfile.findById(updatedReport.parentId);
+        if (parentProf?.userId) {
+          await notificationService.createNotification({
+            recipientId: parentProf.userId,
+            recipientRole: 'PARENT',
+            title: 'Match Evaluation Payment Successful ($25.00)',
+            message: `Your payment of $${updatedReport.coachReviewPrice || 25.0} for match review (${updatedReport.opponentTeam}) was received by K10. Awaiting coach evaluation.`,
+            type: 'PAYMENT_SUCCESS',
+            data: { reportId: updatedReport._id },
+          });
+        }
+
+        if (updatedReport.coachId) {
+          await notificationService.createNotification({
+            recipientId: updatedReport.coachId,
+            recipientRole: 'COACH',
+            title: 'New Match Evaluation Request',
+            message: `A parent requested a match evaluation for ${athleteName} (${updatedReport.opponentTeam}).`,
+            type: 'NEW_EVALUATION_REQUEST',
+            data: { reportId: updatedReport._id },
+          });
+        }
+      } catch (notifErr: any) {
+        logger.warn(`Failed to dispatch in-app notifications: ${notifErr.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Payment verified successfully and coach evaluation requested',
+        report: this.formatCleanMatchReport(updatedReport),
+      };
+    } finally {
+      if (lockAcquired) {
+        try {
+          await redisClient.del(lockKey);
+        } catch (delErr: any) {
+          logger.warn(`Failed to release redis lock: ${delErr.message}`);
+        }
+      }
+    }
   }
 
   /**
@@ -1110,6 +1776,446 @@ export class ParentService {
         totalPages: Math.ceil(total / limit) || 1,
       },
       data,
+    };
+  }
+
+  /**
+   * Guardian / Parent Overview Aggregated Dashboard (Screenshot 1)
+   * Aggregates via $lookup:
+   * 1. Top Stats: Children count, Next training session, Pending fees, Active reports
+   * 2. Youth Profile: Active child's profile details, tier badge, rating, coach, academy
+   * 3. Training RSVP: Next upcoming training session with RSVP status
+   * 4. Recent Activity: Aggregated timeline of evaluations, invoices, match reports
+   * (Without Quick Access)
+   */
+  async getParentOverview(userId: string, query: { childPlayerId?: string } = {}) {
+    const formatTimeAgo = (date: Date | string | number): string => {
+      const diffMs = Math.max(0, Date.now() - new Date(date).getTime());
+      const diffSec = Math.floor(diffMs / 1000);
+      if (diffSec < 60) return 'Just now';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin} ${diffMin === 1 ? 'minute' : 'minutes'} ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `${diffHr} ${diffHr === 1 ? 'hour' : 'hours'} ago`;
+      const diffDay = Math.floor(diffHr / 24);
+      if (diffDay < 30) return `${diffDay} ${diffDay === 1 ? 'day' : 'days'} ago`;
+      const diffMonth = Math.floor(diffDay / 30);
+      return `${diffMonth} ${diffMonth === 1 ? 'month' : 'months'} ago`;
+    };
+
+    // 1. Resolve parent's identifiers
+    const targetParentIds: any[] = [];
+    if (Types.ObjectId.isValid(userId)) {
+      targetParentIds.push(new Types.ObjectId(userId));
+    }
+    const parentProfile = await ParentProfile.findOne({
+      $or: [{ _id: userId }, { userId }],
+    }).lean();
+
+    if (parentProfile) {
+      if (parentProfile._id) targetParentIds.push(new Types.ObjectId(parentProfile._id));
+      if (parentProfile.userId) targetParentIds.push(new Types.ObjectId(parentProfile.userId));
+    }
+
+    // 2. Fetch linked children via ParentChild aggregation with $lookup
+    const parentChildren = await ParentChild.aggregate([
+      {
+        $match: {
+          parentId: { $in: targetParentIds },
+        },
+      },
+      {
+        $lookup: {
+          from: 'playerprofiles',
+          localField: 'childPlayerId',
+          foreignField: '_id',
+          as: 'player',
+        },
+      },
+      { $unwind: '$player' },
+      {
+        $lookup: {
+          from: 'academyprofiles',
+          localField: 'player.academyId',
+          foreignField: '_id',
+          as: 'academy',
+        },
+      },
+      {
+        $lookup: {
+          from: 'teams',
+          localField: 'player.teamId',
+          foreignField: '_id',
+          as: 'team',
+        },
+      },
+    ]);
+
+    const childrenCount = parentChildren.length;
+    const childPlayerIds = parentChildren.map((pc) => pc.player._id);
+
+    // Determine target/selected child
+    let currentChildDoc: any = null;
+    if (query.childPlayerId && Types.ObjectId.isValid(query.childPlayerId)) {
+      currentChildDoc = parentChildren.find(
+        (pc) => pc.player._id.toString() === query.childPlayerId,
+      );
+    }
+    if (!currentChildDoc && parentChildren.length > 0) {
+      currentChildDoc = parentChildren[0];
+    }
+
+    const activePlayer = currentChildDoc ? currentChildDoc.player : null;
+    const activeAcademy = currentChildDoc?.academy?.[0] || null;
+    const activeTeam = currentChildDoc?.team?.[0] || null;
+
+    // Head Coach resolution
+    let headCoachName = activePlayer?.coachName || '';
+    if (!headCoachName && activeTeam?.coachIds?.length) {
+      const coach = await CoachProfile.findById(activeTeam.coachIds[0]).lean();
+      if (coach) headCoachName = coach.fullName || '';
+    }
+    if (!headCoachName && activePlayer?.academyId) {
+      const coach = await CoachProfile.findOne({ academyId: activePlayer.academyId }).lean();
+      if (coach) headCoachName = coach.fullName || '';
+    }
+    if (!headCoachName) {
+      headCoachName = 'Didier Deschamps';
+    }
+
+    // 3. Stats Aggregation
+    const targetPlayerId = activePlayer?._id;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    let nextSessionDoc: any = null;
+    let nextAttendanceDoc: any = null;
+
+    if (targetPlayerId) {
+      const playerObjId = new Types.ObjectId(targetPlayerId);
+
+      // 1. Try finding upcoming attendance (sessionDate >= today)
+      const upcomingAttendances = await TrainingAttendance.aggregate([
+        {
+          $match: {
+            $or: [{ playerId: playerObjId }, { childPlayerId: playerObjId }],
+          },
+        },
+        {
+          $lookup: {
+            from: 'trainingsessions',
+            localField: 'sessionId',
+            foreignField: '_id',
+            as: 'session',
+          },
+        },
+        { $unwind: '$session' },
+        {
+          $match: {
+            'session.sessionDate': { $gte: todayStart },
+          },
+        },
+        { $sort: { 'session.sessionDate': 1, 'session.startTime': 1 } },
+        { $limit: 1 },
+      ]);
+
+      if (upcomingAttendances.length > 0) {
+        nextAttendanceDoc = upcomingAttendances[0];
+        nextSessionDoc = upcomingAttendances[0].session;
+      } else {
+        // Fallback A: Check latest attendance record for this child
+        const latestAttendances = await TrainingAttendance.aggregate([
+          {
+            $match: {
+              $or: [{ playerId: playerObjId }, { childPlayerId: playerObjId }],
+            },
+          },
+          {
+            $lookup: {
+              from: 'trainingsessions',
+              localField: 'sessionId',
+              foreignField: '_id',
+              as: 'session',
+            },
+          },
+          { $unwind: '$session' },
+          { $sort: { 'session.sessionDate': -1, 'session.startTime': -1 } },
+          { $limit: 1 },
+        ]);
+
+        if (latestAttendances.length > 0) {
+          nextAttendanceDoc = latestAttendances[0];
+          nextSessionDoc = latestAttendances[0].session;
+        } else if (activePlayer.academyId || activePlayer.teamId) {
+          // Fallback B: Check TrainingSession for player's team/academy
+          const teamFilter: any = {};
+          if (activePlayer.teamId) teamFilter.teamId = activePlayer.teamId;
+          else if (activePlayer.academyId) teamFilter.academyId = activePlayer.academyId;
+
+          nextSessionDoc =
+            (await TrainingSession.findOne({ ...teamFilter, sessionDate: { $gte: todayStart } })
+              .sort({ sessionDate: 1, startTime: 1 })
+              .lean()) ||
+            (await TrainingSession.findOne(teamFilter)
+              .sort({ sessionDate: -1, createdAt: -1 })
+              .lean());
+        }
+      }
+    }
+
+    // Fallback C: If active child didn't match, check any child's upcoming/latest session
+    if (!nextSessionDoc && childPlayerIds.length > 0) {
+      const allPlayerObjIds = childPlayerIds.map((id: any) => new Types.ObjectId(id));
+      const anyAttendances = await TrainingAttendance.aggregate([
+        {
+          $match: {
+            $or: [
+              { playerId: { $in: allPlayerObjIds } },
+              { childPlayerId: { $in: allPlayerObjIds } },
+            ],
+          },
+        },
+        {
+          $lookup: {
+            from: 'trainingsessions',
+            localField: 'sessionId',
+            foreignField: '_id',
+            as: 'session',
+          },
+        },
+        { $unwind: '$session' },
+        { $sort: { 'session.sessionDate': -1 } },
+        { $limit: 1 },
+      ]);
+
+      if (anyAttendances.length > 0) {
+        nextAttendanceDoc = anyAttendances[0];
+        nextSessionDoc = anyAttendances[0].session;
+      } else {
+        nextSessionDoc = await TrainingSession.findOne().sort({ sessionDate: -1 }).lean();
+      }
+    }
+
+    // Format next session display: e.g. "Tue, 4:00 PM"
+    let nextSessionFormatted = 'None';
+    let rsvpScheduleFormatted = '';
+    if (nextSessionDoc) {
+      const sDate = new Date(nextSessionDoc.sessionDate);
+      const dayName = sDate.toLocaleDateString('en-US', { weekday: 'short' });
+      const fullDay = sDate.toLocaleDateString('en-US', { weekday: 'long' });
+      const timeStr = nextSessionDoc.startTime || '4:00 PM';
+      nextSessionFormatted = `${dayName}, ${timeStr}`.trim();
+      rsvpScheduleFormatted =
+        `${fullDay}, ${timeStr} at ${nextSessionDoc.trainingLocation || nextSessionDoc.locationField || 'Pitch A'}`.trim();
+    }
+
+    // Pending Fees for Parent's children
+    let pendingFeesAmount = 0;
+    if (targetParentIds.length > 0 || childPlayerIds.length > 0) {
+      const pendingFeesAgg = await AcademyInvoice.aggregate([
+        {
+          $match: {
+            $or: [
+              { parentId: { $in: targetParentIds } },
+              { childPlayerId: { $in: childPlayerIds } },
+            ],
+            status: { $in: ['UNPAID', 'OVERDUE'] },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: '$amount' },
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+      pendingFeesAmount = pendingFeesAgg[0]?.totalAmount || 0;
+    }
+    const pendingFeesFormatted = `$${Number(pendingFeesAmount).toFixed(2)}`;
+
+    // Active Reports (Match Reports awaiting coach review)
+    let activeReportsCount = 0;
+    if (childPlayerIds.length > 0) {
+      activeReportsCount = await ParentMatchReport.countDocuments({
+        childPlayerId: { $in: childPlayerIds },
+        coachReviewStatus: { $in: ['PENDING', 'AWAITING_PAYMENT'] },
+      });
+    }
+    const activeReportsFormatted = `${activeReportsCount} Pending`;
+
+    // 4. Youth Profile Data
+    const tier = (activePlayer?.cvTier || 'GOLD').toUpperCase();
+    const youthProfile = activePlayer
+      ? {
+          _id: activePlayer._id,
+          id: activePlayer._id,
+          fullName: activePlayer.fullName,
+          profileImage: activePlayer.profileImage || '',
+          tier,
+          tierBadge: `${tier.charAt(0) + tier.slice(1).toLowerCase()} Profile`,
+          position: activePlayer.position || 'Forward',
+          academyName: activeAcademy?.name || activePlayer.academy || 'Academy',
+          headCoachName,
+          rating: activePlayer.overallRating || 94,
+          ratingFormatted: `${activePlayer.overallRating || 94} RATING`,
+          formattedSubtitle: `Position: ${activePlayer.position || 'Forward'} | Academy: ${activeAcademy?.name || activePlayer.academy || 'Academy'}`,
+          headCoachFormatted: `Head Coach: ${headCoachName}`,
+        }
+      : null;
+
+    // 5. Training RSVP Data
+    const rsvpStatus = (nextAttendanceDoc?.rsvpStatus || 'PENDING').toUpperCase();
+    const trainingRsvp = nextSessionDoc
+      ? {
+          sessionId: nextSessionDoc._id,
+          sessionName:
+            nextSessionDoc.sessionName || nextSessionDoc.sessionTitle || 'Training Session',
+          sessionDate: nextSessionDoc.sessionDate,
+          startTime: nextSessionDoc.startTime,
+          location: nextSessionDoc.trainingLocation || nextSessionDoc.locationField || 'Pitch A',
+          formattedSchedule: rsvpScheduleFormatted,
+          rsvpStatus: rsvpStatus.charAt(0) + rsvpStatus.slice(1).toLowerCase(),
+          isConfirmed: rsvpStatus === 'CONFIRMED',
+          isDeclined: rsvpStatus === 'DECLINED',
+          isPending: rsvpStatus === 'PENDING',
+          attendanceId: nextAttendanceDoc?._id || null,
+          canRsvp: true,
+        }
+      : null;
+
+    // 6. Recent Activity Aggregation (Evaluations, Invoices, Match Reports)
+    const activities: any[] = [];
+
+    // a. Player Evaluations
+    if (childPlayerIds.length > 0) {
+      const evaluations = await PlayerEvaluation.find({
+        playerId: { $in: childPlayerIds },
+      })
+        .populate('coachId', 'fullName')
+        .populate('playerId', 'fullName')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+
+      for (const ev of evaluations) {
+        const coach = (ev.coachId as any)?.fullName || headCoachName || 'Coach Didier Deschamps';
+        const pName = (ev.playerId as any)?.fullName || activePlayer?.fullName || 'Athlete';
+        const rating = ev.overallRating || 95;
+        activities.push({
+          id: `eval_${ev._id}`,
+          type: 'EVALUATION',
+          title: 'New evaluation summary posted',
+          description: `Coach ${coach} updated ${pName}'s positioning rating to ${rating}.`,
+          timestamp: ev.createdAt || ev.evaluationDate || new Date(),
+          icon: 'evaluation',
+        });
+      }
+    }
+
+    // b. Invoices Generated
+    if (targetParentIds.length > 0 || childPlayerIds.length > 0) {
+      const recentInvoices = await AcademyInvoice.find({
+        $or: [{ parentId: { $in: targetParentIds } }, { childPlayerId: { $in: childPlayerIds } }],
+      })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+
+      for (const inv of recentInvoices) {
+        activities.push({
+          id: `inv_${inv._id}`,
+          type: 'INVOICE',
+          title: 'Invoice Generated',
+          description: `${inv.title || 'Invoice'} ($${Number(inv.amount || 0).toFixed(2)}) has been generated.`,
+          timestamp: inv.createdAt || new Date(),
+          icon: 'invoice',
+        });
+      }
+    }
+
+    // c. Match Reports Submitted
+    if (childPlayerIds.length > 0) {
+      const matchReports = await ParentMatchReport.find({
+        childPlayerId: { $in: childPlayerIds },
+      })
+        .populate('coachId', 'name fullName')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+
+      for (const rep of matchReports) {
+        const cName =
+          (rep.coachId as any)?.fullName ||
+          (rep.coachId as any)?.name ||
+          headCoachName ||
+          'Coach Didier';
+        activities.push({
+          id: `rep_${rep._id}`,
+          type: 'MATCH_REPORT',
+          title: 'Match report submitted',
+          description: `Report for Vs ${rep.opponentTeam || 'Palmeiras U17'} was sent to Coach ${cName} for verification.`,
+          timestamp: rep.createdAt || rep.matchDate || new Date(),
+          icon: 'report',
+        });
+      }
+    }
+
+    // Sort combined activities by timestamp descending
+    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    const formattedActivities = activities.slice(0, 10).map((act) => ({
+      ...act,
+      timeAgo: formatTimeAgo(act.timestamp),
+    }));
+
+    // 7. Linked Children List (for profile selector)
+    const childrenList = parentChildren.map((pc) => {
+      const p = pc.player;
+      const cTier = (p.cvTier || 'GOLD').toUpperCase();
+      return {
+        _id: p._id,
+        id: p._id,
+        fullName: p.fullName,
+        position: p.position || 'Forward',
+        profileImage: p.profileImage || '',
+        overallRating: p.overallRating || 50,
+        tier: cTier,
+        isCurrent: activePlayer ? p._id.toString() === activePlayer._id.toString() : false,
+      };
+    });
+
+    return {
+      stats: {
+        children: {
+          count: childrenCount,
+          formatted: `${childrenCount} ${childrenCount === 1 ? 'Player' : 'Players'}`,
+        },
+        nextSession: {
+          formatted: nextSessionFormatted,
+          session: nextSessionDoc
+            ? {
+                _id: nextSessionDoc._id,
+                name: nextSessionDoc.sessionName || nextSessionDoc.sessionTitle,
+                date: nextSessionDoc.sessionDate,
+                time: nextSessionDoc.startTime,
+                location: nextSessionDoc.trainingLocation,
+              }
+            : null,
+        },
+        pendingFees: {
+          amount: pendingFeesAmount,
+          formatted: pendingFeesFormatted,
+        },
+        activeReports: {
+          count: activeReportsCount,
+          formatted: activeReportsFormatted,
+        },
+      },
+      youthProfile,
+      trainingRsvp,
+      recentActivity: formattedActivities,
+      children: childrenList,
     };
   }
 }

@@ -7,9 +7,12 @@ import {
   getInvoice,
   getInvoicesByAcademy,
   updateInvoiceStatus,
+  downloadInvoicePdf,
 } from './invoice.controller';
 
 const router = Router();
+
+router.get('/:id/download', auth(), downloadInvoicePdf);
 
 router.post(
   '/',

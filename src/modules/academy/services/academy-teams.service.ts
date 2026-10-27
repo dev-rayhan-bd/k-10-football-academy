@@ -105,6 +105,8 @@ export class AcademyTeamsService {
       academy.currentPlan,
     );
 
+    const members = await this.getAvailableMembers(academyIdentifier);
+
     return {
       summary: {
         totalTeams,
@@ -127,6 +129,8 @@ export class AcademyTeamsService {
       },
       plan: featureAccess,
       teams: formattedTeams,
+      coaches: members.coaches,
+      players: members.players,
     };
   }
 
@@ -203,6 +207,238 @@ export class AcademyTeamsService {
     });
 
     return { coaches, players };
+  }
+
+  async getAcademyPlayers(academyIdentifier: string, query: any = {}) {
+    const academy = await academyResolverService.resolveAcademyProfile(academyIdentifier);
+
+    const page = Math.max(1, Number(query?.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query?.limit) || 10));
+    const search = query?.search ? String(query.search).trim().toLowerCase() : '';
+    const teamIdFilter = query?.teamId ? String(query.teamId) : '';
+    const positionFilter = query?.position ? String(query.position).trim().toLowerCase() : '';
+    const cvTierFilter = query?.cvTier ? String(query.cvTier).trim().toUpperCase() : '';
+
+    const allTeams = await Team.find({ academyId: academy._id }).select(
+      'teamName ageGroup playerIds',
+    );
+
+    const baseFilter: any = {
+      $or: [{ academyId: academy._id }, { academy: academy.name }],
+    };
+    if (cvTierFilter && cvTierFilter !== 'ALL') {
+      baseFilter.cvTier = cvTierFilter;
+    }
+
+    const rawPlayers = await PlayerProfile.find(baseFilter)
+      .populate('userId', 'name email avatar phone')
+      .populate('teamId', 'teamName ageGroup')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    let players = rawPlayers.map((player: any) => {
+      const assignedTeam = allTeams.find(
+        (t) =>
+          (player.teamId && player.teamId._id
+            ? player.teamId._id.toString() === t._id.toString()
+            : player.teamId?.toString() === t._id.toString()) ||
+          (t.playerIds && t.playerIds.some((id: any) => id.toString() === player._id.toString())),
+      );
+
+      const userObj = player.userId && typeof player.userId === 'object' ? player.userId : {};
+      return {
+        _id: player._id,
+        id: player._id,
+        fullName: player.fullName || userObj?.name || 'Player',
+        position: player.position || 'Forward',
+        age: player.age || 18,
+        dateOfBirth: player.dateOfBirth,
+        overallRating: player.overallRating || 75,
+        profileImage: player.profileImage || player.avatar || userObj?.avatar || '',
+        cvTier: player.cvTier || 'GOLD',
+        email: userObj?.email || player.email || '',
+        phone: userObj?.phone || player.phone || '',
+        jerseyNumber: player.jerseyNumber,
+        assignedTeamId: assignedTeam
+          ? assignedTeam._id
+          : player.teamId?._id || player.teamId || null,
+        assignedTeamName: assignedTeam ? assignedTeam.teamName : player.teamId?.teamName || null,
+        assignedTeamAgeGroup: assignedTeam
+          ? assignedTeam.ageGroup
+          : player.teamId?.ageGroup || null,
+        status: player.status || 'ACTIVE',
+        createdAt: player.createdAt,
+      };
+    });
+
+    if (search) {
+      players = players.filter(
+        (p: any) =>
+          p.fullName.toLowerCase().includes(search) ||
+          p.position.toLowerCase().includes(search) ||
+          (p.assignedTeamName && p.assignedTeamName.toLowerCase().includes(search)) ||
+          p.email.toLowerCase().includes(search),
+      );
+    }
+
+    if (teamIdFilter) {
+      players = players.filter(
+        (p: any) => p.assignedTeamId && p.assignedTeamId.toString() === teamIdFilter,
+      );
+    }
+
+    if (positionFilter && positionFilter !== 'all') {
+      players = players.filter((p: any) => p.position.toLowerCase() === positionFilter);
+    }
+
+    const total = players.length;
+    const totalPage = Math.ceil(total / limit) || 1;
+    const startIndex = (page - 1) * limit;
+    const paginatedPlayers = players.slice(startIndex, startIndex + limit);
+
+    return {
+      meta: {
+        page,
+        limit,
+        total,
+        totalPage,
+      },
+      academy: {
+        id: academy._id,
+        name: academy.name,
+        logo: academy.logo,
+      },
+      players: paginatedPlayers,
+    };
+  }
+
+  async getAcademyPlayerById(academyIdentifier: string, playerId: string) {
+    const academy = await academyResolverService.resolveAcademyProfile(academyIdentifier);
+
+    if (!Types.ObjectId.isValid(playerId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
+    }
+
+    const player = await PlayerProfile.findOne({
+      _id: playerId,
+      $or: [{ academyId: academy._id }, { academy: academy.name }],
+    })
+      .populate('userId', 'name email avatar phone country')
+      .populate('teamId', 'teamName ageGroup coachIds playerIds')
+      .lean();
+
+    if (!player) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Player not found in this academy');
+    }
+
+    const assignedTeam = await Team.findOne({
+      academyId: academy._id,
+      playerIds: player._id,
+    }).select('teamName ageGroup coachIds');
+
+    return {
+      ...player,
+      assignedTeamId: assignedTeam ? assignedTeam._id : (player.teamId as any)?._id || null,
+      assignedTeamName: assignedTeam
+        ? assignedTeam.teamName
+        : (player.teamId as any)?.teamName || null,
+      assignedTeamAgeGroup: assignedTeam
+        ? assignedTeam.ageGroup
+        : (player.teamId as any)?.ageGroup || null,
+    };
+  }
+
+  async updateAcademyPlayer(academyIdentifier: string, playerId: string, payload: any) {
+    const academy = await academyResolverService.resolveAcademyProfile(academyIdentifier);
+
+    if (!Types.ObjectId.isValid(playerId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
+    }
+
+    const player = await PlayerProfile.findOne({
+      _id: playerId,
+      $or: [{ academyId: academy._id }, { academy: academy.name }],
+    });
+
+    if (!player) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Player not found in this academy');
+    }
+
+    if (payload.position) player.position = payload.position;
+    if (payload.jerseyNumber !== undefined) player.jerseyNumber = payload.jerseyNumber;
+    if (payload.cvTier) player.cvTier = payload.cvTier;
+    if (payload.overallRating !== undefined) player.overallRating = payload.overallRating;
+
+    // Team Assignment
+    if (payload.teamId !== undefined) {
+      await Team.updateMany(
+        { academyId: academy._id, playerIds: player._id },
+        { $pull: { playerIds: player._id } },
+      );
+
+      if (payload.teamId && Types.ObjectId.isValid(payload.teamId)) {
+        const targetTeam = await Team.findOne({ _id: payload.teamId, academyId: academy._id });
+        if (!targetTeam) {
+          throw new AppError(StatusCodes.NOT_FOUND, 'Target team not found in this academy');
+        }
+        await Team.findByIdAndUpdate(payload.teamId, {
+          $addToSet: { playerIds: player._id },
+        });
+        player.teamId = targetTeam._id as any;
+      } else {
+        player.teamId = undefined;
+      }
+    }
+
+    await player.save();
+
+    // Recalculate members count for affected teams
+    const allTeams = await Team.find({ academyId: academy._id });
+    for (const t of allTeams) {
+      t.playersCount = (t.playerIds || []).length;
+      t.coachesCount = (t.coachIds || []).length;
+      t.totalMembers = t.playersCount + t.coachesCount;
+      await t.save();
+    }
+
+    return await this.getAcademyPlayerById(academyIdentifier, playerId);
+  }
+
+  async removePlayerFromAcademy(academyIdentifier: string, playerId: string) {
+    const academy = await academyResolverService.resolveAcademyProfile(academyIdentifier);
+
+    if (!Types.ObjectId.isValid(playerId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
+    }
+
+    const player = await PlayerProfile.findOne({
+      _id: playerId,
+      $or: [{ academyId: academy._id }, { academy: academy.name }],
+    });
+
+    if (!player) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Player not found in this academy');
+    }
+
+    player.academyId = undefined;
+    player.academy = undefined;
+    player.teamId = undefined;
+    await player.save();
+
+    await Team.updateMany(
+      { academyId: academy._id, playerIds: player._id },
+      { $pull: { playerIds: player._id } },
+    );
+
+    const allTeams = await Team.find({ academyId: academy._id });
+    for (const t of allTeams) {
+      t.playersCount = (t.playerIds || []).length;
+      t.coachesCount = (t.coachIds || []).length;
+      t.totalMembers = t.playersCount + t.coachesCount;
+      await t.save();
+    }
+
+    return { message: 'Player removed from academy successfully' };
   }
 
   async createTeam(

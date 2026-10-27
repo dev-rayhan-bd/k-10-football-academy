@@ -10,6 +10,9 @@ import { academyCoachesService } from './services/academy-coaches.service';
 import { academyParentsService } from './services/academy-parents.service';
 import { academyMatchesService } from './services/academy-matches.service';
 import { academyEventsService } from './services/academy-events.service';
+import { academyTournamentRegistrationService } from './services/academy-tournament-registration.service';
+import { academyTournamentEngineService } from './services/academy-tournament-engine.service';
+import { academyTournamentSimulationService } from './services/academy-tournament-simulation.service';
 import { academyMediaService } from './services/academy-media.service';
 import { academyCvValidationService } from './services/academy-cv-validation.service';
 import { academyDashboardService } from './services/academy-dashboard.service';
@@ -174,6 +177,22 @@ export class AcademyService {
     return await academyTeamsService.getAvailableMembers(academyIdentifier);
   }
 
+  async getAcademyPlayers(academyIdentifier: string, query?: any) {
+    return await academyTeamsService.getAcademyPlayers(academyIdentifier, query);
+  }
+
+  async getAcademyPlayerById(academyIdentifier: string, playerId: string) {
+    return await academyTeamsService.getAcademyPlayerById(academyIdentifier, playerId);
+  }
+
+  async updateAcademyPlayer(academyIdentifier: string, playerId: string, payload: any) {
+    return await academyTeamsService.updateAcademyPlayer(academyIdentifier, playerId, payload);
+  }
+
+  async removePlayerFromAcademy(academyIdentifier: string, playerId: string) {
+    return await academyTeamsService.removePlayerFromAcademy(academyIdentifier, playerId);
+  }
+
   async createTeam(
     academyIdentifier: string,
     payload: Partial<ITeam> & { coachIds?: string[]; playerIds?: string[] },
@@ -310,8 +329,16 @@ export class AcademyService {
     return await academyCoachesService.requestCoachAffiliation(coachUserId, payload);
   }
 
-  async getAcademyCoaches(academyIdentifier: string, status?: string) {
-    return await academyCoachesService.getAcademyCoaches(academyIdentifier, status);
+  async getAcademyCoaches(academyIdentifier: string, query?: any) {
+    return await academyCoachesService.getAcademyCoaches(academyIdentifier, query);
+  }
+
+  async getAcademyCoachById(academyIdentifier: string, coachId: string) {
+    return await academyCoachesService.getAcademyCoachById(academyIdentifier, coachId);
+  }
+
+  async updateAcademyCoach(academyIdentifier: string, coachId: string, payload: any) {
+    return await academyCoachesService.updateAcademyCoach(academyIdentifier, coachId, payload);
   }
 
   async getCoachAffiliations(coachUserId: string) {
@@ -483,6 +510,129 @@ export class AcademyService {
       id,
       user,
       participantData,
+      academyIdentifier,
+    );
+  }
+
+  // --- AcademyTournament Delegates ---
+
+  async registerTournamentClub(eventId: string, payload: any, originUrl?: string) {
+    return await academyTournamentRegistrationService.registerClub(eventId, payload, originUrl);
+  }
+
+  async handleTournamentRegistrationStripeWebhook(sessionObject: any) {
+    return await academyTournamentRegistrationService.handleTournamentRegistrationStripeWebhook(
+      sessionObject,
+    );
+  }
+
+  async verifyClubRegistrationPayment(eventId: string, sessionId: string) {
+    return await academyTournamentRegistrationService.verifyClubRegistrationPayment(
+      eventId,
+      sessionId,
+    );
+  }
+
+  async getTournamentRegisteredClubs(eventId: string) {
+    return await academyTournamentRegistrationService.getRegisteredClubs(eventId);
+  }
+
+  async getTournamentBadgePresets(eventId: string) {
+    return await academyTournamentRegistrationService.getTournamentBadgePresets(eventId);
+  }
+
+  async getTournamentClubRoster(eventId: string, clubId: string) {
+    return await academyTournamentRegistrationService.getClubRoster(eventId, clubId);
+  }
+
+  async allocateTournamentGroups(
+    eventId: string,
+    allocations: any[],
+    user: any,
+    academyIdentifier?: string,
+  ) {
+    return await academyTournamentEngineService.allocateGroups(
+      eventId,
+      allocations,
+      user,
+      academyIdentifier,
+    );
+  }
+
+  async startTournamentAndGenerateFixtures(eventId: string, user: any, academyIdentifier?: string) {
+    return await academyTournamentEngineService.startTournamentAndGenerateFixtures(
+      eventId,
+      user,
+      academyIdentifier,
+    );
+  }
+
+  async updateTournamentFixture(
+    eventId: string,
+    matchId: string,
+    payload: any,
+    user: any,
+    academyIdentifier?: string,
+  ) {
+    return await academyTournamentEngineService.updateTournamentFixture(
+      eventId,
+      matchId,
+      payload,
+      user,
+      academyIdentifier,
+    );
+  }
+
+  async recordMatchResult(eventId: string, payload: any, user: any, academyIdentifier?: string) {
+    return await academyTournamentEngineService.recordMatchResult(
+      eventId,
+      payload,
+      user,
+      academyIdentifier,
+    );
+  }
+
+  async getTournamentFixtures(eventId: string, query?: any) {
+    return await academyTournamentEngineService.getTournamentFixtures(eventId, query);
+  }
+
+  async getAllocatedGroups(eventId: string, user: any, academyIdentifier?: string) {
+    return await academyTournamentEngineService.getAllocatedGroups(
+      eventId,
+      user,
+      academyIdentifier,
+    );
+  }
+
+  async getTournamentArena(
+    eventId: string,
+    options?: { tab?: string; group?: string; stage?: string },
+  ) {
+    return await academyTournamentEngineService.getTournamentArena(eventId, options);
+  }
+
+  async getTournamentPublicPortal(eventId: string) {
+    return await academyTournamentEngineService.getPublicPortalData(eventId);
+  }
+
+  async resetTournamentFlow(eventId: string, user: any, academyIdentifier?: string) {
+    return await academyTournamentEngineService.resetTournamentFlow(
+      eventId,
+      user,
+      academyIdentifier,
+    );
+  }
+
+  async simulateTournamentStage(
+    eventId: string,
+    payload?: any,
+    user?: any,
+    academyIdentifier?: string,
+  ) {
+    return await academyTournamentSimulationService.simulateStage(
+      eventId,
+      payload,
+      user,
       academyIdentifier,
     );
   }

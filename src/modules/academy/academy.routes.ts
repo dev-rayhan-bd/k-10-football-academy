@@ -25,6 +25,11 @@ import {
   createExtraEventZodSchema,
   updateExtraEventZodSchema,
   registerExtraEventParticipantZodSchema,
+  registerTournamentClubZodSchema,
+  allocateTournamentGroupsZodSchema,
+  simulateTournamentStageZodSchema,
+  updateTournamentFixtureZodSchema,
+  recordMatchResultZodSchema,
   createAcademySponsorZodSchema,
   updateAcademySponsorZodSchema,
   createAcademyNewsZodSchema,
@@ -69,9 +74,15 @@ import {
   inviteCoach,
   requestCoachAffiliation,
   getAcademyCoaches,
+  getAcademyCoachById,
+  updateAcademyCoach,
   getCoachAffiliations,
   respondToCoachAffiliation,
   removeCoachAffiliation,
+  getAcademyPlayers,
+  getAcademyPlayerById,
+  updateAcademyPlayer,
+  removePlayerFromAcademy,
   getTransferRequestsDashboard,
   getTargetAcademiesForTransfer,
   getMyAcademyPlayersForTransfer,
@@ -108,6 +119,21 @@ import {
   updateExtraEvent,
   deleteExtraEvent,
   registerForExtraEvent,
+  registerTournamentClub,
+  verifyClubRegistrationPayment,
+  getTournamentRegisteredClubs,
+  getTournamentBadgePresets,
+  getTournamentClubRoster,
+  allocateTournamentGroups,
+  getAllocatedGroups,
+  startTournamentAndGenerateFixtures,
+  updateTournamentFixture,
+  recordMatchResult,
+  getTournamentFixtures,
+  getTournamentArena,
+  getTournamentPublicPortal,
+  resetTournamentFlow,
+  simulateTournamentStage,
   getSponsorsMeta,
   getSponsors,
   getSponsorById,
@@ -254,6 +280,71 @@ router.post(
 );
 
 // ==========================================
+// TRAINING SESSIONS (ACADEMY DASHBOARD)
+// ==========================================
+router.get(
+  '/training-sessions/form-meta',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getTrainingFormMeta,
+);
+router.get('/training-sessions/teams', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getTeamsDropdown);
+router.get(
+  '/training-sessions/coaches',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getCoachesDropdown,
+);
+router.get(
+  '/training-sessions',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
+  getTrainingSessions,
+);
+router.post(
+  '/training-sessions',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(createTrainingSessionZodSchema),
+  createTrainingSession,
+);
+router.get(
+  '/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  getSessionAttendance,
+);
+router.put(
+  '/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(saveAttendanceZodSchema),
+  saveAttendance,
+);
+router.post(
+  '/training-sessions/:sessionId/attendance',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(saveAttendanceZodSchema),
+  saveAttendance,
+);
+router.get(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
+  getTrainingSessionById,
+);
+router.patch(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(updateTrainingSessionZodSchema),
+  updateTrainingSession,
+);
+router.put(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  validateRequest(updateTrainingSessionZodSchema),
+  updateTrainingSession,
+);
+router.delete(
+  '/training-sessions/:sessionId',
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
+  deleteTrainingSession,
+);
+
+// ==========================================
 // ACADEMY COACH AFFILIATION & APPROVAL FLOW
 // ==========================================
 router.post(
@@ -271,13 +362,28 @@ router.post(
 router.get('/coaches/my-affiliations', auth('COACH', 'SUPER_ADMIN'), getCoachAffiliations);
 router.get('/coaches', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyCoaches);
 router.get('/:academyId/coaches', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyCoaches);
+router.get('/coaches/:coachId', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyCoachById);
 router.patch(
   '/coaches/:affiliationId/respond',
   auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
   validateRequest(respondAffiliationZodSchema),
   respondToCoachAffiliation,
 );
+router.patch('/coaches/:coachId', auth('ACADEMY', 'SUPER_ADMIN'), updateAcademyCoach);
 router.delete('/coaches/:affiliationId', auth('ACADEMY', 'SUPER_ADMIN'), removeCoachAffiliation);
+
+// ==========================================
+// ACADEMY PLAYERS MANAGEMENT (TABLE VIEW, DETAILS, EDIT, REMOVE)
+// ==========================================
+router.get('/players', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyPlayers);
+router.get('/:academyId/players', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyPlayers);
+router.get(
+  '/players/:playerId',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'ADMIN'),
+  getAcademyPlayerById,
+);
+router.patch('/players/:playerId', auth('ACADEMY', 'SUPER_ADMIN'), updateAcademyPlayer);
+router.delete('/players/:playerId', auth('ACADEMY', 'SUPER_ADMIN'), removePlayerFromAcademy);
 
 // ==========================================
 // COACH AND PLAYERS DASHBOARD & TEAM ROSTER
@@ -550,71 +656,8 @@ router.delete(
 );
 
 // ==========================================
-// TRAINING SESSIONS (ACADEMY DASHBOARD)
+// TRAINING SESSIONS (ROUTE ALIASES WITH :academyId)
 // ==========================================
-router.get(
-  '/training-sessions/form-meta',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  getTrainingFormMeta,
-);
-router.get('/training-sessions/teams', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getTeamsDropdown);
-router.get(
-  '/training-sessions/coaches',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  getCoachesDropdown,
-);
-router.get(
-  '/training-sessions',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
-  getTrainingSessions,
-);
-router.post(
-  '/training-sessions',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  validateRequest(createTrainingSessionZodSchema),
-  createTrainingSession,
-);
-router.get(
-  '/training-sessions/:sessionId/attendance',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  getSessionAttendance,
-);
-router.put(
-  '/training-sessions/:sessionId/attendance',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  validateRequest(saveAttendanceZodSchema),
-  saveAttendance,
-);
-router.post(
-  '/training-sessions/:sessionId/attendance',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  validateRequest(saveAttendanceZodSchema),
-  saveAttendance,
-);
-router.get(
-  '/training-sessions/:sessionId',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),
-  getTrainingSessionById,
-);
-router.patch(
-  '/training-sessions/:sessionId',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  validateRequest(updateTrainingSessionZodSchema),
-  updateTrainingSession,
-);
-router.put(
-  '/training-sessions/:sessionId',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  validateRequest(updateTrainingSessionZodSchema),
-  updateTrainingSession,
-);
-router.delete(
-  '/training-sessions/:sessionId',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  deleteTrainingSession,
-);
-
-// Route aliases with :academyId in path
 router.get(
   '/:academyId/training-sessions/form-meta',
   auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
@@ -856,6 +899,154 @@ router.post(
   optionalAuth(),
   validateRequest(registerExtraEventParticipantZodSchema),
   registerForExtraEvent,
+);
+
+// ==========================================
+// TOURNAMENT ARENA, CLUBS & SIMULATION ROUTES (SCREENSHOTS)
+// ==========================================
+router.post(
+  '/extra-events/:id/register-club',
+  optionalAuth(),
+  upload.any() as any,
+  validateRequest(registerTournamentClubZodSchema),
+  registerTournamentClub,
+);
+router.post(
+  '/:academyId/extra-events/:id/register-club',
+  optionalAuth(),
+  upload.any() as any,
+  validateRequest(registerTournamentClubZodSchema),
+  registerTournamentClub,
+);
+
+router.post(
+  '/extra-events/:id/verify-registration-payment',
+  optionalAuth(),
+  verifyClubRegistrationPayment,
+);
+router.post(
+  '/:academyId/extra-events/:id/verify-registration-payment',
+  optionalAuth(),
+  verifyClubRegistrationPayment,
+);
+
+router.get(
+  '/extra-events/:id/registered-clubs',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getTournamentRegisteredClubs,
+);
+router.get(
+  '/:academyId/extra-events/:id/registered-clubs',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getTournamentRegisteredClubs,
+);
+
+router.get('/extra-events/:id/badge-presets', optionalAuth(), getTournamentBadgePresets);
+router.get('/:academyId/extra-events/:id/badge-presets', optionalAuth(), getTournamentBadgePresets);
+
+router.get(
+  '/extra-events/:id/registered-clubs/:clubId/roster',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getTournamentClubRoster,
+);
+router.get(
+  '/:academyId/extra-events/:id/registered-clubs/:clubId/roster',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getTournamentClubRoster,
+);
+
+router.get(
+  '/extra-events/:id/allocate-groups',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAllocatedGroups,
+);
+router.get(
+  '/:academyId/extra-events/:id/allocate-groups',
+  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  getAllocatedGroups,
+);
+
+router.patch(
+  '/extra-events/:id/allocate-groups',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(allocateTournamentGroupsZodSchema),
+  allocateTournamentGroups,
+);
+router.patch(
+  '/:academyId/extra-events/:id/allocate-groups',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(allocateTournamentGroupsZodSchema),
+  allocateTournamentGroups,
+);
+
+router.post(
+  '/extra-events/:id/start-tournament',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  startTournamentAndGenerateFixtures,
+);
+router.post(
+  '/:academyId/extra-events/:id/start-tournament',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  startTournamentAndGenerateFixtures,
+);
+
+router.patch(
+  '/extra-events/:id/fixtures/:matchId',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateTournamentFixtureZodSchema),
+  updateTournamentFixture,
+);
+router.patch(
+  '/:academyId/extra-events/:id/fixtures/:matchId',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(updateTournamentFixtureZodSchema),
+  updateTournamentFixture,
+);
+
+router.post(
+  '/extra-events/:id/record-match-result',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(recordMatchResultZodSchema),
+  recordMatchResult,
+);
+router.post(
+  '/:academyId/extra-events/:id/record-match-result',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(recordMatchResultZodSchema),
+  recordMatchResult,
+);
+
+router.get('/extra-events/:id/fixtures', optionalAuth(), getTournamentFixtures);
+router.get('/:academyId/extra-events/:id/fixtures', optionalAuth(), getTournamentFixtures);
+
+router.get('/extra-events/:id/arena', optionalAuth(), getTournamentArena);
+router.get('/:academyId/extra-events/:id/arena', optionalAuth(), getTournamentArena);
+
+router.get('/extra-events/:id/public-portal', getTournamentPublicPortal);
+router.get('/:academyId/extra-events/:id/public-portal', getTournamentPublicPortal);
+
+router.post(
+  '/extra-events/:id/reset-tournament',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  resetTournamentFlow,
+);
+router.post(
+  '/:academyId/extra-events/:id/reset-tournament',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  resetTournamentFlow,
+);
+
+router.post(
+  '/extra-events/:id/simulate-stage',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(simulateTournamentStageZodSchema),
+  simulateTournamentStage,
+);
+router.post(
+  '/:academyId/extra-events/:id/simulate-stage',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  validateRequest(simulateTournamentStageZodSchema),
+  simulateTournamentStage,
 );
 
 // ==========================================

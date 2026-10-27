@@ -272,9 +272,12 @@ export interface IAcademyMatch {
 export interface IAcademyMatchDocument extends IAcademyMatch, Document {}
 
 // ==========================================
-// EXTRA EVENTS INTERFACES (SCREENSHOTS)
+// EXTRA EVENTS & TOURNAMENT INTERFACES (SCREENSHOTS)
 // ==========================================
 export type ExtraEventStatus = 'OPEN' | 'CLOSING SOON' | 'CLOSED';
+export type TournamentStatus = 'REGISTRATION' | 'LIVE GAME' | 'COMPLETED';
+export type TournamentSimulationStep =
+  'NOT_STARTED' | 'GROUP_STAGE' | 'SEMIFINALS' | 'GRAND_FINAL' | 'COMPLETED';
 
 export interface IExtraEventParticipant {
   _id?: Types.ObjectId;
@@ -288,13 +291,134 @@ export interface IExtraEventParticipant {
   paymentStatus?: 'PAID' | 'PENDING' | 'FREE';
 }
 
+export interface ITournamentClubRosterPlayer {
+  _id?: Types.ObjectId;
+  fullName: string;
+  dateOfBirth?: string;
+  shirtNo?: number;
+}
+
+export interface ITournamentBadgePresetItem {
+  id: string;
+  name: string;
+  color: string;
+  iconUrl: string;
+  isTaken?: boolean;
+}
+
+export interface ITournamentRegisteredClub {
+  _id?: Types.ObjectId;
+  clubId?: string;
+  clubName: string;
+  name?: string;
+  category: string;
+  badgePreset?: string;
+  badgeName?: string;
+  logoUrl?: string;
+  coachName: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  contactEmail: string;
+  paymentStatus: 'PAID' | 'PENDING';
+  paidAmount: number;
+  stripeSessionId?: string;
+  stripePaymentIntentId?: string;
+  allocatedGroup?: 'GROUP A' | 'GROUP B';
+  roster: ITournamentClubRosterPlayer[];
+  registeredAt: Date;
+}
+
+export interface ITournamentFixture {
+  _id?: Types.ObjectId;
+  matchId: string;
+  matchNo: number;
+  stage: 'GROUP_STAGE' | 'SEMIFINAL' | 'GRAND_FINAL';
+  group?: 'GROUP A' | 'GROUP B';
+  homeTeam: {
+    clubId?: string;
+    _id?: string;
+    name: string;
+    clubName?: string;
+    logoUrl?: string;
+    score?: number;
+  };
+  awayTeam: {
+    clubId?: string;
+    _id?: string;
+    name: string;
+    clubName?: string;
+    logoUrl?: string;
+    score?: number;
+  };
+  pitch?: string;
+  kickoffTime?: string;
+  matchDate?: string;
+  status: 'SCHEDULED' | 'LIVE' | 'COMPLETED';
+  isLiveMatch: boolean;
+  winner?: string;
+}
+
+export interface ITournamentStanding {
+  _id?: Types.ObjectId;
+  clubId?: string;
+  teamId?: string;
+  group: 'GROUP A' | 'GROUP B';
+  teamName: string;
+  clubName?: string;
+  name?: string;
+  logoUrl?: string;
+  p: number; // Played
+  w: number; // Won
+  d: number; // Drawn
+  l: number; // Lost
+  gf: number; // Goals For
+  ga: number; // Goals Against
+  gd: number; // Goal Difference
+  pts: number; // Points
+  rank?: number;
+  isQualified: boolean;
+}
+
+export interface ITournamentBracketMatch {
+  matchId: string;
+  label: string;
+  dayLabel?: string;
+  homeTeamPlaceholder: string;
+  awayTeamPlaceholder: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeScore?: number;
+  awayScore?: number;
+  winner?: string;
+  status: 'PENDING' | 'LIVE' | 'COMPLETED';
+}
+
+export interface ITournamentBracket {
+  semifinals: ITournamentBracketMatch[];
+  grandFinal: ITournamentBracketMatch;
+  champion?: string;
+  runnerUp?: string;
+}
+
+export const TARGET_ATTENDEES_ENUM = [
+  'Academy Players Only',
+  'Grassroot Players Only',
+  'All Members & Families',
+  'Coaches & Staff Only',
+  'Parents & Guardians Only',
+  'Public Event (Open to all)',
+  'Mixed / Co-Ed',
+] as const;
+
+export type TargetAttendeeType = (typeof TARGET_ATTENDEES_ENUM)[number];
+
 export interface IExtraEvent {
   academyId: Types.ObjectId;
   eventName: string;
   eventType: string;
   group: string;
   ageGroup: string;
-  targetAttendees: string;
+  targetAttendees: TargetAttendeeType;
   eventDate: Date;
   eventEndDate?: Date;
   formattedDateRange?: string;
@@ -303,6 +427,8 @@ export interface IExtraEvent {
   registrationDeadline: Date;
   venueName: string;
   venueAddress: string;
+  latitude?: number;
+  longitude?: number;
   registrationFee: number;
   currency?: string;
   maxCapacity?: number;
@@ -315,6 +441,13 @@ export interface IExtraEvent {
   bannerImage?: string;
   status: ExtraEventStatus;
   participants?: IExtraEventParticipant[];
+  tournamentStatus?: TournamentStatus;
+  isLiveMode?: boolean;
+  simulationStep?: TournamentSimulationStep;
+  registeredClubs?: ITournamentRegisteredClub[];
+  fixtures?: ITournamentFixture[];
+  standings?: ITournamentStanding[];
+  bracket?: ITournamentBracket;
   createdAt?: Date;
   updatedAt?: Date;
 }

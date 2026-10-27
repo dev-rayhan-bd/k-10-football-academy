@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TARGET_ATTENDEES_ENUM } from './academy.interface';
 
 export const createAcademyProfileZodSchema = z.object({
   body: z.object({
@@ -334,9 +335,10 @@ export const createExtraEventZodSchema = z.object({
       eventType: z.string({ required_error: 'Event type is required' }).min(2),
       group: z.string({ required_error: 'Group is required' }).min(2),
       ageGroup: z.string({ required_error: 'Age group is required' }).min(1),
-      targetAttendees: z
-        .string({ required_error: 'Target attendees / player type is required' })
-        .min(2),
+      targetAttendees: z.enum(TARGET_ATTENDEES_ENUM, {
+        required_error: 'Target attendees / player type is required',
+        invalid_type_error: 'Please select a valid target attendee option',
+      }),
       eventDate: z.string({ required_error: 'Event date is required' }).or(z.date()),
       eventEndDate: z.string().or(z.date()).optional(),
       formattedDateRange: z.string().optional(),
@@ -347,6 +349,8 @@ export const createExtraEventZodSchema = z.object({
         .or(z.date()),
       venueName: z.string({ required_error: 'Venue name is required' }).min(2),
       venueAddress: z.string({ required_error: 'Venue address is required' }).min(2),
+      latitude: z.number().or(z.string().transform(Number)).optional(),
+      longitude: z.number().or(z.string().transform(Number)).optional(),
       registrationFee: z
         .number()
         .or(
@@ -377,7 +381,11 @@ export const updateExtraEventZodSchema = z.object({
       eventType: z.string().min(2).optional(),
       group: z.string().min(2).optional(),
       ageGroup: z.string().min(1).optional(),
-      targetAttendees: z.string().min(2).optional(),
+      targetAttendees: z
+        .enum(TARGET_ATTENDEES_ENUM, {
+          invalid_type_error: 'Please select a valid target attendee option',
+        })
+        .optional(),
       eventDate: z.string().or(z.date()).optional(),
       eventEndDate: z.string().or(z.date()).optional(),
       formattedDateRange: z.string().optional(),
@@ -386,6 +394,8 @@ export const updateExtraEventZodSchema = z.object({
       registrationDeadline: z.string().or(z.date()).optional(),
       venueName: z.string().min(2).optional(),
       venueAddress: z.string().min(2).optional(),
+      latitude: z.number().or(z.string().transform(Number)).optional(),
+      longitude: z.number().or(z.string().transform(Number)).optional(),
       registrationFee: z
         .number()
         .or(
@@ -417,6 +427,119 @@ export const registerExtraEventParticipantZodSchema = z.object({
       teamName: z.string().optional(),
       paidAmount: z.number().optional(),
       paymentStatus: z.enum(['PAID', 'PENDING', 'FREE']).optional(),
+    })
+    .passthrough(),
+});
+
+export const registerTournamentClubZodSchema = z.object({
+  body: z
+    .object({
+      clubName: z.string({ required_error: 'Club / Team name is required' }).min(2),
+      category: z.string().optional().default('U-16'),
+      badgePreset: z.string().optional(),
+      badgeName: z.string().optional(),
+      logoUrl: z.string().optional(),
+      coachName: z.string({ required_error: 'Coach / Manager name is required' }).min(2),
+      contactPerson: z.string().optional(),
+      contactPhone: z.string().optional(),
+      contactEmail: z.string({ required_error: 'Contact email is required' }).email(),
+      roster: z
+        .preprocess(
+          (val) => {
+            if (typeof val === 'string') {
+              try {
+                return JSON.parse(val);
+              } catch {
+                return [];
+              }
+            }
+            return val;
+          },
+          z.array(
+            z.object({
+              fullName: z.string().min(1),
+              dateOfBirth: z.string().optional(),
+              shirtNo: z.number().or(z.string().transform(Number)).optional(),
+            }),
+          ),
+        )
+        .optional()
+        .default([]),
+      paymentMethod: z.enum(['STRIPE', 'CARD', 'MANUAL']).optional().default('STRIPE'),
+      successUrl: z.string().optional(),
+      cancelUrl: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export const allocateTournamentGroupsZodSchema = z.object({
+  body: z
+    .object({
+      allocations: z.array(
+        z
+          .object({
+            _id: z.string().optional(),
+            clubId: z.string().optional(),
+            clubName: z.string().optional(),
+            group: z.enum(['GROUP A', 'GROUP B']),
+          })
+          .refine((data) => data._id || data.clubId || data.clubName, {
+            message: 'Either _id, clubId, or clubName is required for each allocation',
+          }),
+      ),
+    })
+    .passthrough(),
+});
+
+export const simulateTournamentStageZodSchema = z.object({
+  body: z
+    .object({
+      step: z.enum(['GROUP_STAGE', 'SEMIFINALS', 'GRAND_FINAL']).optional(),
+      scores: z
+        .array(
+          z.object({
+            matchId: z.string(),
+            homeScore: z.number(),
+            awayScore: z.number(),
+          }),
+        )
+        .optional(),
+    })
+    .passthrough(),
+});
+
+export const updateTournamentFixtureZodSchema = z.object({
+  body: z
+    .object({
+      homeScore: z.number().optional(),
+      awayScore: z.number().optional(),
+      kickoffTime: z.string().optional(),
+      pitch: z.string().optional(),
+      matchDate: z.string().optional(),
+      status: z.enum(['SCHEDULED', 'LIVE', 'COMPLETED']).optional(),
+    })
+    .passthrough(),
+});
+
+export const recordMatchResultZodSchema = z.object({
+  body: z
+    .object({
+      team1: z.string().optional(),
+      club1: z.string().optional(),
+      club1Id: z.string().optional(),
+      goal1: z.number().optional(),
+      score1: z.number().optional(),
+      team1Score: z.number().optional(),
+      team2: z.string().optional(),
+      club2: z.string().optional(),
+      club2Id: z.string().optional(),
+      goal2: z.number().optional(),
+      score2: z.number().optional(),
+      team2Score: z.number().optional(),
+      matchId: z.string().optional(),
+      pitch: z.string().optional(),
+      kickoffTime: z.string().optional(),
+      matchDate: z.string().optional(),
     })
     .passthrough(),
 });

@@ -1,0 +1,419 @@
+{
+  "info": {
+    "_postman_id": "k10-academy-tournament-arena-api-v1",
+    "name": "K10 Football - Academy Tournament Arena & Live Simulation",
+    "description": "Complete Postman collection for Extra Event Tournaments, Club Registration (with Roster & Stripe Checkout), Group Stage Allocation, Fixture Generation, Live Match Simulation Center, and Public Fan Portal.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://10.10.28.81:5005/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "accesstoken",
+      "value": "YOUR_JWT_ACCESS_TOKEN",
+      "type": "string"
+    },
+    {
+      "key": "eventId",
+      "value": "66c7f8a9e1b2c3d4e5f6a701",
+      "type": "string"
+    },
+    {
+      "key": "clubId",
+      "value": "66c7f8a9e1b2c3d4e5f6a702",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accesstoken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Create Extra Event (with Map Lat/Long Coordinates)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"eventName\": \"Tournament Registration\",\n  \"eventType\": \"Tournament Registration\",\n  \"group\": \"All Members & Families\",\n  \"ageGroup\": \"U-16\",\n  \"targetAttendees\": \"All Members & Families\",\n  \"eventDate\": \"2026-03-05T00:00:00.000Z\",\n  \"formattedDateRange\": \"5 MARCH 2026\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"18:00\",\n  \"registrationDeadline\": \"2026-03-01T23:59:59.000Z\",\n  \"venueName\": \"SPORTS CENTER COMPLEX\",\n  \"venueAddress\": \"123 Field Lane, London\",\n  \"latitude\": 51.5074,\n  \"longitude\": -0.1278,\n  \"registrationFee\": 180,\n  \"currency\": \"£\",\n  \"maxCapacity\": 8,\n  \"description\": \"Welcome to the Tournament Registration. This prestigious football tournament gathers the top squads for a competitive matchday experience. The tournament operates in a Group Stage + Knockout structure to guarantee multiple matches for each squad.\",\n  \"requirements\": \"Squad roster lists must be locked prior to registration deadline. Players are required to play in matching team uniforms with visible shirt numbers. Shinguards are strictly mandatory. Parental consent forms must be completed for all underage youth players.\",\n  \"contactPerson\": \"Mario Lopez\",\n  \"contactPhone\": \"+44 7123 456789\",\n  \"contactEmail\": \"tournament@k10football.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events"]
+        },
+        "description": "Creates tournament event with Map Coordinates (latitude, longitude), Venue, Organizer info, and £180 fee."
+      }
+    },
+    {
+      "name": "2. Register Club with Roster & Stripe Payment (Invited Club Flow)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "data",
+              "value": "{\n  \"clubName\": \"Santos FC Academy\",\n  \"category\": \"U-16\",\n  \"badgePreset\": \"CUSTOM\",\n  \"coachName\": \"Coach Michael Edwards\",\n  \"contactPerson\": \"Full Name\",\n  \"contactPhone\": \"+44 7123 456789\",\n  \"contactEmail\": \"contact@santosfc.com\",\n  \"roster\": [\n    {\n      \"fullName\": \"Neymar Jr\",\n      \"dateOfBirth\": \"02/05/2010\",\n      \"shirtNo\": 11\n    },\n    {\n      \"fullName\": \"Rodrygo Silva\",\n      \"dateOfBirth\": \"01/09/2010\",\n      \"shirtNo\": 10\n    },\n    {\n      \"fullName\": \"Gabriel Barbosa\",\n      \"dateOfBirth\": \"08/30/2010\",\n      \"shirtNo\": 9\n    }\n  ],\n  \"paymentMethod\": \"STRIPE\"\n}",
+              "type": "text"
+            },
+            {
+              "key": "logo",
+              "description": "Upload Club Logo badge file (PNG, JPG, SVG)",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/register-club",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "register-club"]
+        },
+        "description": "Submits Club Registration Form via multipart/form-data with 'data' JSON string and 'logo' file upload, and generates Stripe Checkout session URL."
+      }
+    },
+    {
+      "name": "3. Verify Club Registration Stripe Payment (Fallback / Local Dev)",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessionId\": \"cs_test_a1b2c3d4...\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/verify-registration-payment",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "verify-registration-payment"]
+        },
+        "description": "Verifies checkout session with Stripe API and marks club registration as PAID."
+      }
+    },
+    {
+      "name": "4. Get Registered Clubs List (Owner Admin View)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/registered-clubs",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "registered-clubs"]
+        },
+        "description": "Returns list of registered clubs (8/8 teams) with roster counts and status badges."
+      }
+    },
+    {
+      "name": "5. Get Available & Taken Tournament Badge Presets",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/badge-presets",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "badge-presets"]
+        },
+        "description": "Returns all 4 tournament badge presets with clean metadata (id, name, color, icon) and whether each preset isTaken or available for registration."
+      }
+    },
+    {
+      "name": "6. View Club Player Roster Modal",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/registered-clubs/{{clubId}}/roster",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "registered-clubs", "{{clubId}}", "roster"]
+        },
+        "description": "Returns full player list for a registered team (Name, Date of Birth, Shirt No)."
+      }
+    },
+    {
+      "name": "7. Allocate Clubs to Group A & Group B (Group Stage Builder)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"allocations\": [\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c01\", \"group\": \"GROUP A\" },\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c02\", \"group\": \"GROUP A\" },\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c03\", \"group\": \"GROUP A\" },\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c04\", \"group\": \"GROUP A\" },\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c05\", \"group\": \"GROUP B\" },\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c06\", \"group\": \"GROUP B\" },\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c07\", \"group\": \"GROUP B\" },\n    { \"_id\": \"67be1a2b3c4d5e6f7a8b9c08\", \"group\": \"GROUP B\" }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/allocate-groups",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "allocate-groups"]
+        },
+        "description": "Allocates exactly 4 clubs to Group A and 4 clubs to Group B."
+      }
+    },
+    {
+      "name": "8. Start Tournament & Generate Fixtures (Go to Live Mode)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/start-tournament",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "start-tournament"]
+        },
+        "description": "Switches tournament status to LIVE GAME, activates Live Mode, generates Group Stage Round-Robin fixtures across Pitch A-F with kickoff times, and initializes Standings & Bracket."
+      }
+    },
+    {
+      "name": "9. Get Tournament Arena (Standings, Fixtures, Bracket)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/arena",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "arena"]
+        },
+        "description": "Fetches current live Standings (Group A & Group B), Fixtures list, and Knockout Bracket progression."
+      }
+    },
+    {
+      "name": "10. Match Simulation Center - Step 1: Simulate Group Stages",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"step\": \"GROUP_STAGE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/simulate-stage",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "simulate-stage"]
+        },
+        "description": "Generates match scores for all round-robin fixtures, recalculates standings tables (P, W, D, L, GF, GA, GD, PTS), and qualifies Top 2 squads from each group into Semi-finals."
+      }
+    },
+    {
+      "name": "11. Match Simulation Center - Step 2: Simulate Semifinals",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"step\": \"SEMIFINALS\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/simulate-stage",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "simulate-stage"]
+        },
+        "description": "Simulates knockout results for Semi-final 1 & Semi-final 2 and populates the Championship Match Grand Final."
+      }
+    },
+    {
+      "name": "12. Match Simulation Center - Step 3: Simulate Grand Final",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"step\": \"GRAND_FINAL\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/simulate-stage",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "simulate-stage"]
+        },
+        "description": "Simulates final match score, crowns Tournament Champion, and locks results (tournamentStatus: COMPLETED)."
+      }
+    },
+    {
+      "name": "13. Reset Tournament Flow",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accesstoken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/reset-tournament",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "reset-tournament"]
+        },
+        "description": "Resets tournament back to REGISTRATION state, clears fixtures, standings, and bracket tree."
+      }
+    },
+    {
+      "name": "14. Public Fan & Parent Live Portal (Unauthenticated)",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/academies/extra-events/{{eventId}}/public-portal",
+          "host": ["{{baseUrl}}"],
+          "path": ["academies", "extra-events", "{{eventId}}", "public-portal"]
+        },
+        "description": "Completely public endpoint for parents and fans (via 'Share Public Result Link') with venue map coordinates, live standings, fixtures, and bracket tree."
+      }
+    }
+  ]
+}

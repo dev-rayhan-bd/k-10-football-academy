@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
-import { AcademyProfile, AcademyCoach } from '../academy.model';
+import { AcademyProfile, AcademyCoach, Team } from '../academy.model';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { User } from '@/modules/user/user.model';
@@ -191,7 +191,7 @@ export class AcademyCoachesService {
     return affiliation;
   }
 
-  async getAcademyCoaches(academyIdentifier: string, status?: string) {
+  async getAcademyCoaches(academyIdentifier: string, query: any = {}) {
     let academy = null;
     if (Types.ObjectId.isValid(academyIdentifier)) {
       academy = await AcademyProfile.findOne({
@@ -202,6 +202,13 @@ export class AcademyCoachesService {
       throw new AppError(404, 'Academy profile not found');
     }
 
+    const status = typeof query === 'string' ? query : query?.status;
+    const search = query?.search ? String(query.search).trim().toLowerCase() : '';
+    const teamIdFilter = query?.teamId ? String(query.teamId) : '';
+    const page = Math.max(1, Number(query?.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query?.limit) || 10));
+
+    // Fetch affiliations
     const filter: Record<string, unknown> = { academyId: academy._id };
     if (status && status !== 'ALL') {
       filter.status = status;
@@ -210,20 +217,267 @@ export class AcademyCoachesService {
     const affiliations = await AcademyCoach.find(filter)
       .populate(
         'coachId',
-        'fullName title profileImage licenseStatus yearsExperience cvTier coachType overallRatingScore phone email',
+        'fullName title profileImage licenseStatus yearsExperience cvTier coachType overallRatingScore phone email dateOfBirth certifications achievements bio',
       )
-      .populate('coachUserId', 'name email avatar')
+      .populate('coachUserId', 'name email avatar phone')
       .sort({ createdAt: -1 });
 
+    // Fetch direct coaches
+    const directCoaches = await CoachProfile.find({
+      academyId: academy._id,
+    }).populate('userId', 'name email avatar phone');
+
+    // Fetch all academy teams for assigned team mapping
+    const allTeams = await Team.find({ academyId: academy._id }).select(
+      'teamName ageGroup coachIds',
+    );
+
+    const coachMap = new Map<string, any>();
+
+    // Add affiliated coaches
+    affiliations.forEach((aff: any) => {
+      const c = aff.coachId;
+      if (!c || !c._id) return;
+      const cIdStr = c._id.toString();
+
+      const matchingTeams = allTeams.filter(
+        (t) => t.coachIds && t.coachIds.some((id: any) => id.toString() === cIdStr),
+      );
+
+      coachMap.set(cIdStr, {
+        _id: c._id,
+        id: c._id,
+        coachId: c._id,
+        affiliationId: aff._id,
+        fullName: c.fullName || aff.coachUserId?.name || 'Coach',
+        title: aff.role || c.title || 'Coach',
+        role: aff.role || 'Coach',
+        profileImage: c.profileImage || aff.coachUserId?.avatar || '',
+        licenseStatus: c.licenseStatus || 'UEFA A',
+        yearsExperience: c.yearsExperience || 0,
+        cvTier: c.cvTier || 'GOLD',
+        overallRatingScore: c.overallRatingScore || 85,
+        phone: c.phone || aff.coachUserId?.phone || '',
+        email: c.email || aff.coachUserId?.email || '',
+        status: aff.status || 'APPROVED',
+        assignedTeams: matchingTeams.map((t) => ({
+          _id: t._id,
+          teamName: t.teamName,
+          ageGroup: t.ageGroup,
+        })),
+        assignedTeamId: matchingTeams.length > 0 ? matchingTeams[0]._id : null,
+        assignedTeamName: matchingTeams.length > 0 ? matchingTeams[0].teamName : null,
+        joinedAt: aff.createdAt,
+        createdAt: aff.createdAt,
+      });
+    });
+
+    // Add direct coaches
+    directCoaches.forEach((c: any) => {
+      const cIdStr = c._id.toString();
+      if (!coachMap.has(cIdStr)) {
+        const matchingTeams = allTeams.filter(
+          (t) => t.coachIds && t.coachIds.some((id: any) => id.toString() === cIdStr),
+        );
+        const userObj = c.userId as any;
+        coachMap.set(cIdStr, {
+          _id: c._id,
+          id: c._id,
+          coachId: c._id,
+          affiliationId: null,
+          fullName: c.fullName || userObj?.name || 'Coach',
+          title: c.title || 'Coach',
+          role: 'Head Coach',
+          profileImage: c.profileImage || userObj?.avatar || '',
+          licenseStatus: c.licenseStatus || 'UEFA A',
+          yearsExperience: c.yearsExperience || 0,
+          cvTier: c.cvTier || 'GOLD',
+          overallRatingScore: c.overallRatingScore || 85,
+          phone: c.phone || userObj?.phone || '',
+          email: c.email || userObj?.email || '',
+          status: 'APPROVED',
+          assignedTeams: matchingTeams.map((t) => ({
+            _id: t._id,
+            teamName: t.teamName,
+            ageGroup: t.ageGroup,
+          })),
+          assignedTeamId: matchingTeams.length > 0 ? matchingTeams[0]._id : null,
+          assignedTeamName: matchingTeams.length > 0 ? matchingTeams[0].teamName : null,
+          joinedAt: c.createdAt,
+          createdAt: c.createdAt,
+        });
+      }
+    });
+
+    let coachesList = Array.from(coachMap.values());
+
+    // Apply search filter
+    if (search) {
+      coachesList = coachesList.filter(
+        (c) =>
+          c.fullName.toLowerCase().includes(search) ||
+          c.email.toLowerCase().includes(search) ||
+          c.title.toLowerCase().includes(search) ||
+          c.licenseStatus.toLowerCase().includes(search),
+      );
+    }
+
+    // Apply team filter
+    if (teamIdFilter) {
+      coachesList = coachesList.filter(
+        (c) =>
+          c.assignedTeams && c.assignedTeams.some((t: any) => t._id.toString() === teamIdFilter),
+      );
+    }
+
+    const total = coachesList.length;
+    const totalPage = Math.ceil(total / limit) || 1;
+    const startIndex = (page - 1) * limit;
+    const paginatedCoaches = coachesList.slice(startIndex, startIndex + limit);
+
     return {
+      meta: {
+        page,
+        limit,
+        total,
+        totalPage,
+      },
       academy: {
         id: academy._id,
         name: academy.name,
         logo: academy.logo,
       },
-      total: affiliations.length,
-      coaches: affiliations,
+      coaches: paginatedCoaches,
     };
+  }
+
+  async getAcademyCoachById(academyIdentifier: string, coachId: string) {
+    let academy = null;
+    if (Types.ObjectId.isValid(academyIdentifier)) {
+      academy = await AcademyProfile.findOne({
+        $or: [{ _id: academyIdentifier }, { userId: academyIdentifier }],
+      });
+    }
+    if (!academy) {
+      throw new AppError(404, 'Academy profile not found');
+    }
+
+    if (!Types.ObjectId.isValid(coachId)) {
+      throw new AppError(400, 'Invalid coach ID');
+    }
+
+    const coach = await CoachProfile.findById(coachId).populate(
+      'userId',
+      'name email avatar phone',
+    );
+    if (!coach) {
+      throw new AppError(404, 'Coach profile not found');
+    }
+
+    const affiliation = await AcademyCoach.findOne({
+      academyId: academy._id,
+      coachId: coach._id,
+    });
+    const isDirect = coach.academyId?.toString() === academy._id.toString();
+
+    if (!affiliation && !isDirect) {
+      throw new AppError(403, 'This coach is not affiliated with this academy');
+    }
+
+    const assignedTeams = await Team.find({
+      academyId: academy._id,
+      coachIds: coach._id,
+    }).select('teamName ageGroup coachesCount playersCount status');
+
+    const userObj = coach.userId as any;
+    return {
+      _id: coach._id,
+      id: coach._id,
+      fullName: coach.fullName || userObj?.name,
+      title: affiliation?.role || coach.title || 'Coach',
+      role: affiliation?.role || 'Coach',
+      profileImage: coach.profileImage || userObj?.avatar,
+      licenseStatus: coach.licenseStatus,
+      yearsExperience: coach.yearsExperience,
+      cvTier: coach.cvTier,
+      overallRatingScore: coach.overallRatingScore,
+      phone: coach.phone || userObj?.phone,
+      email: coach.email || userObj?.email,
+      dateOfBirth: coach.dateOfBirth,
+      courses: coach.courses || [],
+      accomplishments: coach.accomplishments || [],
+      majorTrophies: coach.majorTrophies || [],
+      keySkills: coach.keySkills || [],
+      bio: coach.additionalNotes || (coach as any).bio || '',
+      affiliation: affiliation
+        ? {
+            id: affiliation._id,
+            status: affiliation.status,
+            role: affiliation.role,
+            createdAt: affiliation.createdAt,
+            approvedAt: affiliation.approvedAt,
+          }
+        : null,
+      assignedTeams,
+    };
+  }
+
+  async updateAcademyCoach(academyIdentifier: string, coachId: string, payload: any) {
+    let academy = null;
+    if (Types.ObjectId.isValid(academyIdentifier)) {
+      academy = await AcademyProfile.findOne({
+        $or: [{ _id: academyIdentifier }, { userId: academyIdentifier }],
+      });
+    }
+    if (!academy) {
+      throw new AppError(404, 'Academy profile not found');
+    }
+
+    if (!Types.ObjectId.isValid(coachId)) {
+      throw new AppError(400, 'Invalid coach ID');
+    }
+
+    const coach = await CoachProfile.findById(coachId);
+    if (!coach) {
+      throw new AppError(404, 'Coach not found');
+    }
+
+    const affiliation = await AcademyCoach.findOne({
+      academyId: academy._id,
+      coachId: coach._id,
+    });
+
+    if (payload.role || payload.title) {
+      const newRole = payload.role || payload.title;
+      if (affiliation) {
+        affiliation.role = newRole;
+        await affiliation.save();
+      }
+      coach.title = newRole;
+      coach.academyRole = newRole;
+      await coach.save();
+    }
+
+    if (payload.status && affiliation) {
+      affiliation.status = payload.status;
+      await affiliation.save();
+    }
+
+    // Team Assignment / Reassignment
+    if (payload.teamId !== undefined) {
+      await Team.updateMany(
+        { academyId: academy._id, coachIds: coach._id },
+        { $pull: { coachIds: coach._id } },
+      );
+
+      if (payload.teamId && Types.ObjectId.isValid(payload.teamId)) {
+        await Team.findByIdAndUpdate(payload.teamId, {
+          $addToSet: { coachIds: coach._id },
+        });
+      }
+    }
+
+    return await this.getAcademyCoachById(academyIdentifier, coachId);
   }
 
   async getCoachAffiliations(coachUserId: string) {
@@ -347,7 +601,7 @@ export class AcademyCoachesService {
     return affiliation;
   }
 
-  async removeCoachAffiliation(academyIdentifier: string, affiliationId: string) {
+  async removeCoachAffiliation(academyIdentifier: string, identifier: string) {
     let academy = null;
     if (Types.ObjectId.isValid(academyIdentifier)) {
       academy = await AcademyProfile.findOne({
@@ -359,44 +613,56 @@ export class AcademyCoachesService {
     }
 
     const affiliation = await AcademyCoach.findOne({
-      _id: affiliationId,
+      $or: [{ _id: identifier }, { coachId: identifier }],
       academyId: academy._id,
     });
-    if (!affiliation) {
-      throw new AppError(404, 'Affiliation not found for this academy');
+
+    if (affiliation) {
+      affiliation.status = 'REMOVED';
+      await affiliation.save();
     }
 
-    affiliation.status = 'REMOVED';
-    await affiliation.save();
+    let coachId = affiliation?.coachId;
+    if (!coachId && Types.ObjectId.isValid(identifier)) {
+      coachId = new Types.ObjectId(identifier);
+    }
 
-    const coach = await CoachProfile.findById(affiliation.coachId);
-    if (coach && coach.academyId?.toString() === academy._id.toString()) {
-      coach.isVerifiedByAcademy = false;
-      coach.academyId = undefined;
-      coach.coachType = 'INDIVIDUAL_COACH';
+    if (coachId) {
+      // Remove coach from all teams in this academy
+      await Team.updateMany(
+        { academyId: academy._id, coachIds: coachId },
+        { $pull: { coachIds: coachId } },
+      );
 
-      if (Array.isArray(coach.clubHistory)) {
-        coach.clubHistory.forEach((c: any) => {
-          if (c.clubName.toLowerCase() === academy.name.toLowerCase() && c.isCurrent) {
-            c.isCurrent = false;
-            c.endYear = new Date().getFullYear();
-            c.period = `${c.startYear || new Date().getFullYear()} - ${new Date().getFullYear()}`;
-          }
+      const coach = await CoachProfile.findById(coachId);
+      if (coach && coach.academyId?.toString() === academy._id.toString()) {
+        coach.isVerifiedByAcademy = false;
+        coach.academyId = undefined;
+        coach.coachType = 'INDIVIDUAL_COACH';
+
+        if (Array.isArray(coach.clubHistory)) {
+          coach.clubHistory.forEach((c: any) => {
+            if (c.clubName.toLowerCase() === academy.name.toLowerCase() && c.isCurrent) {
+              c.isCurrent = false;
+              c.endYear = new Date().getFullYear();
+              c.period = `${c.startYear || new Date().getFullYear()} - ${new Date().getFullYear()}`;
+            }
+          });
+        }
+        await coach.save();
+
+        await notificationService.createNotification({
+          recipientId: coach.userId,
+          recipientRole: 'COACH',
+          title: 'Academy Affiliation Revoked',
+          message: `Your affiliation with ${academy.name} has been revoked. Profile reverted to Individual Coach.`,
+          type: 'ACADEMY_AFFILIATION_REMOVED',
+          data: { academyId: academy._id },
         });
       }
-      await coach.save();
-
-      await notificationService.createNotification({
-        recipientId: coach.userId,
-        recipientRole: 'COACH',
-        title: 'Academy Affiliation Revoked',
-        message: `Your affiliation with ${academy.name} has been revoked. Profile reverted to Individual Coach.`,
-        type: 'ACADEMY_AFFILIATION_REMOVED',
-        data: { academyId: academy._id },
-      });
     }
 
-    return { message: 'Coach removed from academy successfully', affiliation };
+    return { message: 'Coach removed from academy successfully', affiliation: affiliation || null };
   }
 }
 

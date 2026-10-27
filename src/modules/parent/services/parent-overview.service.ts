@@ -106,17 +106,48 @@ export class ParentOverviewService {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    const targetPlayerObjIds = targetPlayerId
+      ? [new Types.ObjectId(targetPlayerId)]
+      : childPlayerIds.map((id: any) => new Types.ObjectId(id));
+
+    const formatRsvpItem = (sessionDoc: any, attendanceDoc: any) => {
+      if (!sessionDoc) return null;
+      const sDate = new Date(sessionDoc.sessionDate);
+      const fullDay = sDate.toLocaleDateString('en-US', { weekday: 'long' });
+      const timeStr = sessionDoc.startTime || '9:00 AM';
+      const loc =
+        sessionDoc.trainingLocation || sessionDoc.locationField || sessionDoc.location || 'Pitch A';
+      const formattedSched = `${fullDay}, ${timeStr} at ${loc}`.trim();
+      const status = (attendanceDoc?.rsvpStatus || 'PENDING').toUpperCase();
+
+      return {
+        sessionId: sessionDoc._id,
+        sessionName: sessionDoc.sessionName || sessionDoc.sessionTitle || 'Training Session',
+        sessionDate: sessionDoc.sessionDate,
+        startTime: timeStr,
+        location: loc,
+        formattedSchedule: formattedSched,
+        rsvpStatus: status.charAt(0) + status.slice(1).toLowerCase(),
+        isConfirmed: status === 'CONFIRMED',
+        isDeclined: status === 'DECLINED',
+        isPending: status === 'PENDING',
+        attendanceId: attendanceDoc?._id || null,
+        canRsvp: true,
+      };
+    };
+
+    let upcomingRsvpList: any[] = [];
     let nextSessionDoc: any = null;
-    let nextAttendanceDoc: any = null;
 
-    if (targetPlayerId) {
-      const playerObjId = new Types.ObjectId(targetPlayerId);
-
-      // 1. Try finding upcoming attendance (sessionDate >= today)
+    if (targetPlayerObjIds.length > 0) {
+      // 1. Find upcoming attendances (sessionDate >= today)
       const upcomingAttendances = await TrainingAttendance.aggregate([
         {
           $match: {
-            $or: [{ playerId: playerObjId }, { childPlayerId: playerObjId }],
+            $or: [
+              { playerId: { $in: targetPlayerObjIds } },
+              { childPlayerId: { $in: targetPlayerObjIds } },
+            ],
           },
         },
         {
@@ -134,97 +165,71 @@ export class ParentOverviewService {
           },
         },
         { $sort: { 'session.sessionDate': 1, 'session.startTime': 1 } },
-        { $limit: 1 },
+        { $limit: 20 },
       ]);
 
-      if (upcomingAttendances.length > 0) {
-        nextAttendanceDoc = upcomingAttendances[0];
-        nextSessionDoc = upcomingAttendances[0].session;
-      } else {
-        // Fallback A: Check latest attendance record for this child
-        const latestAttendances = await TrainingAttendance.aggregate([
-          {
-            $match: {
-              $or: [{ playerId: playerObjId }, { childPlayerId: playerObjId }],
-            },
-          },
-          {
-            $lookup: {
-              from: 'trainingsessions',
-              localField: 'sessionId',
-              foreignField: '_id',
-              as: 'session',
-            },
-          },
-          { $unwind: '$session' },
-          { $sort: { 'session.sessionDate': -1, 'session.startTime': -1 } },
-          { $limit: 1 },
-        ]);
-
-        if (latestAttendances.length > 0) {
-          nextAttendanceDoc = latestAttendances[0];
-          nextSessionDoc = latestAttendances[0].session;
-        } else if (activePlayer.academyId || activePlayer.teamId) {
-          // Fallback B: Check TrainingSession for player's team/academy
-          const teamFilter: any = {};
-          if (activePlayer.teamId) teamFilter.teamId = activePlayer.teamId;
-          else if (activePlayer.academyId) teamFilter.academyId = activePlayer.academyId;
-
-          nextSessionDoc =
-            (await TrainingSession.findOne({ ...teamFilter, sessionDate: { $gte: todayStart } })
-              .sort({ sessionDate: 1, startTime: 1 })
-              .lean()) ||
-            (await TrainingSession.findOne(teamFilter)
-              .sort({ sessionDate: -1, createdAt: -1 })
-              .lean());
+      const sessionRsvpMap = new Map<string, any>();
+      for (const att of upcomingAttendances) {
+        const sId = att.session?._id?.toString();
+        if (sId && !sessionRsvpMap.has(sId)) {
+          const item = formatRsvpItem(att.session, att);
+          if (item) sessionRsvpMap.set(sId, item);
         }
       }
+
+      // Check upcoming team/academy sessions for active player
+      const teamFilter: any = {};
+      if (activePlayer?.teamId) teamFilter.teamId = activePlayer.teamId;
+      else if (activePlayer?.academyId) teamFilter.academyId = activePlayer.academyId;
+
+      if (Object.keys(teamFilter).length > 0) {
+        const upcomingTeamSessions = await TrainingSession.find({
+          ...teamFilter,
+          sessionDate: { $gte: todayStart },
+        })
+          .sort({ sessionDate: 1, startTime: 1 })
+          .limit(20)
+          .lean();
+
+        for (const sess of upcomingTeamSessions) {
+          const sId = sess._id.toString();
+          if (!sessionRsvpMap.has(sId)) {
+            const existingAtt = await TrainingAttendance.findOne({
+              sessionId: sess._id,
+              $or: [
+                { playerId: { $in: targetPlayerObjIds } },
+                { childPlayerId: { $in: targetPlayerObjIds } },
+              ],
+            }).lean();
+            const item = formatRsvpItem(sess, existingAtt);
+            if (item) sessionRsvpMap.set(sId, item);
+          }
+        }
+      }
+
+      upcomingRsvpList = Array.from(sessionRsvpMap.values());
     }
 
-    // Fallback C: If active child didn't match, check any child's upcoming/latest session
-    if (!nextSessionDoc && childPlayerIds.length > 0) {
-      const allPlayerObjIds = childPlayerIds.map((id: any) => new Types.ObjectId(id));
-      const anyAttendances = await TrainingAttendance.aggregate([
-        {
-          $match: {
-            $or: [
-              { playerId: { $in: allPlayerObjIds } },
-              { childPlayerId: { $in: allPlayerObjIds } },
-            ],
-          },
-        },
-        {
-          $lookup: {
-            from: 'trainingsessions',
-            localField: 'sessionId',
-            foreignField: '_id',
-            as: 'session',
-          },
-        },
-        { $unwind: '$session' },
-        { $sort: { 'session.sessionDate': -1 } },
-        { $limit: 1 },
-      ]);
-
-      if (anyAttendances.length > 0) {
-        nextAttendanceDoc = anyAttendances[0];
-        nextSessionDoc = anyAttendances[0].session;
-      } else {
-        nextSessionDoc = await TrainingSession.findOne().sort({ sessionDate: -1 }).lean();
-      }
+    // Set nextSessionDoc for summary card display (only from upcoming sessions)
+    if (upcomingRsvpList.length > 0) {
+      const firstItem = upcomingRsvpList[0];
+      nextSessionDoc = {
+        _id: firstItem.sessionId,
+        sessionName: firstItem.sessionName,
+        sessionTitle: firstItem.sessionName,
+        sessionDate: firstItem.sessionDate,
+        startTime: firstItem.startTime,
+        trainingLocation: firstItem.location,
+      };
     }
 
     // Format next session display: e.g. "Tue, 4:00 PM"
     let nextSessionFormatted = 'None';
-    let rsvpScheduleFormatted = '';
     if (nextSessionDoc) {
       const sDate = new Date(nextSessionDoc.sessionDate);
       const dayName = sDate.toLocaleDateString('en-US', { weekday: 'short' });
-      const fullDay = sDate.toLocaleDateString('en-US', { weekday: 'long' });
       const timeStr = nextSessionDoc.startTime || '4:00 PM';
       nextSessionFormatted = `${dayName}, ${timeStr}`.trim();
-      rsvpScheduleFormatted =
-        `${fullDay}, ${timeStr} at ${nextSessionDoc.trainingLocation || nextSessionDoc.locationField || 'Pitch A'}`.trim();
     }
 
     // Pending Fees for Parent's children
@@ -282,25 +287,8 @@ export class ParentOverviewService {
         }
       : null;
 
-    // 5. Training RSVP Data
-    const rsvpStatus = (nextAttendanceDoc?.rsvpStatus || 'PENDING').toUpperCase();
-    const trainingRsvp = nextSessionDoc
-      ? {
-          sessionId: nextSessionDoc._id,
-          sessionName:
-            nextSessionDoc.sessionName || nextSessionDoc.sessionTitle || 'Training Session',
-          sessionDate: nextSessionDoc.sessionDate,
-          startTime: nextSessionDoc.startTime,
-          location: nextSessionDoc.trainingLocation || nextSessionDoc.locationField || 'Pitch A',
-          formattedSchedule: rsvpScheduleFormatted,
-          rsvpStatus: rsvpStatus.charAt(0) + rsvpStatus.slice(1).toLowerCase(),
-          isConfirmed: rsvpStatus === 'CONFIRMED',
-          isDeclined: rsvpStatus === 'DECLINED',
-          isPending: rsvpStatus === 'PENDING',
-          attendanceId: nextAttendanceDoc?._id || null,
-          canRsvp: true,
-        }
-      : null;
+    // 5. Training RSVP Data (array of upcoming training RSVP items)
+    const trainingRsvp = upcomingRsvpList;
 
     // 6. Recent Activity Aggregation (Evaluations, Invoices, Match Reports)
     const activities: any[] = [];

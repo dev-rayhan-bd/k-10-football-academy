@@ -74,6 +74,11 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
     await subscriptionService.handleSubscriptionStripeWebhook(obj);
   } else if (obj.metadata?.paymentType === 'SHOP_ORDER' || obj.metadata?.type === 'SHOP_ORDER') {
     await shopService.handleShopOrderStripeWebhook(obj);
+  } else if (
+    obj.metadata?.paymentType === 'TOURNAMENT_CLUB_REGISTRATION' ||
+    obj.metadata?.type === 'TOURNAMENT_CLUB_REGISTRATION'
+  ) {
+    await academyService.handleTournamentRegistrationStripeWebhook(obj);
   } else {
     await gameReportService.handleStripeWebhook(event);
   }

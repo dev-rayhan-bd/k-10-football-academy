@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { Team, ExtraEvent } from '../academy.model';
 import { academyResolverService } from './academy-resolver.service';
+import { TARGET_ATTENDEES_ENUM } from '../academy.interface';
 
 export class AcademyEventsService {
   async getExtraEventsMeta(user: any, academyIdentifier?: string) {
@@ -26,15 +27,7 @@ export class AcademyEventsService {
       ],
       groups: ['Academy Members', 'Grassroots Teams', 'Families', 'External Teams', 'All Members'],
       ageGroups: ['U-7', 'U-9', 'U-11', 'U-13', 'U-15', 'U-17', 'U-19', 'Senior', 'All Age Groups'],
-      targetAttendees: [
-        'Boys',
-        'Girls',
-        'Mixed / Co-Ed',
-        'Goalkeepers',
-        'Elite Players',
-        'Grassroots',
-        'Open to All',
-      ],
+      targetAttendees: [...TARGET_ATTENDEES_ENUM],
       statusOptions: ['OPEN', 'CLOSING SOON', 'CLOSED'],
       dateFilters: ['today', 'this_week', 'this_month', 'upcoming', 'past'],
       teams,
@@ -172,6 +165,8 @@ export class AcademyEventsService {
         registrationDeadline: ev.registrationDeadline,
         venueName: ev.venueName,
         venueAddress: ev.venueAddress,
+        latitude: ev.latitude,
+        longitude: ev.longitude,
         registrationFee: fee,
         currency,
         feeFormatted: `${currency} ${fee}`,
@@ -186,6 +181,8 @@ export class AcademyEventsService {
         bannerImage: ev.bannerImage || '',
         canRegister: ev.status === 'OPEN' && (!maxCap || attendees < maxCap),
         shareUrl: `/dashboard/academy/management/extra-events/${ev._id}`,
+        tournamentStatus: ev.tournamentStatus || 'REGISTRATION',
+        isLiveMode: !!ev.isLiveMode,
         createdAt: ev.createdAt,
       };
     });
@@ -236,6 +233,8 @@ export class AcademyEventsService {
       registrationDeadline: ev.registrationDeadline,
       venueName: ev.venueName,
       venueAddress: ev.venueAddress,
+      latitude: ev.latitude,
+      longitude: ev.longitude,
       registrationFee: fee,
       currency,
       feeFormatted: `${currency} ${fee}`,
@@ -249,6 +248,16 @@ export class AcademyEventsService {
       contactEmail: ev.contactEmail,
       bannerImage: ev.bannerImage || '',
       participants: ev.participants || [],
+      tournamentStatus: ev.tournamentStatus || 'REGISTRATION',
+      isLiveMode: !!ev.isLiveMode,
+      simulationStep: ev.simulationStep || 'NOT_STARTED',
+      registeredClubs: ev.registeredClubs || [],
+      fixtures: ev.fixtures || [],
+      standings: ev.standings || [],
+      bracket: ev.bracket || {
+        semifinals: [],
+        grandFinal: null,
+      },
       canRegister: ev.status === 'OPEN' && (!maxCap || attendees < maxCap),
       shareUrl: `/dashboard/academy/management/extra-events/${ev._id}`,
       createdAt: ev.createdAt,
@@ -283,6 +292,8 @@ export class AcademyEventsService {
       registrationDeadline: new Date(payload.registrationDeadline),
       venueName: payload.venueName,
       venueAddress: payload.venueAddress,
+      latitude: payload.latitude !== undefined ? Number(payload.latitude) : undefined,
+      longitude: payload.longitude !== undefined ? Number(payload.longitude) : undefined,
       registrationFee: Number(payload.registrationFee) || 0,
       currency: payload.currency || '£',
       maxCapacity: payload.maxCapacity ? Number(payload.maxCapacity) : undefined,
@@ -295,6 +306,12 @@ export class AcademyEventsService {
       bannerImage: payload.bannerImage || '',
       status: payload.status || 'OPEN',
       participants: [],
+      tournamentStatus: 'REGISTRATION',
+      isLiveMode: false,
+      simulationStep: 'NOT_STARTED',
+      registeredClubs: [],
+      fixtures: [],
+      standings: [],
     });
 
     await event.save();
@@ -333,6 +350,8 @@ export class AcademyEventsService {
       event.registrationDeadline = new Date(payload.registrationDeadline);
     if (payload.venueName) event.venueName = payload.venueName;
     if (payload.venueAddress) event.venueAddress = payload.venueAddress;
+    if (payload.latitude !== undefined) event.latitude = Number(payload.latitude);
+    if (payload.longitude !== undefined) event.longitude = Number(payload.longitude);
     if (payload.registrationFee !== undefined)
       event.registrationFee = Number(payload.registrationFee) || 0;
     if (payload.currency) event.currency = payload.currency;

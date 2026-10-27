@@ -25,6 +25,7 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     academy: { type: String },
     academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', index: true },
     teamId: { type: Schema.Types.ObjectId, ref: 'Team', index: true },
+    jerseyNumber: { type: Number },
     coachesAssigned: { type: String },
     coachName: { type: String },
     fitnessStatus: { type: String, enum: ['ACTIVE', 'INJURED'], default: 'ACTIVE' },

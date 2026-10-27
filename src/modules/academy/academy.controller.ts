@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { academyService } from './academy.service';
@@ -183,6 +184,59 @@ export const getAvailableMembers = catchAsync(async (req: Request, res: Response
     statusCode: 200,
     success: true,
     message: 'Available coaches and players fetched successfully',
+    data: result,
+  });
+});
+
+export const getAcademyPlayers = catchAsync(async (req: Request, res: Response) => {
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const result = await academyService.getAcademyPlayers(academyId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy players fetched successfully',
+    meta: result.meta,
+    data: result,
+  });
+});
+
+export const getAcademyPlayerById = catchAsync(async (req: Request, res: Response) => {
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const result = await academyService.getAcademyPlayerById(academyId, req.params.playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy player details fetched successfully',
+    data: result,
+  });
+});
+
+export const updateAcademyPlayer = catchAsync(async (req: Request, res: Response) => {
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const result = await academyService.updateAcademyPlayer(academyId, req.params.playerId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy player updated successfully',
+    data: result,
+  });
+});
+
+export const removePlayerFromAcademy = catchAsync(async (req: Request, res: Response) => {
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const result = await academyService.removePlayerFromAcademy(academyId, req.params.playerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Player removed from academy successfully',
     data: result,
   });
 });
@@ -468,13 +522,41 @@ export const requestCoachAffiliation = catchAsync(async (req: Request, res: Resp
 });
 
 export const getAcademyCoaches = catchAsync(async (req: Request, res: Response) => {
-  const academyId = req.params.academyId || (req as any).user.userId;
-  const status = req.query.status as string;
-  const result = await academyService.getAcademyCoaches(academyId, status);
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const result = await academyService.getAcademyCoaches(academyId, req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Academy coaches fetched successfully',
+    meta: result.meta,
+    data: result,
+  });
+});
+
+export const getAcademyCoachById = catchAsync(async (req: Request, res: Response) => {
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const result = await academyService.getAcademyCoachById(academyId, req.params.coachId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy coach details fetched successfully',
+    data: result,
+  });
+});
+
+export const updateAcademyCoach = catchAsync(async (req: Request, res: Response) => {
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const result = await academyService.updateAcademyCoach(academyId, req.params.coachId, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy coach updated successfully',
     data: result,
   });
 });
@@ -508,8 +590,11 @@ export const respondToCoachAffiliation = catchAsync(async (req: Request, res: Re
 });
 
 export const removeCoachAffiliation = catchAsync(async (req: Request, res: Response) => {
-  const academyId = req.params.academyId || (req as any).user.userId;
-  const result = await academyService.removeCoachAffiliation(academyId, req.params.affiliationId);
+  const paramId = req.params.academyId;
+  const academyId =
+    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+  const identifier = req.params.coachId || req.params.affiliationId;
+  const result = await academyService.removeCoachAffiliation(academyId, identifier);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -1085,6 +1170,267 @@ export const registerForExtraEvent = catchAsync(async (req: Request, res: Respon
   const { id } = req.params;
   const academyIdentifier = req.params.academyId;
   const result = await academyService.registerForExtraEvent(id, user, req.body, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+// ==========================================
+// TOURNAMENT & LIVE ARENA CONTROLLERS (SCREENSHOTS)
+// ==========================================
+
+export const registerTournamentClub = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const originUrl = (req.headers.origin || req.headers.referer) as string;
+
+  // 1. Support multipart form-data 'data' JSON string if present
+  if (req.body?.data && typeof req.body.data === 'string') {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      req.body = { ...req.body, ...parsed };
+      delete req.body.data;
+    } catch {
+      // Ignore JSON parse error if already processed
+    }
+  }
+
+  // 2. Handle logo file upload if provided
+  const allFiles = Array.isArray(req.files)
+    ? (req.files as Express.Multer.File[])
+    : req.file
+      ? [req.file as Express.Multer.File]
+      : [];
+
+  if (allFiles.length > 0) {
+    const logoFile =
+      allFiles.find(
+        (f) =>
+          f.fieldname === 'logo' ||
+          f.fieldname === 'clubLogo' ||
+          f.fieldname === 'clubLogoBadge' ||
+          f.fieldname === 'logoUrl' ||
+          f.fieldname === 'file',
+      ) || allFiles[0];
+
+    if (logoFile) {
+      req.body.logoUrl = await uploadToStorage(logoFile, 'tournament_clubs');
+      req.body.badgePreset = 'CUSTOM';
+      req.body.badgeName = req.body.badgeName
+        ? String(req.body.badgeName).trim()
+        : `${req.body.clubName || 'Club'} Logo`;
+    }
+  } else if (req.body.logoUrl && String(req.body.logoUrl).trim() !== '') {
+    req.body.badgePreset = 'CUSTOM';
+    req.body.badgeName = req.body.badgeName
+      ? String(req.body.badgeName).trim()
+      : `${req.body.clubName || 'Club'} Logo`;
+  }
+
+  const result = await academyService.registerTournamentClub(id, req.body, originUrl);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const verifyClubRegistrationPayment = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { sessionId } = req.body;
+  const result = await academyService.verifyClubRegistrationPayment(id, sessionId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.club,
+  });
+});
+
+export const getTournamentRegisteredClubs = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await academyService.getTournamentRegisteredClubs(id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Registered tournament clubs fetched successfully',
+    data: result,
+  });
+});
+
+export const getTournamentBadgePresets = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await academyService.getTournamentBadgePresets(id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Tournament badge presets fetched successfully',
+    data: result,
+  });
+});
+
+export const getTournamentClubRoster = catchAsync(async (req: Request, res: Response) => {
+  const { id, clubId } = req.params;
+  const result = await academyService.getTournamentClubRoster(id, clubId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Club roster fetched successfully',
+    data: result,
+  });
+});
+
+export const allocateTournamentGroups = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.allocateTournamentGroups(
+    id,
+    req.body.allocations,
+    user,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getAllocatedGroups = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.getAllocatedGroups(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Tournament allocated groups fetched successfully',
+    data: result,
+  });
+});
+
+export const startTournamentAndGenerateFixtures = catchAsync(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const user = (req as any).user;
+    const academyIdentifier = req.params.academyId;
+    const result = await academyService.startTournamentAndGenerateFixtures(
+      id,
+      user,
+      academyIdentifier,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  },
+);
+
+export const updateTournamentFixture = catchAsync(async (req: Request, res: Response) => {
+  const { id, matchId } = req.params;
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.updateTournamentFixture(
+    id,
+    matchId,
+    req.body,
+    user,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const recordMatchResult = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.recordMatchResult(id, req.body, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getTournamentFixtures = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const query = {
+    group: req.query.group as string | undefined,
+    stage: req.query.stage as string | undefined,
+    status: req.query.status as string | undefined,
+  };
+  const result = await academyService.getTournamentFixtures(id, query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Tournament fixtures fetched successfully',
+    data: result,
+  });
+});
+
+export const getTournamentArena = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const options = {
+    tab: req.query.tab as string | undefined,
+    group: req.query.group as string | undefined,
+    stage: req.query.stage as string | undefined,
+  };
+  const result = await academyService.getTournamentArena(id, options);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Tournament arena data fetched successfully',
+    data: result,
+  });
+});
+
+export const getTournamentPublicPortal = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await academyService.getTournamentPublicPortal(id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Public tournament live portal data fetched successfully',
+    data: result,
+  });
+});
+
+export const resetTournamentFlow = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.resetTournamentFlow(id, user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const simulateTournamentStage = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyService.simulateTournamentStage(
+    id,
+    req.body,
+    user,
+    academyIdentifier,
+  );
   sendResponse(res, {
     statusCode: 200,
     success: true,

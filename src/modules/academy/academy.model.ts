@@ -14,6 +14,7 @@ import {
   IAcademySponsorDocument,
   IAcademyNewsDocument,
   IAcademySuccessStoryDocument,
+  TARGET_ATTENDEES_ENUM,
 } from './academy.interface';
 
 const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
@@ -356,7 +357,7 @@ AcademyMatchSchema.index({ ourTeamId: 1, matchDate: 1 });
 export const AcademyMatch = model<IAcademyMatchDocument>('AcademyMatch', AcademyMatchSchema);
 
 // ==========================================
-// EXTRA EVENTS SCHEMA & MODEL (SCREENSHOTS)
+// EXTRA EVENTS & TOURNAMENT SCHEMAS & MODEL (SCREENSHOTS)
 // ==========================================
 const ExtraEventParticipantSchema = new Schema<IExtraEventParticipant>(
   {
@@ -376,6 +377,131 @@ const ExtraEventParticipantSchema = new Schema<IExtraEventParticipant>(
   { _id: true },
 );
 
+const TournamentClubRosterPlayerSchema = new Schema(
+  {
+    fullName: { type: String, required: true },
+    dateOfBirth: { type: String },
+    shirtNo: { type: Number },
+  },
+  { _id: true },
+);
+
+const TournamentRegisteredClubSchema = new Schema(
+  {
+    clubName: { type: String, required: true },
+    category: { type: String, default: 'U-16' },
+    badgePreset: { type: String },
+    badgeName: { type: String },
+    logoUrl: { type: String },
+    coachName: { type: String, required: true },
+    contactPerson: { type: String },
+    contactPhone: { type: String },
+    contactEmail: { type: String, required: true },
+    paymentStatus: { type: String, enum: ['PAID', 'PENDING'], default: 'PENDING' },
+    paidAmount: { type: Number, default: 0 },
+    stripeSessionId: { type: String },
+    stripePaymentIntentId: { type: String },
+    allocatedGroup: { type: String, enum: ['GROUP A', 'GROUP B'] },
+    roster: [TournamentClubRosterPlayerSchema],
+    registeredAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
+const TournamentFixtureSchema = new Schema(
+  {
+    matchId: { type: String, required: true },
+    matchNo: { type: Number, required: true },
+    stage: {
+      type: String,
+      enum: ['GROUP_STAGE', 'SEMIFINAL', 'GRAND_FINAL'],
+      default: 'GROUP_STAGE',
+    },
+    group: { type: String, enum: ['GROUP A', 'GROUP B'] },
+    homeTeam: {
+      clubId: { type: String },
+      _id: { type: String },
+      name: { type: String, required: true },
+      clubName: { type: String },
+      logoUrl: { type: String },
+      score: { type: Number },
+    },
+    awayTeam: {
+      clubId: { type: String },
+      _id: { type: String },
+      name: { type: String, required: true },
+      clubName: { type: String },
+      logoUrl: { type: String },
+      score: { type: Number },
+    },
+    pitch: { type: String },
+    kickoffTime: { type: String },
+    matchDate: { type: String },
+    status: {
+      type: String,
+      enum: ['SCHEDULED', 'LIVE', 'COMPLETED'],
+      default: 'SCHEDULED',
+    },
+    isLiveMatch: { type: Boolean, default: false },
+    winner: { type: String },
+  },
+  { _id: true },
+);
+
+const TournamentStandingSchema = new Schema(
+  {
+    clubId: { type: String },
+    teamId: { type: String },
+    group: { type: String, enum: ['GROUP A', 'GROUP B'], required: true },
+    teamName: { type: String, required: true },
+    clubName: { type: String },
+    name: { type: String },
+    logoUrl: { type: String },
+    p: { type: Number, default: 0 },
+    w: { type: Number, default: 0 },
+    d: { type: Number, default: 0 },
+    l: { type: Number, default: 0 },
+    gf: { type: Number, default: 0 },
+    ga: { type: Number, default: 0 },
+    gd: { type: Number, default: 0 },
+    pts: { type: Number, default: 0 },
+    rank: { type: Number, default: 1 },
+    isQualified: { type: Boolean, default: false },
+  },
+  { _id: true },
+);
+
+const TournamentBracketMatchSchema = new Schema(
+  {
+    matchId: { type: String, required: true },
+    label: { type: String, required: true },
+    dayLabel: { type: String },
+    homeTeamPlaceholder: { type: String, required: true },
+    awayTeamPlaceholder: { type: String, required: true },
+    homeTeam: { type: String },
+    awayTeam: { type: String },
+    homeScore: { type: Number },
+    awayScore: { type: Number },
+    winner: { type: String },
+    status: {
+      type: String,
+      enum: ['PENDING', 'LIVE', 'COMPLETED'],
+      default: 'PENDING',
+    },
+  },
+  { _id: false },
+);
+
+const TournamentBracketSchema = new Schema(
+  {
+    semifinals: [TournamentBracketMatchSchema],
+    grandFinal: TournamentBracketMatchSchema,
+    champion: { type: String },
+    runnerUp: { type: String },
+  },
+  { _id: false },
+);
+
 export const ExtraEventSchema = new Schema<IExtraEventDocument>(
   {
     academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
@@ -383,7 +509,14 @@ export const ExtraEventSchema = new Schema<IExtraEventDocument>(
     eventType: { type: String, required: true, index: true },
     group: { type: String, required: true },
     ageGroup: { type: String, required: true },
-    targetAttendees: { type: String, required: true },
+    targetAttendees: {
+      type: String,
+      required: [true, 'Target attendees / player type is required'],
+      enum: {
+        values: TARGET_ATTENDEES_ENUM,
+        message: '{VALUE} is not a valid target attendee type',
+      },
+    },
     eventDate: { type: Date, required: true, index: true },
     eventEndDate: { type: Date },
     formattedDateRange: { type: String },
@@ -392,6 +525,8 @@ export const ExtraEventSchema = new Schema<IExtraEventDocument>(
     registrationDeadline: { type: Date, required: true },
     venueName: { type: String, required: true },
     venueAddress: { type: String, required: true },
+    latitude: { type: Number },
+    longitude: { type: Number },
     registrationFee: { type: Number, default: 0 },
     currency: { type: String, default: '£' },
     maxCapacity: { type: Number },
@@ -409,9 +544,38 @@ export const ExtraEventSchema = new Schema<IExtraEventDocument>(
       index: true,
     },
     participants: [ExtraEventParticipantSchema],
+    tournamentStatus: {
+      type: String,
+      enum: ['REGISTRATION', 'LIVE GAME', 'COMPLETED'],
+      default: 'REGISTRATION',
+      index: true,
+    },
+    isLiveMode: { type: Boolean, default: false },
+    simulationStep: {
+      type: String,
+      enum: ['NOT_STARTED', 'GROUP_STAGE', 'SEMIFINALS', 'GRAND_FINAL', 'COMPLETED'],
+      default: 'NOT_STARTED',
+    },
+    registeredClubs: [TournamentRegisteredClubSchema],
+    fixtures: [TournamentFixtureSchema],
+    standings: [TournamentStandingSchema],
+    bracket: TournamentBracketSchema,
   },
   { timestamps: true },
 );
+
+ExtraEventSchema.pre('validate', function (next) {
+  if (this.targetAttendees) {
+    const raw = String(this.targetAttendees).trim();
+    const matched = TARGET_ATTENDEES_ENUM.find((val) => val.toLowerCase() === raw.toLowerCase());
+    if (matched) {
+      this.targetAttendees = matched;
+    } else {
+      this.targetAttendees = 'All Members & Families';
+    }
+  }
+  next();
+});
 
 ExtraEventSchema.pre('save', function (next) {
   // Format readable date string if not manually set (e.g. 15-20 FEBRUARY 2026 or 5 MARCH 2026)

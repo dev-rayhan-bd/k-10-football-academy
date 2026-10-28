@@ -25,6 +25,13 @@ export class UserRegistrationService {
     const normalizedEmail = userData.email!.toLowerCase().trim();
     userData.email = normalizedEmail;
 
+    if (userData.role === 'SUPER_ADMIN' || userData.role === 'ADMIN') {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Access Denied: Cannot self-register as an administrator.',
+      );
+    }
+
     if ((userData.role as string) === 'PARENT' || (userData.role as string) === 'GUARDIAN') {
       userData.role = 'PARENT';
       delete (userData as any).accountManagedBy;

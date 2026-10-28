@@ -68,14 +68,19 @@ export const auth = (...requiredRoles: UserRole[]) => {
         );
       }
 
-      if (requiredRoles.length > 0 && !requiredRoles.includes(decoded.role)) {
+      if (requiredRoles.length > 0 && !requiredRoles.includes(user.role)) {
         throw new AppError(
           StatusCodes.FORBIDDEN,
           'You do not have permission to access this resource',
         );
       }
 
-      req.user = decoded;
+      req.user = {
+        ...decoded,
+        userId: user._id.toString(),
+        email: user.email,
+        role: user.role,
+      };
       next();
     } catch (err) {
       if (err instanceof AppError) throw err;
@@ -93,7 +98,13 @@ export const optionalAuth = () => {
     const token = authHeader.split(' ')[1];
     try {
       const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as IJwtPayload;
-      req.user = decoded;
+      const user = await UserModel.findById(decoded.userId).select('role status').lean();
+      if (user && user.status === 'ACTIVE') {
+        req.user = {
+          ...decoded,
+          role: user.role,
+        };
+      }
     } catch {
       // ignore invalid token for optional auth
     }

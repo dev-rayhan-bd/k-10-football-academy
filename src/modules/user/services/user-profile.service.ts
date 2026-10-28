@@ -300,6 +300,21 @@ export class UserProfileService {
   }
 
   async updateUser(id: string, updateData: Partial<IUser>): Promise<IUserDocument> {
+    const existing = await userRepository.findById(id);
+    if (!existing) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+    }
+    if (existing.role === 'SUPER_ADMIN') {
+      if (updateData.status && updateData.status !== 'ACTIVE') {
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          'Access Denied: Cannot block or deactivate a Super Admin account',
+        );
+      }
+      if (updateData.role && updateData.role !== 'SUPER_ADMIN') {
+        throw new AppError(StatusCodes.FORBIDDEN, 'Access Denied: Cannot demote a Super Admin');
+      }
+    }
     const user = await userRepository.updateById(id, updateData);
     if (!user) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
@@ -308,10 +323,17 @@ export class UserProfileService {
   }
 
   async deleteUser(id: string): Promise<void> {
-    const user = await userRepository.deleteById(id);
-    if (!user) {
+    const existing = await userRepository.findById(id);
+    if (!existing) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
     }
+    if (existing.role === 'SUPER_ADMIN') {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Access Denied: Cannot delete a Super Admin account',
+      );
+    }
+    await userRepository.deleteById(id);
   }
 }
 

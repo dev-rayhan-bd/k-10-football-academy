@@ -1,4 +1,4 @@
-import { Server } from 'http';
+import { Server, createServer } from 'http';
 import app from './app';
 import { env } from '@/config/env';
 import { connectDB, disconnectDB } from '@/config/db';
@@ -6,6 +6,7 @@ import { seedSuperAdmin } from '@/db/seedAdmin';
 import { initBackgroundJobs, closeBackgroundJobs } from '@/jobs';
 import { redisClient } from '@/config/redis';
 import { logger } from '@/utils/logger';
+import { initSocket } from '@/socket';
 
 let server: Server;
 let isShuttingDown = false;
@@ -31,10 +32,15 @@ async function bootstrap() {
       );
     }
 
-    // 3. Start HTTP Server
+    // 3. Start HTTP & Socket.IO Server
     const port = Number(process.env.PORT) || env.PORT || 5000;
-    server = app.listen(port, '0.0.0.0', () => {
-      logger.info(`⚽ K10 Football Academy Server running in ${env.NODE_ENV} mode on port ${port}`);
+    const httpServer = createServer(app);
+    initSocket(httpServer);
+
+    server = httpServer.listen(port, '0.0.0.0', () => {
+      logger.info(
+        `⚽ K10 Football Academy Server & Socket.IO running in ${env.NODE_ENV} mode on port ${port}`,
+      );
     });
 
     /**

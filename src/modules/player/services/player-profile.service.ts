@@ -64,8 +64,26 @@ export class PlayerProfileService {
   ) {
     const queryObj = { ...query };
 
+    // Support ageRange string e.g. "16-20", "18-24", "18+"
+    if (queryObj.ageRange && typeof queryObj.ageRange === 'string') {
+      const parts = queryObj.ageRange.split('-');
+      if (parts.length === 2) {
+        const min = Number(parts[0].trim());
+        const max = Number(parts[1].trim());
+        if (!isNaN(min) && !isNaN(max)) {
+          queryObj.age = { $gte: min, $lte: max };
+        }
+      } else if (queryObj.ageRange.includes('+')) {
+        const min = Number(queryObj.ageRange.replace('+', '').trim());
+        if (!isNaN(min)) {
+          queryObj.age = { $gte: min };
+        }
+      }
+      delete queryObj.ageRange;
+    }
+
     // Support number conversions for Mongoose matching
-    if (queryObj.age !== undefined && queryObj.age !== '') {
+    if (typeof queryObj.age === 'string' && queryObj.age.trim() !== '') {
       queryObj.age = Number(queryObj.age);
     }
     if (queryObj.minAge || queryObj.maxAge) {
@@ -85,15 +103,91 @@ export class PlayerProfileService {
       delete queryObj.maxRating;
     }
 
-    const playerQuery = new QueryBuilder(
-      PlayerProfile.find().populate('userId', 'name email avatar phone'),
-      queryObj,
-    )
-      .search(['fullName', 'position', 'country', 'currentClub', 'dualNationality', 'cvTier'])
-      .filter()
-      .sort()
-      .paginate()
-      .fields();
+    if (queryObj.position && typeof queryObj.position === 'string' && queryObj.position.trim()) {
+      queryObj.position = { $regex: queryObj.position.trim(), $options: 'i' };
+    }
+    if (queryObj.country && typeof queryObj.country === 'string' && queryObj.country.trim()) {
+      queryObj.country = { $regex: queryObj.country.trim(), $options: 'i' };
+    }
+
+    // ----------------------------------------------------
+    // Smart Single searchTerm handling:
+    // Enables the global top search bar to find players by:
+    // - Name ("Marcus", "Santos")
+    // - Position ("Forward", "Midfielder", "Goalkeeper")
+    // - Country ("England", "Bangladesh", "Brazil")
+    // - Age number ("18", "19", "21")
+    // - Age range ("16-20", "18-24")
+    // - CV Tier ("Gold", "Silver", "Bronze")
+    // - Club name ("Youth Stars", "Santos FC")
+    // ----------------------------------------------------
+    const rawSearch = (queryObj.search || queryObj.searchTerm) as string | undefined;
+    let baseQuery = PlayerProfile.find().populate('userId', 'name email avatar phone');
+
+    if (rawSearch && typeof rawSearch === 'string' && rawSearch.trim() !== '') {
+      const term = rawSearch.trim();
+      const searchConditions: any[] = [];
+
+      const textFields = [
+        'fullName',
+        'position',
+        'country',
+        'currentClub',
+        'dualNationality',
+        'cvTier',
+        'secondaryPositions',
+      ];
+
+      // Text field regex match
+      textFields.forEach((field) => {
+        searchConditions.push({ [field]: { $regex: term, $options: 'i' } });
+      });
+
+      // Exact age match if term is a number e.g. "18"
+      const ageNum = Number(term);
+      if (!isNaN(ageNum) && ageNum >= 5 && ageNum <= 60) {
+        searchConditions.push({ age: ageNum });
+      }
+
+      // Age range match if term contains a hyphen e.g. "16-20"
+      if (term.includes('-')) {
+        const parts = term.split('-');
+        if (parts.length === 2) {
+          const min = Number(parts[0].trim());
+          const max = Number(parts[1].trim());
+          if (!isNaN(min) && !isNaN(max)) {
+            searchConditions.push({ age: { $gte: min, $lte: max } });
+          }
+        }
+      } else if (term.includes('+')) {
+        const min = Number(term.replace('+', '').trim());
+        if (!isNaN(min)) {
+          searchConditions.push({ age: { $gte: min } });
+        }
+      }
+
+      // Multi-word search e.g. "Forward England"
+      const words = term.split(/\s+/).filter((w) => w.length > 1);
+      if (words.length > 1) {
+        const andGroup = words.map((w) => {
+          const wordNum = Number(w);
+          const wordConditions: any[] = textFields.map((field) => ({
+            [field]: { $regex: w, $options: 'i' },
+          }));
+          if (!isNaN(wordNum) && wordNum >= 5 && wordNum <= 60) {
+            wordConditions.push({ age: wordNum });
+          }
+          return { $or: wordConditions };
+        });
+        searchConditions.push({ $and: andGroup });
+      }
+
+      baseQuery = baseQuery.find({ $or: searchConditions });
+      delete queryObj.search;
+      delete queryObj.searchTerm;
+    }
+
+    const playerQuery = new QueryBuilder(baseQuery, queryObj).filter().sort().paginate().fields();
 
     const rawResult = await playerQuery.modelQuery;
     const meta = await playerQuery.countTotal();

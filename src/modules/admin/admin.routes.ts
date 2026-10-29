@@ -48,4 +48,39 @@ router.post(
 );
 router.delete('/membership-grants/:id', adminController.revokeMembershipGrant);
 
+// 5. Approvals & Verifications (Agents & Clubs Registration Applications)
+router.get('/approvals', adminController.getApprovals);
+router.get('/approvals/:id', adminController.getApprovalDetails);
+router.patch(
+  '/approvals/:id',
+  validateRequest(AdminValidation.reviewDecisionZodSchema),
+  adminController.decideApproval,
+);
+
+// 6. Success Stories Management (Unified across Academies, Agents, Clubs)
+router.get('/success-stories', adminController.getSuccessStories);
+router.get('/success-stories/:id', adminController.getSuccessStoryDetails);
+router.patch(
+  '/success-stories/:id',
+  validateRequest(AdminValidation.reviewDecisionZodSchema),
+  adminController.decideSuccessStory,
+);
+
+// 7. Platform Payments, Revenue, Commission & Spend Ledger
+router.get('/payments', adminController.getPayments);
+router.get('/payments/:id', adminController.getPaymentDetails);
+router.post(
+  '/payments',
+  validateRequest(AdminValidation.createPaymentZodSchema),
+  adminController.createPayment,
+);
+router.patch(
+  '/payments/:id',
+  validateRequest(AdminValidation.updatePaymentZodSchema),
+  adminController.updatePayment,
+);
+
+// 8. Platform Analytics (Top Cards, User Growth by Role, Role Distribution, Revenue Breakdown)
+router.get('/analytics', adminController.getAnalytics);
+
 export const AdminRoutes = router;

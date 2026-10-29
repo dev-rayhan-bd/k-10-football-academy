@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { catchAsync } from '@/utils/catchAsync';
@@ -101,7 +102,7 @@ export class AdminController {
   });
 
   // ==========================================
-  // MEMBERSHIP PLANS (Screenshots 1 & 2)
+  // MEMBERSHIP PLANS
   // ==========================================
 
   getMembershipPlans = catchAsync(async (req: Request, res: Response): Promise<void> => {
@@ -146,7 +147,7 @@ export class AdminController {
   });
 
   // ==========================================
-  // GRANT MEMBERSHIP (Screenshots 3 & 4)
+  // GRANT MEMBERSHIP
   // ==========================================
 
   getMembershipGrants = catchAsync(async (req: Request, res: Response): Promise<void> => {
@@ -176,6 +177,138 @@ export class AdminController {
       statusCode: StatusCodes.OK,
       success: true,
       message: 'Membership grant revoked successfully',
+      data: result,
+    });
+  });
+
+  // ==========================================
+  // APPROVALS & VERIFICATIONS (Agents & Clubs)
+  // ==========================================
+
+  getApprovals = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getApprovals(req.query as any);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Approval applications fetched successfully',
+      meta: result.meta as any,
+      data: result.data,
+    });
+  });
+
+  getApprovalDetails = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getApprovalDetailsById(req.params.id);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Approval application details fetched successfully',
+      data: result,
+    });
+  });
+
+  decideApproval = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.decideApproval(req.params.id, req.body);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  });
+
+  // ==========================================
+  // SUCCESS STORIES (Academies, Agents, Clubs)
+  // ==========================================
+
+  getSuccessStories = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getSuccessStories(req.query as any);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Success stories fetched successfully',
+      meta: result.meta as any,
+      data: result.data,
+    });
+  });
+
+  getSuccessStoryDetails = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getSuccessStoryById(req.params.id);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Success story details fetched successfully',
+      data: result,
+    });
+  });
+
+  decideSuccessStory = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.decideSuccessStory(req.params.id, req.body);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  });
+
+  // ==========================================
+  // PAYMENTS, REVENUE, COMMISSIONS & SPEND
+  // ==========================================
+
+  getPayments = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getPayments(req.query as any);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Admin platform payments and revenue summary fetched successfully',
+      meta: {
+        ...result.meta,
+        summary: result.summary,
+      } as any,
+      data: result.data,
+    });
+  });
+
+  getPaymentDetails = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getPaymentById(req.params.id);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Payment details retrieved successfully',
+      data: result,
+    });
+  });
+
+  createPayment = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.createPayment(req.body, req.user?.userId);
+    sendResponse(res, {
+      statusCode: StatusCodes.CREATED,
+      success: true,
+      message: 'Payment record created successfully',
+      data: result,
+    });
+  });
+
+  updatePayment = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.updatePayment(req.params.id, req.body, req.user?.userId);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Payment record updated successfully',
+      data: result,
+    });
+  });
+
+  // ==========================================
+  // ANALYTICS (User Growth, Role Distribution & Revenue Breakdown)
+  // ==========================================
+
+  getAnalytics = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getAnalytics(req.query as any);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Admin platform analytics fetched successfully',
       data: result,
     });
   });

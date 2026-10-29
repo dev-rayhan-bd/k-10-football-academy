@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { IMembershipPlan } from './subscription.interface';
@@ -13,41 +14,11 @@ export class SubscriptionService {
   }
 
   async getActivePlans(role?: string) {
-    // Ensure the 1 single flat price plan for CLUB exists ($199/month)
-    await MembershipPlan.findOneAndUpdate(
-      { targetRole: 'CLUB', isActive: true },
-      {
-        $setOnInsert: {
-          title: 'Professional Football Club Scouting Access',
-          targetRole: 'CLUB',
-          price: 199,
-          billingCycle: 'MONTHLY',
-          isActive: true,
-        },
-      },
-      { upsert: true, new: true },
-    );
-
-    // Ensure the 1 single flat price plan for AGENT exists ($99/month)
-    await MembershipPlan.findOneAndUpdate(
-      { targetRole: 'AGENT', isActive: true },
-      {
-        $setOnInsert: {
-          title: 'Licensed Football Agent Recruitment Access',
-          targetRole: 'AGENT',
-          price: 99,
-          billingCycle: 'MONTHLY',
-          isActive: true,
-        },
-      },
-      { upsert: true, new: true },
-    );
-
     const filter: Record<string, unknown> = { isActive: true };
     if (role) {
       filter.targetRole = String(role).toUpperCase();
     }
-    return MembershipPlan.find(filter);
+    return MembershipPlan.find(filter).sort({ createdAt: 1 });
   }
 
   async subscribe(userId: string, planId: string) {

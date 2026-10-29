@@ -9,6 +9,9 @@ const router = Router();
 // Strictly restrict all Super Admin / Admin management endpoints
 router.use(auth('SUPER_ADMIN', 'ADMIN'));
 
+// 0. Super Admin Central Dashboard
+router.get('/dashboard', adminController.getDashboard);
+
 // 1. Platform Entity Monitoring Tables
 router.get('/players', adminController.getPlayers);
 router.get('/coaches', adminController.getCoaches);

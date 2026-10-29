@@ -6,6 +6,27 @@ import { sendResponse } from '@/utils/sendResponse';
 import { adminService } from './admin.service';
 
 export class AdminController {
+  // ==========================================
+  // 0. DASHBOARD (Hero, Pending Approvals, 4 Metric Cards, Charts & Recent Activities)
+  // ==========================================
+
+  getDashboard = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getDashboard(req.query as any);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Super admin dashboard overview fetched successfully',
+      meta: result.meta as any,
+      data: {
+        hero: result.hero,
+        summary: result.summary,
+        pendingApprovals: result.pendingApprovals,
+        analytics: result.analytics,
+        recentActivities: result.recentActivities,
+      },
+    });
+  });
+
   getPlayers = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const result = await adminService.getPlayers(req.query as any);
     sendResponse(res, {

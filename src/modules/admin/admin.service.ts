@@ -1,14 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { UserRole } from '@/modules/user/user.interface';
-import { IAdminListQuery, IAdminPaymentQuery, IAdminAnalyticsQuery } from './services/admin.utils';
+import {
+  IAdminListQuery,
+  IAdminPaymentQuery,
+  IAdminAnalyticsQuery,
+  IAdminDashboardQuery,
+} from './services/admin.utils';
 import { adminMonitoringService } from './services/admin-monitoring.service';
 import { adminUserActionsService } from './services/admin-user-actions.service';
 import { adminMembershipService } from './services/admin-membership.service';
 import { adminApprovalsService } from './services/admin-approvals.service';
 import { adminPaymentsService } from './services/admin-payments.service';
 import { adminAnalyticsService } from './services/admin-analytics.service';
+import { adminDashboardService } from './services/admin-dashboard.service';
 
-export { IAdminListQuery, IAdminPaymentQuery, IAdminAnalyticsQuery };
+export { IAdminListQuery, IAdminPaymentQuery, IAdminAnalyticsQuery, IAdminDashboardQuery };
 
 /**
  * Enterprise Facade: AdminService
@@ -20,6 +26,11 @@ export { IAdminListQuery, IAdminPaymentQuery, IAdminAnalyticsQuery };
  * - AdminPaymentsService (Platform Revenue, Subscriptions, Game Reports, Commissions & Spend Ledger)
  */
 export class AdminService {
+  // --- 0. Super Admin Central Dashboard ---
+  async getDashboard(query: IAdminDashboardQuery) {
+    return adminDashboardService.getDashboard(query);
+  }
+
   // --- 1. Platform Entity Monitoring Tables ---
   async getPlayers(query: IAdminListQuery) {
     return adminMonitoringService.getPlayers(query);

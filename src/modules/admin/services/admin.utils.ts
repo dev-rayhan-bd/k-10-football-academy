@@ -47,6 +47,12 @@ export interface IAdminPaymentQuery {
   limit?: string | number;
 }
 
+export interface IAdminDashboardQuery {
+  year?: string | number;
+  page?: string | number;
+  limit?: string | number;
+}
+
 export interface IAdminAnalyticsQuery {
   year?: string | number;
   role?: string;
@@ -210,4 +216,21 @@ export const parseDurationInput = (
     };
   }
   return { months: 12, label: '1 Year' };
+};
+
+export const formatTimeAgo = (date?: Date | string | null): string => {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `m ago`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `h ago`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 30) return `d ago`;
+  const diffMonth = Math.floor(diffDay / 30);
+  if (diffMonth < 12) return `mo ago`;
+  return `y ago`;
 };

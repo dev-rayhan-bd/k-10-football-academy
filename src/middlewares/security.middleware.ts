@@ -49,6 +49,7 @@ const defaultAllowedOrigins = [
   'http://localhost:3001',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
+  'http://13.49.210.5',
 ];
 
 const envAllowedOrigins = process.env.ALLOWED_ORIGINS

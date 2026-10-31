@@ -255,7 +255,7 @@ export class AcademyTeamsService {
         dateOfBirth: player.dateOfBirth,
         overallRating: player.overallRating || 75,
         profileImage: player.profileImage || player.avatar || userObj?.avatar || '',
-        cvTier: player.cvTier || 'GOLD',
+        cvTier: player.cvTier || 'BRONZE',
         email: userObj?.email || player.email || '',
         phone: userObj?.phone || player.phone || '',
         jerseyNumber: player.jerseyNumber,
@@ -751,7 +751,7 @@ export class AcademyTeamsService {
       name: coach.fullName,
       role: coach.title || 'COACH',
       profileImage: coach.profileImage || '',
-      cvType: coach.cvTier || 'SILVER',
+      cvType: coach.cvTier || 'BRONZE',
       status: 'ACTIVE',
     }));
 
@@ -888,7 +888,7 @@ export class AcademyTeamsService {
         fullName: coach.fullName,
         title: coach.title || 'ASSISTANT COACH',
         profileImage: coach.profileImage || '',
-        cvType: coach.cvTier || 'SILVER',
+        cvType: coach.cvTier || 'BRONZE',
         academyAffiliation: affiliation,
         isAssigned,
         canAssign: !isAssigned && !isTeamCoachSlotFull,
@@ -988,7 +988,7 @@ export class AcademyTeamsService {
         name: coach.fullName,
         role: role || coach.title || 'ASSISTANT COACH',
         profileImage: coach.profileImage || '',
-        cvType: coach.cvTier || 'SILVER',
+        cvType: coach.cvTier || 'BRONZE',
         status: 'ACTIVE',
       },
     };

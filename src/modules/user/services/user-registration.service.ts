@@ -292,6 +292,7 @@ export class UserRegistrationService {
             weight: userData.weight || existingUser.weight,
             currentClub: userData.currentClub || existingUser.currentClub || '',
             profileImage: userData.avatar || existingUser.avatar || '',
+            cvTier: 'BRONZE',
           },
           { upsert: true, new: true },
         );
@@ -455,6 +456,7 @@ export class UserRegistrationService {
           weight: userData.weight || newUser.weight,
           currentClub: userData.currentClub || newUser.currentClub || '',
           profileImage: userData.avatar || newUser.avatar || '',
+          cvTier: 'BRONZE',
         },
         { upsert: true, new: true },
       );

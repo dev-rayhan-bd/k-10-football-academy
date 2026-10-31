@@ -66,6 +66,7 @@ export class ParentChildrenService {
           country: 'Bangladesh',
           currentClub: childUser.currentClub || 'K10 Academy',
           profileImage: childUser.avatar || '',
+          cvTier: 'BRONZE',
         });
       }
     }
@@ -229,6 +230,7 @@ export class ParentChildrenService {
       weight: childUser.weight,
       currentClub: childUser.currentClub || '',
       profileImage: childUser.avatar || '',
+      cvTier: 'BRONZE',
       profileCompletion: 40,
     });
 

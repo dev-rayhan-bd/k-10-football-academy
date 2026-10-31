@@ -488,7 +488,7 @@ export class PlayerAnalyticsService {
         position: profile.position,
         currentClub: profile.currentClub,
         profileImage: profile.profileImage || null,
-        tier: profile.tier || 'GOLD',
+        tier: profile.cvTier || 'BRONZE',
       },
       summary,
       fullPotential,

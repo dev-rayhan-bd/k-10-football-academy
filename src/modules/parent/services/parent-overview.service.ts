@@ -268,7 +268,7 @@ export class ParentOverviewService {
     const activeReportsFormatted = `${activeReportsCount} Pending`;
 
     // 4. Youth Profile Data
-    const tier = (activePlayer?.cvTier || 'GOLD').toUpperCase();
+    const tier = (activePlayer?.cvTier || 'BRONZE').toUpperCase();
     const youthProfile = activePlayer
       ? {
           _id: activePlayer._id,
@@ -280,8 +280,8 @@ export class ParentOverviewService {
           position: activePlayer.position || 'Forward',
           academyName: activeAcademy?.name || activePlayer.academy || 'Academy',
           headCoachName,
-          rating: activePlayer.overallRating || 94,
-          ratingFormatted: `${activePlayer.overallRating || 94} RATING`,
+          rating: activePlayer.overallRating ?? 50,
+          ratingFormatted: `${activePlayer.overallRating ?? 50} RATING`,
           formattedSubtitle: `Position: ${activePlayer.position || 'Forward'} | Academy: ${activeAcademy?.name || activePlayer.academy || 'Academy'}`,
           headCoachFormatted: `Head Coach: ${headCoachName}`,
         }
@@ -378,7 +378,7 @@ export class ParentOverviewService {
     // 7. Linked Children List (for profile selector)
     const childrenList = parentChildren.map((pc) => {
       const p = pc.player;
-      const cTier = (p.cvTier || 'GOLD').toUpperCase();
+      const cTier = (p.cvTier || 'BRONZE').toUpperCase();
       return {
         _id: p._id,
         id: p._id,

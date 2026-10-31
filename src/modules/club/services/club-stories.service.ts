@@ -1,7 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
-import { User } from '@/modules/user/user.model';
-import { Notification } from '@/modules/notification/notification.model';
+import { notificationService } from '@/modules/notification/notification.service';
 import { ClubProfile, ClubSuccessStory } from '../club.model';
 import { clubResolverService } from './club-resolver.service';
 
@@ -106,17 +105,13 @@ export class ClubStoriesService {
     });
 
     // Notify admins of new club success story submitted for review
-    const admins = await User.find({ role: { $in: ['SUPER_ADMIN', 'ADMIN'] } }).select('_id role');
-    for (const admin of admins) {
-      await Notification.create({
-        recipientId: admin._id,
-        recipientRole: admin.role,
-        title: 'New Club Success Story Submitted for Approval',
-        message: `${club.name || 'A Football Club'} has submitted a new success story "${storyTitle}" for review and approval.`,
-        type: 'STORY',
-        data: { clubId: club._id, storyId: story._id },
-      });
-    }
+    await notificationService.notifyAdmins({
+      settingKey: 'storyAlerts',
+      title: 'New Club Success Story Submitted for Approval',
+      message: `${club.name || 'A Football Club'} has submitted a new success story "${storyTitle}" for review and approval.`,
+      type: 'STORY',
+      data: { clubId: club._id, storyId: story._id },
+    });
 
     return {
       _id: story._id,
@@ -185,7 +180,7 @@ export class ClubStoriesService {
 
     const club = await ClubProfile.findById(story.clubId);
     if (club && club.userId) {
-      await Notification.create({
+      await notificationService.createNotification({
         recipientId: club.userId,
         recipientRole: 'CLUB',
         title: status === 'APPROVED' ? 'Success Story Approved!' : 'Success Story Review Update',

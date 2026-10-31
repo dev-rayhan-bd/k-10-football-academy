@@ -5,6 +5,7 @@ import { IMembershipPlan } from './subscription.interface';
 import { MembershipPlan, UserSubscription } from './subscription.model';
 import { UserModel } from '@/modules/user/user.model';
 import { Notification } from '@/modules/notification/notification.model';
+import { notificationService } from '@/modules/notification/notification.service';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 
@@ -148,6 +149,14 @@ export class SubscriptionService {
         message: `Your payment of $${plan?.price || 0} was successful. Full access to your ${user.role.toLowerCase()} dashboard and scouting tools has been unlocked!`,
         type: 'SUBSCRIPTION',
         data: { subscriptionId: subscription._id, planId, status: 'ACTIVE' },
+      });
+
+      await notificationService.notifyAdmins({
+        settingKey: 'paymentAlerts',
+        title: 'New Subscription Payment Received',
+        message: `${user.name || 'A user'} (${user.role}) has purchased a ${plan?.planName || plan?.title || 'membership'} plan for $${plan?.price || 0}.`,
+        type: 'PAYMENT',
+        data: { userId: user._id, subscriptionId: subscription._id, planId },
       });
     }
 

@@ -1,7 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { User } from '@/modules/user/user.model';
-import { Notification } from '@/modules/notification/notification.model';
+import { notificationService } from '@/modules/notification/notification.service';
 import { IClubProfile, IClubAchievement, IClubFavourite } from '../club.interface';
 import { ClubProfile, ClubAchievement, ClubFavourite } from '../club.model';
 import { clubResolverService } from './club-resolver.service';
@@ -128,19 +128,13 @@ export class ClubProfileService {
 
     if (payload.authorizationDocument || payload.clubRegistrationDocument) {
       const user = await User.findById(userId);
-      const admins = await User.find({ role: { $in: ['SUPER_ADMIN', 'ADMIN'] } }).select(
-        '_id role',
-      );
-      for (const admin of admins) {
-        await Notification.create({
-          recipientId: admin._id,
-          recipientRole: admin.role,
-          title: 'New Club Verification Request',
-          message: `${profile.name || user?.name || 'A Football Club'} has submitted verification documents for review.`,
-          type: 'VERIFICATION',
-          data: { userId, role: 'CLUB' },
-        });
-      }
+      await notificationService.notifyAdmins({
+        settingKey: 'verificationAlerts',
+        title: 'New Club Verification Request',
+        message: `${profile.name || user?.name || 'A Football Club'} has submitted verification documents for review.`,
+        type: 'VERIFICATION',
+        data: { userId, role: 'CLUB' },
+      });
     }
 
     const updated = await ClubProfile.findById(profile._id).populate(

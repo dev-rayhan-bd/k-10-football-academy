@@ -92,6 +92,12 @@ export interface INotificationSettings {
   newPlayers?: boolean;
   profileUpdates?: boolean;
   sharedWithYou?: boolean;
+  verificationAlerts?: boolean;
+  storyAlerts?: boolean;
+  paymentAlerts?: boolean;
+  userRegistrationAlerts?: boolean;
+  reportAlerts?: boolean;
+  systemAlerts?: boolean;
 }
 
 export interface IUserDocument extends IUser, Document {

@@ -149,6 +149,18 @@ export class GameReportCoachService {
       }
     }
 
+    void notificationService.notifyAdmins({
+      settingKey: 'reportAlerts',
+      title: 'Match Report Evaluated',
+      message: `Coach ${coachUser.name || 'Coach'} completed the match evaluation for ${playerProfile.fullName || 'player'}. Rating: ${finalRating}/100.`,
+      type: 'EVALUATION_COMPLETED',
+      data: {
+        reportId: matchRecord._id,
+        playerId: playerProfile._id,
+        rating: finalRating,
+      },
+    });
+
     // Send Completion Notification Email to Player
     const playerUser = await User.findById(playerProfile.userId);
     if (playerUser && playerUser.email) {

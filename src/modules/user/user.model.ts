@@ -123,6 +123,12 @@ const userSchema = new Schema<IUserDocument>(
       newPlayers: { type: Boolean, default: true },
       profileUpdates: { type: Boolean, default: true },
       sharedWithYou: { type: Boolean, default: true },
+      verificationAlerts: { type: Boolean, default: true },
+      storyAlerts: { type: Boolean, default: true },
+      paymentAlerts: { type: Boolean, default: true },
+      userRegistrationAlerts: { type: Boolean, default: true },
+      reportAlerts: { type: Boolean, default: true },
+      systemAlerts: { type: Boolean, default: true },
     },
   },
   {

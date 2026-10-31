@@ -14,7 +14,7 @@ export interface INotification {
   title: string;
   message: string;
   type: NotificationType | string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   isRead: boolean;
   createdAt?: Date;
   updatedAt?: Date;

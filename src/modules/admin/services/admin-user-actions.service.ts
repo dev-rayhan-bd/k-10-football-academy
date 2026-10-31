@@ -18,6 +18,7 @@ import { ClubProfile, ClubFavourite } from '@/modules/club/club.model';
 import { ParentProfile } from '@/modules/parent/parent.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { Notification } from '@/modules/notification/notification.model';
+import { notificationService } from '@/modules/notification/notification.service';
 import { userProfileService } from '@/modules/user/services/user-profile.service';
 
 export class AdminUserActionsService {
@@ -208,6 +209,20 @@ export class AdminUserActionsService {
         reason: payload.reason || '',
       },
     }).catch(() => null);
+
+    void notificationService.notifyAdmins({
+      settingKey: 'systemAlerts',
+      title: isBlocked ? 'User Account Restricted' : 'User Account Reactivated',
+      message: `User ${user.name} (${user.email}, ${user.role}) was ${nextStatus.toLowerCase()} by admin.${payload.reason ? ` Reason: ${payload.reason}` : ''}`,
+      type: 'SYSTEM',
+      data: {
+        targetUserId: user._id,
+        role: user.role,
+        previousStatus,
+        status: nextStatus,
+        reason: payload.reason || '',
+      },
+    });
 
     return {
       userId: user._id,

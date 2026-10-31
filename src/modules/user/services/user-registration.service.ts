@@ -17,6 +17,7 @@ import {
   PlayerFullPotential,
   FifaCardStats,
 } from '@/modules/player/player.model';
+import { notificationService } from '@/modules/notification/notification.service';
 
 export class UserRegistrationService {
   async registerUser(
@@ -498,6 +499,14 @@ export class UserRegistrationService {
       to: normalizedEmail,
       subject: 'Verify your K10 Football Academy Account',
       body: getOtpVerificationEmailTemplate(newUser.name, otp),
+    });
+
+    void notificationService.notifyAdmins({
+      settingKey: 'userRegistrationAlerts',
+      title: 'New User Registered',
+      message: `A new ${newUser.role.toLowerCase()} "${newUser.name}" (${newUser.email}) has registered on the platform.`,
+      type: 'NEW_USER',
+      data: { userId: newUser._id, role: newUser.role, email: newUser.email },
     });
 
     const userObj = newUser.toObject() as unknown as IUser;

@@ -8,7 +8,7 @@ import { Types } from 'mongoose';
 import { IAgentProfile, IVerificationDocument } from '../agent.interface';
 import { AgentProfile, VerificationDocument } from '../agent.model';
 import { UserModel } from '@/modules/user/user.model';
-import { Notification } from '@/modules/notification/notification.model';
+import { notificationService } from '@/modules/notification/notification.service';
 
 export class AgentProfileService {
   async getMyAgentProfile(userId: string) {
@@ -146,19 +146,13 @@ export class AgentProfileService {
       payload.associationMembershipDocument
     ) {
       const user = await UserModel.findById(userId);
-      const admins = await UserModel.find({ role: { $in: ['SUPER_ADMIN', 'ADMIN'] } }).select(
-        '_id role',
-      );
-      for (const admin of admins) {
-        await Notification.create({
-          recipientId: admin._id,
-          recipientRole: admin.role,
-          title: 'New Agent Verification Request',
-          message: `${user?.name || 'A Football Agent'} has submitted FIFA license and verification documents for review.`,
-          type: 'VERIFICATION',
-          data: { userId, role: 'AGENT' },
-        });
-      }
+      await notificationService.notifyAdmins({
+        settingKey: 'verificationAlerts',
+        title: 'New Agent Verification Request',
+        message: `${user?.name || 'A Football Agent'} has submitted FIFA license and verification documents for review.`,
+        type: 'VERIFICATION',
+        data: { userId, role: 'AGENT' },
+      });
     }
 
     return formatAgentProfileResponse(updated);

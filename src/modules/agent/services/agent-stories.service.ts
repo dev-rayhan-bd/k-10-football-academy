@@ -3,6 +3,7 @@ import { AppError } from '@/utils/AppError';
 import { SuccessStory } from '../agent.model';
 import { UserModel } from '@/modules/user/user.model';
 import { Notification } from '@/modules/notification/notification.model';
+import { notificationService } from '@/modules/notification/notification.service';
 
 export class AgentStoriesService {
   async createSuccessStory(creatorId: string, payload: any, creatorRole: string = 'AGENT') {
@@ -41,19 +42,13 @@ export class AgentStoriesService {
     if (!isSuperAdmin) {
       const creatorUser = await UserModel.findById(creatorId).select('name email agencyName');
       const creatorName = creatorUser?.agencyName || creatorUser?.name || 'An Agent';
-      const admins = await UserModel.find({ role: { $in: ['SUPER_ADMIN', 'ADMIN'] } }).select(
-        '_id role',
-      );
-      for (const admin of admins) {
-        await Notification.create({
-          recipientId: admin._id,
-          recipientRole: admin.role,
-          title: 'New Agent Success Story Submitted for Approval',
-          message: `${creatorName} has submitted a new success story "${storyTitle}" for review and approval.`,
-          type: 'STORY',
-          data: { creatorId, storyId: story._id },
-        });
-      }
+      await notificationService.notifyAdmins({
+        settingKey: 'storyAlerts',
+        title: 'New Agent Success Story Submitted for Approval',
+        message: `${creatorName} has submitted a new success story "${storyTitle}" for review and approval.`,
+        type: 'STORY',
+        data: { creatorId, storyId: story._id },
+      });
     }
 
     return {

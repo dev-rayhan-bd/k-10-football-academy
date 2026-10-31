@@ -415,6 +415,7 @@ export class ParentChildrenService {
         childPlayerId,
         childUserId,
         fullName: child?.fullName || childUser?.name || 'Child Athlete',
+        email: childUser?.email || '',
         position: child?.position || 'Forward',
         profileImage: child?.profileImage || childUser?.avatar || '',
         cvTier: child?.cvTier || 'BRONZE',

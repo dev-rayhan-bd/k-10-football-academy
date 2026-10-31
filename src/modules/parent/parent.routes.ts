@@ -83,8 +83,6 @@ router.post(
   switchToParent,
 );
 
-router.post('/switch-back', auth('PLAYER', 'PARENT', 'GUARDIAN', 'SUPER_ADMIN'), switchToParent);
-
 router.get('/my-children', auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'), getMyChildren);
 
 router.post(

@@ -108,7 +108,30 @@ export const initSocket = (server: HttpServer): SocketIOServer => {
       return data || {};
     };
 
-    // 1. Join Conversation Room
+    // 1. Start or Retrieve Conversation (1-on-1 or Group) via Socket
+    const handleStartConversation = async (raw: any, callback?: (res: any) => void) => {
+      try {
+        const data = parseSocketPayload(raw);
+        const conversation = await chatService.getOrCreateConversation(userId, data);
+        const convId = conversation.id || (conversation as any)._id?.toString();
+
+        if (convId) {
+          socket.join(`conversation:${convId}`);
+        }
+
+        socket.emit('conversation_started', { success: true, data: conversation });
+        callback?.({ success: true, data: conversation });
+      } catch (err: any) {
+        logger.error(`❌ Socket start_conversation error for user ${userId}: ${err.message}`);
+        socket.emit('chat_error', { event: 'start_conversation', message: err.message });
+        callback?.({ success: false, message: err.message });
+      }
+    };
+
+    socket.on('start_conversation', handleStartConversation);
+    socket.on('create_conversation', handleStartConversation);
+
+    // 2. Join Conversation Room
     socket.on('join_conversation', async (raw: any, callback?: (res: any) => void) => {
       try {
         const data = parseSocketPayload(raw);
@@ -134,7 +157,7 @@ export const initSocket = (server: HttpServer): SocketIOServer => {
       }
     });
 
-    // 2. Leave Conversation Room
+    // 3. Leave Conversation Room
     socket.on('leave_conversation', (raw: any) => {
       const data = parseSocketPayload(raw);
       const conversationId = data.conversationId || data.conversation_id || data.conversationID;
@@ -144,11 +167,14 @@ export const initSocket = (server: HttpServer): SocketIOServer => {
       }
     });
 
-    // 3. Send Message via Socket
+    // 4. Send Message via Socket
     socket.on('send_message', async (raw: any, callback?: (res: any) => void) => {
       try {
         const data = parseSocketPayload(raw);
         const message = await chatService.sendMessage(userId, data);
+        if (message.conversationId) {
+          socket.join(`conversation:${message.conversationId}`);
+        }
         socket.emit('message_sent', { success: true, data: message });
         callback?.({ success: true, data: message });
       } catch (err: any) {

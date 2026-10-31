@@ -90,6 +90,13 @@ export class ParentProfileService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Child user account not found');
     }
 
+    if (childUser.role === 'PARENT' || childUser.role === 'GUARDIAN') {
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        'Unauthorized: You are already logged in as a parent. A parent token cannot switch to parent.',
+      );
+    }
+
     const childPlayerProfile = await PlayerProfile.findOne({ userId: childUserId });
 
     // Determine parent user ID (from token or optional parameter)
@@ -122,7 +129,10 @@ export class ParentProfileService {
     }
 
     if (!resolvedParentUserId) {
-      throw new AppError(StatusCodes.FORBIDDEN, 'No linked parent account found for this player');
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        'Unauthorized: No linked parent account found for this player session',
+      );
     }
 
     // Verify parent user exists and is active
@@ -167,8 +177,8 @@ export class ParentProfileService {
 
     if (!linkExists) {
       throw new AppError(
-        StatusCodes.FORBIDDEN,
-        'You are not authorized to switch to this parent profile. Link does not exist.',
+        StatusCodes.UNAUTHORIZED,
+        'Unauthorized: You are not authorized to switch to this parent profile. Link does not exist.',
       );
     }
 

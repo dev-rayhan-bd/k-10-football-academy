@@ -19,7 +19,10 @@ export class PlayerCvTransformerService {
 
     // 1. Format Attributes
     const formattedAttributes = aggregatedProfile.attributesDoc
-      ? playerAttributeService.formatCategorizedAttributes(aggregatedProfile.attributesDoc)
+      ? playerAttributeService.formatCategorizedAttributes(
+          aggregatedProfile.attributesDoc,
+          aggregatedProfile.position,
+        )
       : null;
 
     // 2. Calculate 6 Category Averages for Radar & Skills Donut
@@ -107,9 +110,9 @@ export class PlayerCvTransformerService {
         else if (attrKey === 'aerialAbility')
           val = rawAttrDoc.aerialAbility ?? rawAttrDoc.aerialDuels ?? rawAttrDoc.heading;
         else if (attrKey === 'oneOnOne') val = rawAttrDoc.oneOnOne ?? rawAttrDoc.standingTackle;
-        else val = 88;
+        else val = 50;
       }
-      val = val !== undefined && val !== null ? Number(val) : 88;
+      val = val !== undefined && val !== null ? Number(val) : 50;
       posAttributeKeySet.add(attrKey);
       positionalCoefficientsList.push({
         key: attrKey,
@@ -121,41 +124,7 @@ export class PlayerCvTransformerService {
       });
     });
 
-    // Add base UI categories if not already added to ensure comprehensive list
-    const baseScreenshotKeys = [
-      'ballControl',
-      'dribbling',
-      'shortPassing',
-      'longPassing',
-      'crossing',
-      'shooting',
-      'finishing',
-      'longShots',
-      'positioning',
-      'vision',
-      'anticipation',
-      'composure',
-    ];
-
-    for (const key of baseScreenshotKeys) {
-      if (!posAttributeKeySet.has(key)) {
-        let val = rawAttrDoc[key];
-        if (val === undefined || val === null) {
-          if (key === 'composure') val = rawAttrDoc.composition ?? rawAttrDoc.composure;
-          else if (key === 'shooting') val = rawAttrDoc.shooting ?? rawAttrDoc.finishing;
-        }
-        val = val !== undefined && val !== null ? Number(val) : 88;
-        posAttributeKeySet.add(key);
-        positionalCoefficientsList.push({
-          key,
-          label: formatAttributeLabel(key),
-          value: val,
-          score: val,
-          grade: calculateMetricGrade(val),
-          weight: Math.round(((posCoefficients[key] as number) || 0.05) * 100),
-        });
-      }
-    }
+    // Positional attributes are strictly position-specific according to the client's Excel specification
 
     // 5. Foot Dominance
     const prefFoot = aggregatedProfile.preferredFoot || 'RIGHT';
@@ -471,7 +440,7 @@ export class PlayerCvTransformerService {
               : 'N/A',
           coachName: m.coachReview?.coachName || 'Coach',
           coachFeedback: m.coachReview?.coachFeedback || '',
-          amount: m.coachReview?.paymentAmount ? `$${m.coachReview.paymentAmount}` : '$6.99',
+          amount: m.coachReview?.paymentAmount ? `$${m.coachReview.paymentAmount}` : '$3.99',
           paymentStatus: m.coachReview?.paymentStatus || 'UNPAID',
           date: m.matchDate || m.gameDate,
           status:
@@ -1029,6 +998,8 @@ export class PlayerCvTransformerService {
       newGameReports: newGameReports.slice(0, 4),
       professionalReports: allProfessionalReports,
       certificates: aggregatedProfile.documents || [],
+      mediaGallery: aggregatedProfile.mediaGallery || [],
+      gallery: aggregatedProfile.mediaGallery || [],
     };
 
     return finalProfile;

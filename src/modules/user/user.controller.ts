@@ -59,6 +59,31 @@ export class UserController {
     });
   });
 
+  verifyParentConsent = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const userId = (req.body.userId ||
+      req.query.userId ||
+      req.query.id ||
+      req.params.userId) as string;
+    const token = (req.body.token || req.query.token) as string;
+    const relationshipType = (req.body.relationshipType ||
+      req.body.relationship ||
+      req.body.parentRelationship ||
+      req.body.relationType ||
+      req.query.relationshipType) as string;
+    const result = await this.service.verifyParentConsent(
+      userId,
+      token,
+      (req as any).user,
+      relationshipType,
+    );
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  });
+
   resendOtp = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const { email } = req.body;
     await this.service.resendOtp(email);

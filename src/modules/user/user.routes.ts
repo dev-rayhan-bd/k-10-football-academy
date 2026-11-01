@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { userController } from './user.controller';
 import { UserValidation } from './user.validation';
 import { validateRequest } from '@/middlewares/validateRequest';
-import { auth } from '@/middlewares/auth.middleware';
+import { auth, optionalAuth } from '@/middlewares/auth.middleware';
 import { upload } from '@/middlewares/multer';
 import { authRateLimiter, searchRateLimiter } from '@/config/rateLimit.config';
 import {
@@ -33,6 +33,19 @@ router.post(
   authRateLimiter,
   validateRequest(UserValidation.verifyOtpZodSchema),
   userController.verifyOtp,
+);
+
+router.post(
+  '/verify-parent-consent',
+  optionalAuth(),
+  authRateLimiter,
+  userController.verifyParentConsent,
+);
+router.get(
+  '/verify-parent-consent',
+  optionalAuth(),
+  authRateLimiter,
+  userController.verifyParentConsent,
 );
 
 router.post(

@@ -29,7 +29,7 @@ const ParentChildSchema = new Schema<IParentChildDocument>(
     childPlayerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true },
     relationshipType: {
       type: String,
-      enum: ['FATHER', 'MOTHER', 'GUARDIAN'],
+      enum: ['FATHER', 'MOTHER', 'GUARDIAN', 'PARENT'],
       required: true,
     },
   },

@@ -1,6 +1,17 @@
 import { Document, Types } from 'mongoose';
 
-export type RelationshipType = 'FATHER' | 'MOTHER' | 'GUARDIAN';
+export type RelationshipType = 'FATHER' | 'MOTHER' | 'GUARDIAN' | 'PARENT';
+
+export function normalizeRelationshipType(val?: string): RelationshipType {
+  if (!val) return 'PARENT';
+  const clean = String(val).trim().toUpperCase();
+  if (clean === 'FATHER' || clean === 'DAD') return 'FATHER';
+  if (clean === 'MOTHER' || clean === 'MOM') return 'MOTHER';
+  if (clean === 'GUARDIAN') return 'GUARDIAN';
+  if (clean === 'PARENT') return 'PARENT';
+  return 'PARENT';
+}
+
 export type CoachReviewStatus =
   'PENDING' | 'EVALUATED' | 'UNREQUESTED' | 'AWAITING_PAYMENT' | 'REJECTED';
 

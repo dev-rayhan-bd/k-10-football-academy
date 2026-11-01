@@ -8,7 +8,9 @@ yarn-error.log*
 coverage/
 .DS_Store
 .agents
-# DBML ERD Files
-*.dbml
+
 
 .vercel
+
+
+*.md

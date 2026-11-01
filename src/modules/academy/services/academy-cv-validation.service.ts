@@ -104,8 +104,11 @@ export class AcademyCvValidationService {
     if (query.tier && String(query.tier).toUpperCase() !== 'ALL') {
       const targetTier = String(query.tier).toUpperCase();
       filtered = filtered.filter((p) => {
+        const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
         const rating = Number(p.overallRating) || 0;
-        const tier = rating >= 80 ? 'GOLD' : rating >= 60 ? 'SILVER' : 'BRONZE';
+        const tier = isVerified
+          ? (p.cvTier as any) || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
+          : 'BRONZE';
         return tier === targetTier;
       });
     }
@@ -158,12 +161,12 @@ export class AcademyCvValidationService {
     };
 
     const playersList = paginated.map((p) => {
-      const rating = Number(p.overallRating) || 0;
-      const cvTier: 'GOLD' | 'SILVER' | 'BRONZE' =
-        rating >= 80 ? 'GOLD' : rating >= 60 ? 'SILVER' : 'BRONZE';
-
       const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
       const validationStatus = isVerified ? 'VERIFIED' : 'PENDING';
+      const rating = Number(p.overallRating) || 0;
+      const cvTier: 'GOLD' | 'SILVER' | 'BRONZE' = isVerified
+        ? (p.cvTier as any) || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
+        : 'BRONZE';
 
       const verifyingCoach = p.verifyingCoachId
         ? coachMap.get(p.verifyingCoachId.toString())
@@ -380,9 +383,11 @@ export class AcademyCvValidationService {
         age = p.age;
       }
 
-      const rating = Number(p.overallRating || 85);
-      const tier: 'GOLD' | 'SILVER' | 'BRONZE' =
-        rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE';
+      const rating = Number(p.overallRating || 50);
+      const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
+      const tier: 'GOLD' | 'SILVER' | 'BRONZE' = isVerified
+        ? (p.cvTier as any) || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
+        : 'BRONZE';
       const pid = p._id.toString();
 
       return {
@@ -541,8 +546,13 @@ export class AcademyCvValidationService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Player profile not found');
     }
 
-    const rating = Number((player as any).overallRating || 85);
-    const tier = rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE';
+    const rating = Number((player as any).overallRating || 50);
+    const isVerified = Boolean(
+      (player as any).isVerifiedByCoach || (player as any).coachVerification?.isVerified,
+    );
+    const tier = isVerified
+      ? (player as any).cvTier || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
+      : 'BRONZE';
 
     let age = 18;
     if (player.dateOfBirth) {

@@ -1,3 +1,5 @@
+import { StatusCodes } from 'http-status-codes';
+import { AppError } from '@/utils/AppError';
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { catchAsync } from '@/utils/catchAsync';
@@ -23,6 +25,20 @@ export const getAcademyProfile = catchAsync(async (req: Request, res: Response) 
     statusCode: 200,
     success: true,
     message: 'Academy profile fetched successfully',
+    data: result,
+  });
+});
+
+export const getAcademyHomepage = catchAsync(async (req: Request, res: Response) => {
+  const identifier = req.params.academyId || req.params.id || (req as any).user?.userId;
+  if (!identifier) {
+    throw new AppError(StatusCodes.BAD_REQUEST, 'Academy ID or authentication required');
+  }
+  const result = await academyService.getAcademyHomepage(identifier);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Academy homepage presentation details retrieved successfully',
     data: result,
   });
 });

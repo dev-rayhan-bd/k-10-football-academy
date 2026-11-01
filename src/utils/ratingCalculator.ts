@@ -462,26 +462,38 @@ export const normalizePositionKey = (pos: string): PositionKey => {
   if (clean in POSITION_ATTRIBUTE_COEFFICIENTS) {
     return clean as PositionKey;
   }
+  if (clean === 'RB/LB' || clean === 'LB/RB') return 'RB-LB';
+  if (clean === 'RWB/LWB' || clean === 'LWB/RWB') return 'RWB-LWB';
+  if (clean === 'RW/LW' || clean === 'LW/RW') return 'RW-LW';
+
+  // 1. Goalkeeping
+  if (clean.includes('GK') || clean.includes('GOAL') || clean.includes('KEEP')) {
+    return 'GK';
+  }
+
+  // 2. Wing Backs (must check before Fullbacks & Wingers)
   if (
-    clean.includes('ST') ||
-    clean.includes('FORWARD') ||
-    clean.includes('STRIKER') ||
-    clean.includes('ATTACK')
+    clean.includes('RWB') ||
+    clean.includes('LWB') ||
+    clean.includes('WING BACK') ||
+    clean.includes('WINGBACK')
   ) {
-    return 'ST';
+    return 'RWB-LWB';
   }
-  if (clean.includes('WING') || clean.includes('RW') || clean.includes('LW')) {
-    return 'RW-LW';
+
+  // 3. Full Backs (must check before CB)
+  if (
+    clean.includes('RB') ||
+    clean.includes('LB') ||
+    clean.includes('RIGHT BACK') ||
+    clean.includes('LEFT BACK') ||
+    clean.includes('FULL BACK') ||
+    clean.includes('FULLBACK')
+  ) {
+    return 'RB-LB';
   }
-  if (clean.includes('CAM') || clean.includes('ATTACKING MID')) {
-    return 'CAM';
-  }
-  if (clean.includes('CDM') || clean.includes('DEFENSIVE MID')) {
-    return 'CDM';
-  }
-  if (clean.includes('CM') || clean.includes('MID')) {
-    return 'CM';
-  }
+
+  // 4. Center Back
   if (
     clean.includes('CB') ||
     clean.includes('CENTER BACK') ||
@@ -490,15 +502,60 @@ export const normalizePositionKey = (pos: string): PositionKey => {
   ) {
     return 'CB';
   }
-  if (clean.includes('RWB') || clean.includes('LWB')) {
-    return 'RWB-LWB';
+
+  // 5. Attacking Midfielder (must check before Attack / Forward / CM)
+  if (
+    clean.includes('CAM') ||
+    clean.includes('ATTACKING MID') ||
+    clean.includes('ATTACKING-MID') ||
+    clean.includes('PLAYMAKER')
+  ) {
+    return 'CAM';
   }
-  if (clean.includes('RB') || clean.includes('LB') || clean.includes('FULLBACK')) {
-    return 'RB-LB';
+
+  // 6. Defensive Midfielder (must check before CM)
+  if (clean.includes('CDM') || clean.includes('DEFENSIVE MID') || clean.includes('HOLDING MID')) {
+    return 'CDM';
   }
-  if (clean.includes('GK') || clean.includes('GOAL') || clean.includes('KEEP')) {
-    return 'GK';
+
+  // 7. Wingers
+  if (
+    clean.includes('RW') ||
+    clean.includes('LW') ||
+    clean.includes('RIGHT WING') ||
+    clean.includes('LEFT WING') ||
+    clean.includes('WINGER') ||
+    clean.includes('WING')
+  ) {
+    return 'RW-LW';
   }
+
+  // 8. Centre Forward
+  if (
+    clean === 'CF' ||
+    clean.includes('CENTRE FORWARD') ||
+    clean.includes('CENTER FORWARD') ||
+    clean.includes('SECOND STRIKER') ||
+    clean.includes('SHADOW STRIKER')
+  ) {
+    return 'CF';
+  }
+
+  // 9. Strikers & Attackers
+  if (
+    clean.includes('ST') ||
+    clean.includes('FORWARD') ||
+    clean.includes('STRIKER') ||
+    clean.includes('ATTACK')
+  ) {
+    return 'ST';
+  }
+
+  // 10. Central Midfielder
+  if (clean.includes('CM') || clean.includes('MID')) {
+    return 'CM';
+  }
+
   return 'CM';
 };
 

@@ -117,6 +117,10 @@ export class AcademyService {
     return await academyProfileService.getProfileById(id);
   }
 
+  async getAcademyHomepage(identifier: string) {
+    return await academyProfileService.getAcademyHomepage(identifier);
+  }
+
   async getMyProfile(userId: string) {
     return await academyProfileService.getMyProfile(userId);
   }

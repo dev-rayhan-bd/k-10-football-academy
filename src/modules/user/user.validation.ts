@@ -51,6 +51,9 @@ export const createUserZodSchema = z.object({
 
       // Player details from Signup Form
       dateOfBirth: z.string().optional(),
+      parentEmail: z.string().email('Invalid parent/guardian email address').optional(),
+      parentRelationship: z.string().optional(),
+      relationshipType: z.string().optional(),
       position: z.string().optional(),
       height: z.union([z.number(), z.string()]).optional(),
       weight: z.union([z.number(), z.string()]).optional(),
@@ -84,6 +87,7 @@ export const createUserZodSchema = z.object({
         .optional()
         .or(z.literal('')),
       relationship: z.string().optional(),
+      relationType: z.string().optional(),
     })
     .superRefine((data, ctx) => {
       // Role: COACH
@@ -332,6 +336,15 @@ export const updateProfileZodSchema = z.object({
   }),
 });
 
+export const verifyParentConsentZodSchema = z.object({
+  body: z.object({
+    token: z.string().optional(),
+    userId: z.string().min(1, 'User ID is required'),
+    relationshipType: z.string().optional(),
+    relationship: z.string().optional(),
+  }),
+});
+
 export const UserValidation = {
   createUserZodSchema,
   loginUserZodSchema,
@@ -343,4 +356,5 @@ export const UserValidation = {
   changePasswordZodSchema,
   forgotPasswordZodSchema,
   resetPasswordZodSchema,
+  verifyParentConsentZodSchema,
 };

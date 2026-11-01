@@ -765,8 +765,15 @@ export class PlayerProfileService {
 
     if (profile) {
       // Sync attribute updates into PlayerAttributes collection if passed
-      const attrsToUpdate =
+      let attrsToUpdate =
         payload.attributes || payload.analysisOfPlayerAttributes || payload.categories;
+      if (typeof attrsToUpdate === 'string') {
+        try {
+          attrsToUpdate = JSON.parse(attrsToUpdate);
+        } catch {
+          // ignore invalid json
+        }
+      }
       if (attrsToUpdate) {
         await playerAttributeService.updateAttributes(profile._id.toString(), attrsToUpdate);
       } else {
@@ -954,8 +961,8 @@ export class PlayerProfileService {
 
     const relType =
       payload.relationshipType &&
-      ['FATHER', 'MOTHER', 'GUARDIAN'].includes(payload.relationshipType.toUpperCase())
-        ? (payload.relationshipType.toUpperCase() as 'FATHER' | 'MOTHER' | 'GUARDIAN')
+      ['FATHER', 'MOTHER', 'GUARDIAN', 'PARENT'].includes(payload.relationshipType.toUpperCase())
+        ? (payload.relationshipType.toUpperCase() as any)
         : 'FATHER';
 
     const link = await ParentChild.create({

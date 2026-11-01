@@ -90,7 +90,14 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
   if (req.body.data) {
     try {
       const parsed = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
-      payload = { ...parsed, ...payload };
+      payload = { ...payload, ...parsed };
+      if (typeof payload.attributes === 'string') {
+        try {
+          payload.attributes = JSON.parse(payload.attributes);
+        } catch {
+          // ignore invalid json
+        }
+      }
       delete payload.data;
     } catch {
       // ignore

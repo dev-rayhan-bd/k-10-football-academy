@@ -1,7 +1,13 @@
 import { AppError } from '@/utils/AppError';
 import { UserModel } from '@/modules/user/user.model';
+import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { CoachProfile } from '../coach.model';
-import { PlayerProfile, PlayerAttributes, MatchRecord } from '@/modules/player/player.model';
+import {
+  PlayerProfile,
+  PlayerAttributes,
+  MatchRecord,
+  PlayerMentalAnalysis,
+} from '@/modules/player/player.model';
 import { playerStatsService } from '@/modules/player/services/player-stats.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { NotificationService } from '@/modules/notification/notification.service';
@@ -15,6 +21,12 @@ export class CoachCvValidationService {
     payload: {
       physicalSkills?: Record<string, number>;
       technicalSkills?: Record<string, number>;
+      behavioralSkills?: Record<string, number>;
+      mentalSkills?: Record<string, number>;
+      physical?: Record<string, number>;
+      technical?: Record<string, number>;
+      behavioral?: Record<string, number>;
+      mental?: Record<string, number>;
       attributes?: Record<string, number>;
       coachFeedback?: string;
       certificateNote?: string;
@@ -24,6 +36,24 @@ export class CoachCvValidationService {
     const coach = await CoachProfile.findOne({ userId: coachUserId });
     if (!coach) {
       throw new AppError(404, 'Coach profile not found');
+    }
+
+    // 1b. Active Coach Subscription check
+    const coachSub = await UserSubscription.findOne({
+      userId: coachUserId,
+      status: 'ACTIVE',
+    });
+    if (!coachSub) {
+      throw new AppError(
+        402,
+        'Payment Required: An active coach membership subscription is required to validate player CVs. Please complete your coach subscription payment.',
+      );
+    }
+    if (coachSub.nextBillingDate && new Date(coachSub.nextBillingDate) < new Date()) {
+      throw new AppError(
+        402,
+        'Subscription Expired: Your coach membership subscription has expired. Please renew your subscription to reactivate CV validation access.',
+      );
     }
 
     // 1. Strict Club/Academy Registration Check: Coach MUST have an officially approved academy affiliation
@@ -62,7 +92,7 @@ export class CoachCvValidationService {
       );
     }
 
-    // 4. Strict Permissions Lock: Coach has permission ONLY to edit and assess Physical Skills & Technical Skills
+    // 4. Strict Permissions Lock: Coach has permission ONLY to edit and assess Physical Skills, Technical Skills & Behavioral/Mental Skills
     const physicalKeys = [
       'pace',
       'acceleration',
@@ -92,20 +122,59 @@ export class CoachCvValidationService {
       'interception',
       'interceptions',
     ];
+    const behavioralKeys = [
+      'creativity',
+      'leadership',
+      'confidence',
+      'composure',
+      'composition',
+      'motivation',
+      'focus',
+      'determination',
+      'workRate',
+      'teamwork',
+      'consistency',
+      'concentration',
+      'aggression',
+      'bravery',
+      'decisions',
+      'decisionMaking',
+    ];
+    const mentalKeys = [
+      'creativity',
+      'leadership',
+      'confidence',
+      'composure',
+      'motivation',
+      'focus',
+    ];
 
     const allowedSkillsToUpdate: Record<string, number> = {};
+    const mentalToUpdate: Record<string, number> = {};
+
     const rawSkills = {
       ...(payload.physicalSkills || {}),
       ...(payload.technicalSkills || {}),
+      ...(payload.behavioralSkills || {}),
+      ...(payload.mentalSkills || {}),
       ...((payload as any).physical || {}),
       ...((payload as any).technical || {}),
+      ...((payload as any).behavioral || {}),
+      ...((payload as any).mental || {}),
       ...(payload.attributes || {}),
       ...(payload as any),
     };
 
     for (const [key, val] of Object.entries(rawSkills)) {
-      if (physicalKeys.includes(key) || technicalKeys.includes(key)) {
+      if (
+        physicalKeys.includes(key) ||
+        technicalKeys.includes(key) ||
+        behavioralKeys.includes(key)
+      ) {
         allowedSkillsToUpdate[key] = Math.max(0, Math.min(100, Number(val)));
+      }
+      if (mentalKeys.includes(key)) {
+        mentalToUpdate[key] = Math.max(0, Math.min(100, Number(val)));
       }
     }
 
@@ -113,6 +182,23 @@ export class CoachCvValidationService {
       await PlayerAttributes.findOneAndUpdate(
         { playerId: player._id },
         { $set: allowedSkillsToUpdate },
+        { upsert: true, new: true },
+      );
+    }
+
+    if (Object.keys(mentalToUpdate).length > 0) {
+      const mentalVals = Object.values(mentalToUpdate);
+      const overallMentalScore = Math.round(
+        mentalVals.reduce((a, b) => a + b, 0) / mentalVals.length,
+      );
+      await PlayerMentalAnalysis.findOneAndUpdate(
+        { playerId: player._id },
+        {
+          $set: {
+            ...mentalToUpdate,
+            overallMentalScore,
+          },
+        },
         { upsert: true, new: true },
       );
     }

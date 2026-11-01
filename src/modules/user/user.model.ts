@@ -113,6 +113,13 @@ const userSchema = new Schema<IUserDocument>(
     parentProfileId: { type: Schema.Types.ObjectId, ref: 'ParentProfile' },
     contactPhone: { type: String },
     address: { type: String },
+    // Under-16 Safeguarding & Parental Consent
+    parentEmail: { type: String, trim: true, lowercase: true },
+    parentRelationship: { type: String },
+    relationshipType: { type: String },
+    isParentConsentVerified: { type: Boolean, default: false },
+    parentConsentToken: { type: String },
+    parentConsentExpires: { type: Date },
     notificationSettings: {
       newVideoLikes: { type: Boolean, default: true },
       profileViews: { type: Boolean, default: true },
@@ -179,6 +186,18 @@ const userSchema = new Schema<IUserDocument>(
           delete ret.contactPhone;
           delete ret.address;
         }
+        if (ret.role !== 'PLAYER') {
+          delete ret.isParentConsentVerified;
+          delete ret.parentEmail;
+          delete ret.parentConsentToken;
+          delete ret.parentConsentExpires;
+        }
+        if (['COACH', 'AGENT', 'CLUB'].includes(ret.role)) {
+          // Coach, Agent, and Club require admin credentials approval
+        } else if (ret.isEmailVerified) {
+          ret.isVerified = true;
+          ret.verificationStatus = 'APPROVED';
+        }
         return ret;
       },
     },
@@ -227,6 +246,18 @@ const userSchema = new Schema<IUserDocument>(
           delete ret.parentProfileId;
           delete ret.contactPhone;
           delete ret.address;
+        }
+        if (ret.role !== 'PLAYER') {
+          delete ret.isParentConsentVerified;
+          delete ret.parentEmail;
+          delete ret.parentConsentToken;
+          delete ret.parentConsentExpires;
+        }
+        if (['COACH', 'AGENT', 'CLUB'].includes(ret.role)) {
+          // Coach, Agent, and Club require admin credentials approval
+        } else if (ret.isEmailVerified) {
+          ret.isVerified = true;
+          ret.verificationStatus = 'APPROVED';
         }
         return ret;
       },

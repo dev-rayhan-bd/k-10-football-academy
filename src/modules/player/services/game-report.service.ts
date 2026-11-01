@@ -21,7 +21,7 @@ export class GameReportService {
   }
 
   /**
-   * Flow 2 - Step A: "Request From Coach" (Screen 1 & 2 + Coach Selection & $6.99 Payment checkout session)
+   * Flow 2 - Step A: "Request From Coach" (Screen 1 & 2 + Coach Selection & $3.99 Payment checkout session)
    */
   async requestCoachGameReport(userId: string, payload: any) {
     return gameReportPaymentService.requestCoachGameReport(userId, payload);
@@ -53,6 +53,13 @@ export class GameReportService {
    */
   async completeCoachGameReport(reportId: string, coachUser: any, payload: any) {
     return gameReportCoachService.completeCoachGameReport(reportId, coachUser, payload);
+  }
+
+  /**
+   * Action on Game Report Request (Accept, Reject, Schedule, Cancel)
+   */
+  async updateGameReportStatus(reportId: string, user: any, payload: any) {
+    return gameReportCoachService.updateGameReportStatus(reportId, user, payload);
   }
 
   /**

@@ -86,7 +86,7 @@ export class PlayerCvPipelineService {
           let: { pId: '$_id' },
           pipeline: [
             { $match: { $expr: { $eq: ['$playerId', '$$pId'] } } },
-            { $sort: { matchDate: -1 } },
+            { $sort: { matchDate: -1, createdAt: -1 } },
           ],
           as: 'matchRecords',
         },
@@ -98,7 +98,7 @@ export class PlayerCvPipelineService {
           let: { pId: '$_id' },
           pipeline: [
             { $match: { $expr: { $eq: ['$childPlayerId', '$$pId'] } } },
-            { $sort: { matchDate: -1 } },
+            { $sort: { matchDate: -1, createdAt: -1 } },
             { $limit: 10 },
           ],
           as: 'professionalReports',
@@ -182,6 +182,18 @@ export class PlayerCvPipelineService {
             { $limit: 10 },
           ],
           as: 'coachEvaluations',
+        },
+      },
+      // 9. $lookup player media gallery (photos & videos)
+      {
+        $lookup: {
+          from: 'playermedias',
+          let: { pId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$playerId', '$$pId'] } } },
+            { $sort: { createdAt: -1 } },
+          ],
+          as: 'mediaGallery',
         },
       },
     ]);

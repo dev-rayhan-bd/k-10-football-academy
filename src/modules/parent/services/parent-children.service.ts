@@ -11,6 +11,7 @@ import {
 } from '@/modules/player/player.model';
 import { Team } from '@/modules/academy/academy.model';
 import { ParentProfile, ParentChild } from '../parent.model';
+import { normalizeRelationshipType, RelationshipType } from '../parent.interface';
 
 export class ParentChildrenService {
   async linkChild(
@@ -18,7 +19,7 @@ export class ParentChildrenService {
     payload: {
       childPlayerId?: string;
       childUserId?: string;
-      relationshipType: 'FATHER' | 'MOTHER' | 'GUARDIAN';
+      relationshipType?: RelationshipType | string;
     },
   ) {
     const parent = await UserModel.findById(parentId);
@@ -113,10 +114,11 @@ export class ParentChildrenService {
       ]);
     }
 
+    const relType = normalizeRelationshipType(payload.relationshipType);
     const link = await ParentChild.create({
       parentId: effectiveParentId,
       childPlayerId: resolvedPlayerProfile._id,
-      relationshipType: payload.relationshipType,
+      relationshipType: relType,
     });
 
     // Mark child account as managed by PARENT and verified
@@ -258,10 +260,13 @@ export class ParentChildrenService {
     childUser.playerId = playerProf._id.toString();
     await childUser.save();
 
+    const relType = normalizeRelationshipType(
+      payload.relationshipType || payload.relationship || parentProfile?.relationship || 'PARENT',
+    );
     const link = await ParentChild.create({
       parentId: effectiveParentId,
       childPlayerId: playerProf._id,
-      relationshipType: payload.relationshipType || 'FATHER',
+      relationshipType: relType,
     });
 
     return {
@@ -290,14 +295,81 @@ export class ParentChildrenService {
   }
 
   async getChildren(parentId: string) {
+    const parentUser = Types.ObjectId.isValid(parentId) ? await UserModel.findById(parentId) : null;
+
+    let parentProfile = await ParentProfile.findOne({
+      $or: [{ _id: parentId }, { userId: parentId }],
+    }).catch(() => null);
+
+    if (!parentProfile && parentUser) {
+      parentProfile = await ParentProfile.create({
+        userId: parentUser._id,
+        contactPhone: parentUser.phone || '+8801700000000',
+        firstName: parentUser.name?.split(' ')[0] || '',
+        lastName: parentUser.name?.split(' ').slice(1).join(' ') || '',
+      }).catch(() => null);
+    }
+
     const targetParentIds: any[] = [parentId];
-    if (Types.ObjectId.isValid(parentId)) {
-      const parentProfile = await ParentProfile.findOne({
-        $or: [{ _id: parentId }, { userId: parentId }],
+    if (parentProfile) {
+      targetParentIds.push(parentProfile._id);
+      targetParentIds.push(parentProfile.userId);
+    }
+
+    // Auto-reconcile: link any child accounts where parentEmail matches and consent is verified
+    const parentEmail = parentUser?.email?.toLowerCase().trim();
+    if (parentEmail && parentProfile) {
+      const matchingChildren = await UserModel.find({
+        role: 'PLAYER',
+        parentEmail: { $regex: new RegExp(`^${parentEmail}$`, 'i') },
+        isParentConsentVerified: true,
       });
-      if (parentProfile) {
-        targetParentIds.push(parentProfile._id);
-        targetParentIds.push(parentProfile.userId);
+
+      for (const child of matchingChildren) {
+        let playerProf = await PlayerProfile.findOne({ userId: child._id });
+        if (!playerProf) {
+          const birthDate = child.dateOfBirth
+            ? new Date(child.dateOfBirth)
+            : new Date('2010-01-01');
+          const age = Math.max(0, new Date().getFullYear() - birthDate.getFullYear());
+          playerProf = await PlayerProfile.create({
+            userId: child._id,
+            fullName: child.name,
+            position: child.position || 'Forward',
+            dateOfBirth: birthDate,
+            age,
+            country: child.country || 'Bangladesh',
+            height: child.height,
+            weight: child.weight,
+            currentClub: child.currentClub || '',
+            profileImage: child.avatar || '',
+            cvTier: 'BRONZE',
+          }).catch(() => null);
+        }
+
+        if (playerProf) {
+          if (!child.playerId) {
+            child.playerId = playerProf._id.toString();
+            await child.save().catch(() => null);
+          }
+          const resolvedRel = normalizeRelationshipType(
+            child.parentRelationship ||
+              child.relationshipType ||
+              parentProfile?.relationship ||
+              parentUser?.parentRelationship ||
+              parentUser?.relationshipType ||
+              'PARENT',
+          );
+          await ParentChild.findOneAndUpdate(
+            { parentId: parentProfile._id, childPlayerId: playerProf._id },
+            {
+              parentId: parentProfile._id,
+              childPlayerId: playerProf._id,
+              relationshipType: resolvedRel,
+            },
+            { upsert: true, new: true },
+          ).catch(() => null);
+        }
       }
     }
 
@@ -328,125 +400,170 @@ export class ParentChildrenService {
       teamByPlayerId.set(t._id.toString(), t);
     });
 
-    return links.map((link: any) => {
-      const child = link.childPlayerId;
-      const childUser = child?.userId;
-      const childUserId = childUser?._id
-        ? childUser._id.toString()
-        : child?.userId
-          ? child.userId.toString()
-          : '';
-      const childPlayerId = child?._id ? child._id.toString() : link.childPlayerId.toString();
+    return links
+      .filter((link: any) => link.childPlayerId)
+      .map((link: any) => {
+        const child = link.childPlayerId;
+        const childUser = child?.userId;
+        const childUserId = childUser?._id
+          ? childUser._id.toString()
+          : child?.userId
+            ? child.userId.toString()
+            : '';
+        const childPlayerId = child?._id ? child._id.toString() : link.childPlayerId.toString();
 
-      // 1. Resolve current club: player's present club from clubHistory ALWAYS has priority
-      let currentClub = '';
-      if (Array.isArray(child?.clubHistory) && child.clubHistory.length > 0) {
-        const presentClubItem = child.clubHistory.find(
-          (c: any) =>
-            c.isCurrent === true ||
-            String(c.isCurrent).toLowerCase() === 'true' ||
-            String(c.to || '')
-              .trim()
-              .toLowerCase() === 'present',
-        );
-        if (presentClubItem && presentClubItem.clubName) {
-          currentClub = presentClubItem.clubName;
-        }
-      }
-      if (!currentClub) {
-        currentClub = child?.currentClub || childUser?.currentClub || child?.academy || '';
-      }
-
-      // 2. Resolve team & assigned coaches
-      const team =
-        teamByPlayerId.get(childPlayerId) ||
-        (child?.teamId ? teamByPlayerId.get(child.teamId.toString()) : null);
-
-      let coachesAssigned = '';
-      let assignedCoach: any = null;
-      const assignedCoaches: any[] = [];
-
-      if (team && Array.isArray(team.coachIds) && team.coachIds.length > 0) {
-        team.coachIds.forEach((c: any) => {
-          if (c) {
-            assignedCoaches.push({
-              id: c._id ? c._id.toString() : '',
-              name: c.fullName || c.title || 'Coach',
-              title: c.title || 'Head Coach',
-              profileImage: c.profileImage || '',
-            });
+        // 1. Resolve current club: player's present club from clubHistory ALWAYS has priority
+        let currentClub = '';
+        if (Array.isArray(child?.clubHistory) && child.clubHistory.length > 0) {
+          const presentClubItem = child.clubHistory.find(
+            (c: any) =>
+              c.isCurrent === true ||
+              String(c.isCurrent).toLowerCase() === 'true' ||
+              String(c.to || '')
+                .trim()
+                .toLowerCase() === 'present',
+          );
+          if (presentClubItem && presentClubItem.clubName) {
+            currentClub = presentClubItem.clubName;
           }
-        });
-        coachesAssigned = team.coachIds
-          .map((c: any) => c.fullName || c.title)
-          .filter(Boolean)
-          .join(', ');
-        if (assignedCoaches.length > 0) {
-          assignedCoach = assignedCoaches[0];
         }
-      }
-      if (!coachesAssigned) {
-        coachesAssigned =
-          child?.coachesAssigned || child?.coachVerification?.coachName || child?.coachName || '';
+        if (!currentClub) {
+          currentClub = child?.currentClub || childUser?.currentClub || child?.academy || '';
+        }
+
+        // 2. Resolve team & assigned coaches
+        const team =
+          teamByPlayerId.get(childPlayerId) ||
+          (child?.teamId ? teamByPlayerId.get(child.teamId.toString()) : null);
+
+        let coachesAssigned = '';
+        let assignedCoach: any = null;
+        const assignedCoaches: any[] = [];
+
+        if (team && Array.isArray(team.coachIds) && team.coachIds.length > 0) {
+          team.coachIds.forEach((c: any) => {
+            if (c) {
+              assignedCoaches.push({
+                id: c._id ? c._id.toString() : '',
+                name: c.fullName || c.title || 'Coach',
+                title: c.title || 'Head Coach',
+                profileImage: c.profileImage || '',
+              });
+            }
+          });
+          coachesAssigned = team.coachIds
+            .map((c: any) => c.fullName || c.title)
+            .filter(Boolean)
+            .join(', ');
+          if (assignedCoaches.length > 0) {
+            assignedCoach = assignedCoaches[0];
+          }
+        }
+        if (!coachesAssigned) {
+          coachesAssigned =
+            child?.coachesAssigned || child?.coachVerification?.coachName || child?.coachName || '';
+          if (coachesAssigned) {
+            assignedCoach = {
+              id: '',
+              name: coachesAssigned,
+              title: 'Coach',
+              profileImage: '',
+            };
+            assignedCoaches.push(assignedCoach);
+          }
+        }
+
+        // 3. Resolve academy
+        const academyName = child?.academy || (team?.academyId as any)?.name || '';
+
+        const isCvVerified = Boolean(
+          child?.isVerifiedByCoach || child?.coachVerification?.isVerified,
+        );
+        const isAccountVerified = Boolean(
+          childUser?.isVerified === true ||
+          childUser?.verificationStatus === 'APPROVED' ||
+          childUser?.accountManagedBy === 'PARENT',
+        );
+
+        const item: any = {
+          linkId: link._id,
+          relationshipType: link.relationshipType,
+          childPlayerId,
+          childUserId,
+          fullName: child?.fullName || childUser?.name || 'Child Athlete',
+          email: childUser?.email || '',
+          position: child?.position || 'Forward',
+          profileImage: child?.profileImage || childUser?.avatar || '',
+          cvTier: child?.cvTier || 'BRONZE',
+          isCvVerified,
+          isVerifiedByCoach: isCvVerified,
+          isVerified: isAccountVerified,
+          overallRating: child?.overallRating ?? 50,
+          age: child?.age || null,
+          dateOfBirth: child?.dateOfBirth || null,
+          height: child?.height ?? childUser?.height ?? null,
+          weight: child?.weight ?? childUser?.weight ?? null,
+          preferredFoot: child?.preferredFoot || 'RIGHT',
+          currentClub,
+          accountManagedBy: childUser?.accountManagedBy || 'PARENT',
+        };
+
+        if (academyName) {
+          item.academy = academyName;
+          item.academyLocation = academyName;
+        }
+
         if (coachesAssigned) {
-          assignedCoach = {
-            id: '',
-            name: coachesAssigned,
-            title: 'Coach',
-            profileImage: '',
-          };
-          assignedCoaches.push(assignedCoach);
+          item.coachesAssigned = coachesAssigned;
+          item.coachName = coachesAssigned;
+          item.assignedCoach = assignedCoach;
+          item.assignedCoaches = assignedCoaches;
         }
+
+        return item;
+      });
+  }
+
+  async getChildRegistrationRequests(parentId: string) {
+    const parent = await UserModel.findById(parentId);
+    if (!parent) throw new AppError(StatusCodes.NOT_FOUND, 'Parent user not found');
+
+    const parentEmail = parent.email.toLowerCase().trim();
+
+    const pendingChildren = await UserModel.find({
+      role: 'PLAYER',
+      parentEmail,
+      isParentConsentVerified: false,
+    }).sort({ createdAt: -1 });
+
+    return pendingChildren.map((child: any) => {
+      const birthDate = child.dateOfBirth ? new Date(child.dateOfBirth) : null;
+      let age = child.age;
+      if (birthDate && !isNaN(birthDate.getTime())) {
+        const today = new Date();
+        let calcAge = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) calcAge--;
+        age = calcAge;
       }
 
-      // 3. Resolve academy
-      const academyName = child?.academy || (team?.academyId as any)?.name || '';
-
-      const isCvVerified = Boolean(
-        child?.isVerifiedByCoach || child?.coachVerification?.isVerified,
-      );
-      const isAccountVerified = Boolean(
-        childUser?.isVerified === true ||
-        childUser?.verificationStatus === 'APPROVED' ||
-        childUser?.accountManagedBy === 'PARENT',
-      );
-
-      const item: any = {
-        linkId: link._id,
-        relationshipType: link.relationshipType,
-        childPlayerId,
-        childUserId,
-        fullName: child?.fullName || childUser?.name || 'Child Athlete',
-        email: childUser?.email || '',
-        position: child?.position || 'Forward',
-        profileImage: child?.profileImage || childUser?.avatar || '',
-        cvTier: child?.cvTier || 'BRONZE',
-        isCvVerified,
-        isVerifiedByCoach: isCvVerified,
-        isVerified: isAccountVerified,
-        overallRating: child?.overallRating ?? 50,
-        age: child?.age || null,
-        dateOfBirth: child?.dateOfBirth || null,
-        height: child?.height ?? childUser?.height ?? null,
-        weight: child?.weight ?? childUser?.weight ?? null,
-        preferredFoot: child?.preferredFoot || 'RIGHT',
-        currentClub,
-        accountManagedBy: childUser?.accountManagedBy || 'PARENT',
+      return {
+        _id: child._id,
+        userId: child._id,
+        name: child.name,
+        email: child.email,
+        dateOfBirth: child.dateOfBirth,
+        age,
+        position: child.position || 'Forward',
+        avatar: child.avatar || '',
+        parentEmail: child.parentEmail,
+        isParentConsentVerified: false,
+        parentConsentToken: child.parentConsentToken,
+        parentConsentExpires: child.parentConsentExpires,
+        verificationStatus: child.verificationStatus || 'PENDING',
+        status: child.status,
+        createdAt: child.createdAt,
       };
-
-      if (academyName) {
-        item.academy = academyName;
-        item.academyLocation = academyName;
-      }
-
-      if (coachesAssigned) {
-        item.coachesAssigned = coachesAssigned;
-        item.coachName = coachesAssigned;
-        item.assignedCoach = assignedCoach;
-        item.assignedCoaches = assignedCoaches;
-      }
-
-      return item;
     });
   }
 }

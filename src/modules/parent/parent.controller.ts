@@ -128,6 +128,17 @@ export const createChild = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+export const getChildRegistrationRequests = catchAsync(async (req: Request, res: Response) => {
+  const parentId = (req as any).user.userId || (req as any).user._id;
+  const result = await parentService.getChildRegistrationRequests(parentId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Pending child registration requests fetched successfully',
+    data: result,
+  });
+});
+
 export const getMyChildren = catchAsync(async (req: Request, res: Response) => {
   const result = await parentService.getChildren((req as any).user.userId);
   sendResponse(res, {

@@ -51,12 +51,15 @@ import {
   verifyGameReportPayment,
   getPlayerGameReports,
   getGameReportDetails,
+  updateGameReportStatus,
 } from './game-report.controller';
 
 import { upload } from '@/middlewares/multer';
 import {
   gateClubOrAgentIfAuthenticated,
   requireClubOrAgentAccess,
+  requirePlayerSubscription,
+  requireCoachSubscription,
 } from '@/middlewares/clubAgentGate.middleware';
 
 const router = Router();
@@ -109,18 +112,26 @@ router.delete('/me/clubs/:clubId', auth(), deleteClubHistoryItem);
 router.post('/me/link-parent', auth('PLAYER', 'SUPER_ADMIN'), linkParent);
 router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
 router.get('/me/matches', auth(), getMatchRecords);
-router.post('/me/matches', auth(), validateRequest(createMatchRecordZodSchema), addMatchRecord);
+router.post(
+  '/me/matches',
+  auth(),
+  requirePlayerSubscription(),
+  validateRequest(createMatchRecordZodSchema),
+  addMatchRecord,
+);
 
 // Dedicated Game Report Flows (Screen 1 & 2 vs Screen 3, 4, 5)
 router.post(
   '/me/game-reports/self',
   auth('PLAYER', 'SUPER_ADMIN'),
+  requirePlayerSubscription(),
   validateRequest(createMatchRecordZodSchema),
   createSelfGameReport,
 );
 router.post(
   '/me/game-reports/request-coach',
   auth('PLAYER', 'SUPER_ADMIN', 'PARENT'),
+  requirePlayerSubscription(),
   validateRequest(requestCoachGameReportZodSchema),
   requestCoachGameReport,
 );
@@ -129,18 +140,50 @@ router.get('/me/game-reports/verify-payment', optionalAuth(), verifyGameReportPa
 router.get('/me/game-reports/:reportId', auth(), getGameReportDetails);
 router.get('/game-reports/:reportId', auth(), getGameReportDetails);
 router.get('/me/evaluations', auth('PLAYER', 'SUPER_ADMIN'), getMyPlayerEvaluations);
-router.get('/coach/game-reports', auth('SUPER_ADMIN', 'COACH'), getCoachAllGameReports);
-router.get('/coach/game-reports/pending', auth('SUPER_ADMIN', 'COACH'), getCoachPendingReports);
+router.get(
+  '/coach/game-reports',
+  auth('SUPER_ADMIN', 'COACH'),
+  requireCoachSubscription(),
+  getCoachAllGameReports,
+);
+router.get(
+  '/coach/game-reports/pending',
+  auth('SUPER_ADMIN', 'COACH'),
+  requireCoachSubscription(),
+  getCoachPendingReports,
+);
 router.patch(
   '/coach/game-reports/:reportId/complete',
   auth('SUPER_ADMIN', 'COACH'),
   validateRequest(completeCoachGameReportZodSchema),
   completeCoachGameReport,
 );
+router.patch(
+  '/coach/game-reports/:reportId/status',
+  auth('SUPER_ADMIN', 'COACH', 'ACADEMY'),
+  updateGameReportStatus,
+);
+router.patch(
+  '/game-reports/:reportId/status',
+  auth('SUPER_ADMIN', 'COACH', 'ACADEMY'),
+  updateGameReportStatus,
+);
 
 router.get('/me/media', auth(), getMediaGallery);
-router.post('/me/media', auth(), upload.any() as any, uploadMediaGallery);
-router.post('/me/videos', auth(), upload.any() as any, uploadHighlightVideo);
+router.post(
+  '/me/media',
+  auth(),
+  requirePlayerSubscription(),
+  upload.any() as any,
+  uploadMediaGallery,
+);
+router.post(
+  '/me/videos',
+  auth(),
+  requirePlayerSubscription(),
+  upload.any() as any,
+  uploadHighlightVideo,
+);
 router.get('/me/documents', auth(), getPlayerDocuments);
 router.post('/me/documents', auth(), upload.any() as any, uploadPlayerDocuments);
 router.patch('/me/documents/:documentId', auth(), upload.any() as any, updatePlayerDocument);

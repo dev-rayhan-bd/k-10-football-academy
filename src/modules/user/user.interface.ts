@@ -77,6 +77,13 @@ export interface IUser {
   parentProfileId?: string;
   contactPhone?: string;
   address?: string;
+  // Under-16 Safeguarding & Parental Consent
+  parentEmail?: string;
+  parentRelationship?: string;
+  relationshipType?: string;
+  isParentConsentVerified?: boolean;
+  parentConsentToken?: string;
+  parentConsentExpires?: Date;
   notificationSettings?: INotificationSettings;
   createdAt?: Date;
   updatedAt?: Date;

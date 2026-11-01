@@ -25,7 +25,7 @@ export const createSelfGameReport = catchAsync(async (req: Request, res: Respons
 });
 
 /**
- * 2. Coach Flow - Step 1: Request Coach with $6.99 Stripe Payment (Screen 1 & 2)
+ * 2. Coach Flow - Step 1: Request Coach with $3.99 Stripe Payment (Screen 1 & 2)
  */
 export const requestCoachGameReport = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId || (req.user as any)?._id;
@@ -34,7 +34,7 @@ export const requestCoachGameReport = catchAsync(async (req: Request, res: Respo
   sendResponse(res, {
     statusCode: StatusCodes.CREATED,
     success: true,
-    message: 'Game report created and Stripe payment checkout initiated ($6.99)',
+    message: 'Game report created and Stripe payment checkout initiated ($3.99)',
     data: result,
   });
 });
@@ -141,6 +141,21 @@ export const completeCoachGameReport = catchAsync(async (req: Request, res: Resp
     statusCode: StatusCodes.OK,
     success: true,
     message: 'Coach evaluation completed and player CV updated successfully',
+    data: result,
+  });
+});
+
+/**
+ * Action on Game Report Request (Accept, Reject, Schedule, Cancel)
+ */
+export const updateGameReportStatus = catchAsync(async (req: Request, res: Response) => {
+  const reportId = req.params.reportId || req.params.id;
+  const result = await gameReportService.updateGameReportStatus(reportId, req.user, req.body);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
     data: result,
   });
 });

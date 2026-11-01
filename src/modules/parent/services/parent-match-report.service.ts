@@ -507,8 +507,8 @@ export class ParentMatchReportService {
 
           if (academy) {
             const cost = updatedReport.coachReviewPrice || 25.0;
-            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2)); // 40% to Academy
-            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2)); // 60% to K10
+            const commissionAcademy = parseFloat((cost * 0.5).toFixed(2)); // 50% to Academy
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2)); // 50% to K10
 
             await AcademyFinanceTransaction.findOneAndUpdate(
               { reportId: updatedReport._id },
@@ -586,8 +586,8 @@ export class ParentMatchReportService {
 
           if (academy) {
             const cost = updatedReport.coachReviewPrice || 25.0;
-            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2));
-            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
+            const commissionAcademy = parseFloat((cost * 0.5).toFixed(2)); // 50% to Academy
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2)); // 50% to K10
 
             await AcademyFinanceTransaction.findOneAndUpdate(
               { reportId: updatedReport._id },

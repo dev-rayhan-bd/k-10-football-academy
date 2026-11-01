@@ -145,7 +145,7 @@ export class GameReportQueryService {
         }
       }
 
-      const amountNumber = m.coachReview?.paymentAmount || 6.99;
+      const amountNumber = m.coachReview?.paymentAmount || 3.99;
       const goals = m.goals ?? m.stats?.goalScored ?? 0;
       const assists = m.assists ?? m.stats?.assists ?? 0;
       const passes =

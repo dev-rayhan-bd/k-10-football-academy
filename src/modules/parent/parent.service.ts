@@ -47,7 +47,7 @@ export class ParentService {
     payload: {
       childPlayerId?: string;
       childUserId?: string;
-      relationshipType: 'FATHER' | 'MOTHER' | 'GUARDIAN';
+      relationshipType?: 'FATHER' | 'MOTHER' | 'GUARDIAN' | 'PARENT' | string;
     },
   ) {
     return await parentChildrenService.linkChild(parentId, payload);
@@ -55,6 +55,10 @@ export class ParentService {
 
   async createChild(parentId: string, payload: any) {
     return await parentChildrenService.createChild(parentId, payload);
+  }
+
+  async getChildRegistrationRequests(parentId: string) {
+    return await parentChildrenService.getChildRegistrationRequests(parentId);
   }
 
   async getChildren(parentId: string) {

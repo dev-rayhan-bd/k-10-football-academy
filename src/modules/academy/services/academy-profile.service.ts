@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { IAcademyProfile } from '../academy.interface';
-import { AcademyProfile, Team } from '../academy.model';
+import { AcademyProfile, Team, AcademyCoach, ExtraEvent, AcademyNews } from '../academy.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { User } from '@/modules/user/user.model';
@@ -235,6 +235,145 @@ export class AcademyProfileService {
     return {
       ...formatted,
       plan: featureAccess,
+    };
+  }
+
+  async getAcademyHomepage(identifier: string) {
+    let profile = null;
+    if (Types.ObjectId.isValid(identifier)) {
+      profile = await AcademyProfile.findOne({
+        $or: [{ _id: identifier }, { userId: identifier }],
+      }).populate('userId', 'name email avatar phone');
+    }
+    if (!profile) {
+      profile = await AcademyProfile.findOne({
+        name: { $regex: new RegExp(`^${identifier.trim()}$`, 'i') },
+      }).populate('userId', 'name email avatar phone');
+    }
+    if (!profile) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy profile not found');
+    }
+
+    const academyId = profile._id;
+
+    // Fetch existing dashboard data for presentation
+    const [teams, coaches, events, news] = await Promise.all([
+      Team.find({ academyId, status: 'ACTIVE' })
+        .select('teamName ageGroup playersCount coachesCount')
+        .lean(),
+      AcademyCoach.find({ academyId, status: 'APPROVED' })
+        .populate('coachId', 'fullName title profileImage licenseStatus yearsExperience')
+        .lean(),
+      ExtraEvent.find({ academyId, status: { $ne: 'CANCELLED' } })
+        .sort({ eventDate: 1 })
+        .limit(5)
+        .lean(),
+      AcademyNews.find({ academyId }).sort({ publishDate: -1 }).limit(5).lean(),
+    ]);
+
+    return {
+      academyId: profile._id,
+      // 1. Academy Information
+      academyInfo: {
+        name: profile.name,
+        logo: profile.logo || '',
+        coverPhoto: profile.coverPhoto || '',
+        location:
+          profile.location || `${profile.city || 'Dhaka'}, ${profile.country || 'Bangladesh'}`,
+        country: profile.country || 'Bangladesh',
+        city: profile.city || 'Dhaka',
+        contactPhone: profile.contactPhone || (profile.userId as any)?.phone || '',
+        contactEmail: profile.contactEmail || (profile.userId as any)?.email || '',
+        description: profile.description || '',
+        establishedDate: profile.establishedDate,
+        category: profile.category || 'General Academy',
+        registrationId: profile.registrationId || '',
+      },
+      // 2. Academy Introduction
+      academyIntroduction: {
+        mission:
+          profile.visionAndMission ||
+          'To nurture the next generation of football stars by combining technical excellence with character development.',
+        philosophy:
+          profile.trainingPhilosophy ||
+          'Player-centered development focusing on technical skills, tactical awareness, physical conditioning, and mental resilience.',
+        objectives:
+          'Developing world-class football talent through technical, physical, and character development.',
+        playerDevelopmentApproach:
+          profile.trainingPhilosophy ||
+          'Holistic player development combining professional coaching with modern analytics.',
+      },
+      // 3. Training Information
+      trainingInformation: {
+        totalTeams: teams.length,
+        ageGroups: teams.map((t) => ({
+          _id: t._id,
+          teamName: t.teamName,
+          ageGroup: t.ageGroup,
+          playersCount: t.playersCount || 0,
+        })),
+        trainingFacilities: profile.location || 'Official Training Ground',
+      },
+      // 4. Registration Information
+      registrationInformation: {
+        howToRegister:
+          'Parents can register their children through the K10 Parent Dashboard by selecting the Academy membership plan.',
+        membershipPlans: [
+          {
+            planName: 'Monthly Academy Membership',
+            description:
+              'Includes regular weekly training sessions, attendance monitoring, and quarterly coach evaluations.',
+            includesQuarterlyEvaluation: true,
+          },
+        ],
+      },
+      // 5. Academy Shop (Link to existing shop section)
+      academyShop: {
+        sectionUrl: `/academies/${profile._id}/shop`,
+        description:
+          'Purchase official Academy kits, uniforms, and equipment directly from the Academy Shop.',
+      },
+      // 6. Fees & Payments (Link to existing fees section)
+      feesAndPayments: {
+        sectionUrl: `/academies/${profile._id}/payments`,
+        description:
+          'View and pay registration fees, monthly membership dues, and event fees securely.',
+      },
+      // 7. Events and Announcements
+      eventsAndAnnouncements: [
+        ...events.map((e: any) => ({
+          _id: e._id,
+          title: e.eventName || 'Academy Event',
+          type: 'EVENT',
+          date: e.eventDate,
+          location: e.location || 'Training Ground',
+          description: e.description || '',
+        })),
+        ...news.map((n: any) => ({
+          _id: n._id,
+          title: n.articleTitle || 'Announcement',
+          type: 'ANNOUNCEMENT',
+          date: n.publishDate,
+          content: n.fullArticle || n.excerpt || '',
+        })),
+      ],
+      // 8. Coaching Staff
+      coachingStaff: coaches.map((c: any) => {
+        const coachProfile = c.coachId || {};
+        return {
+          _id: c._id,
+          name: coachProfile.fullName || c.role || 'Academy Coach',
+          title: coachProfile.title || c.role || 'Academy Coach',
+          profileImage: coachProfile.profileImage || '',
+          licenseStatus: coachProfile.licenseStatus || 'UEFA / AFC Licensed',
+          yearsExperience: coachProfile.yearsExperience || 0,
+        };
+      }),
+      meta: {
+        teamsCount: teams.length,
+        coachesCount: coaches.length,
+        eventsCount: events.length,
+      },
     };
   }
 

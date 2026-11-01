@@ -17,6 +17,7 @@ import {
   createChild,
   getChildren,
   getMyChildren,
+  getChildRegistrationRequests,
   createMatchReport,
   getMatchReports,
   requestMatchReportReview,
@@ -84,6 +85,11 @@ router.post(
 );
 
 router.get('/my-children', auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'), getMyChildren);
+router.get(
+  '/child-requests',
+  auth('PARENT', 'GUARDIAN', 'SUPER_ADMIN'),
+  getChildRegistrationRequests,
+);
 
 router.post(
   '/create-child',

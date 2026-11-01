@@ -2,7 +2,10 @@ import { Router } from 'express';
 import { validateRequest } from '@/middlewares/validateRequest';
 import { auth, optionalAuth } from '@/middlewares/auth.middleware';
 import { upload } from '@/middlewares/multer';
-import { gateClubOrAgentIfAuthenticated } from '@/middlewares/clubAgentGate.middleware';
+import {
+  gateClubOrAgentIfAuthenticated,
+  requireCoachSubscription,
+} from '@/middlewares/clubAgentGate.middleware';
 import {
   createCoachProfileZodSchema,
   updateCoachProfileZodSchema,
@@ -69,17 +72,43 @@ router.get('/', optionalAuth(), gateClubOrAgentIfAuthenticated(), getAllCoachPro
 router.get(
   '/me/player-cv-validations',
   auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
   getPlayerCvValidationsDashboard,
 );
-router.get('/my-cv-validations', auth('COACH', 'SUPER_ADMIN'), getPlayerCvValidationsDashboard);
-router.post('/players/:playerId/validate-cv', auth('COACH', 'SUPER_ADMIN'), validatePlayerCV);
-router.post('/validate-player-cv', auth('COACH', 'SUPER_ADMIN'), validatePlayerCV);
+router.get(
+  '/my-cv-validations',
+  auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
+  getPlayerCvValidationsDashboard,
+);
+router.post(
+  '/players/:playerId/validate-cv',
+  auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
+  validatePlayerCV,
+);
+router.post(
+  '/validate-player-cv',
+  auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
+  validatePlayerCV,
+);
 
 // ==========================================
 // PLAYER EVALUATION (DEVELOPMENT PROGRAMME)
 // ==========================================
-router.get('/me/player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
-router.get('/my-player-evaluations', auth('COACH', 'SUPER_ADMIN'), getPlayerEvaluationsDashboard);
+router.get(
+  '/me/player-evaluations',
+  auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
+  getPlayerEvaluationsDashboard,
+);
+router.get(
+  '/my-player-evaluations',
+  auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
+  getPlayerEvaluationsDashboard,
+);
 router.get(
   '/me/player-evaluations/:id',
   auth('COACH', 'SUPER_ADMIN', 'ACADEMY', 'PLAYER'),
@@ -103,18 +132,21 @@ router.get(
 router.post(
   '/me/player-evaluations/:id/submit',
   auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
   validateRequest(submitPlayerEvaluationZodSchema),
   submitPlayerEvaluation,
 );
 router.post(
   '/me/player-evaluations/submit',
   auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
   validateRequest(submitPlayerEvaluationZodSchema),
   submitPlayerEvaluation,
 );
 router.post(
   '/players/:playerId/evaluate',
   auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
   validateRequest(submitPlayerEvaluationZodSchema),
   submitPlayerEvaluation,
 );
@@ -134,8 +166,18 @@ router.get('/me', auth(), getMyCoachProfile);
 // ==========================================
 router.get('/me/teams', auth('COACH', 'SUPER_ADMIN'), getMyTeamsSquad);
 router.get('/my-teams', auth('COACH', 'SUPER_ADMIN'), getMyTeamsSquad);
-router.get('/me/game-reports', auth('COACH', 'SUPER_ADMIN'), getCoachAllGameReports);
-router.get('/my-game-reports', auth('COACH', 'SUPER_ADMIN'), getCoachAllGameReports);
+router.get(
+  '/me/game-reports',
+  auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
+  getCoachAllGameReports,
+);
+router.get(
+  '/my-game-reports',
+  auth('COACH', 'SUPER_ADMIN'),
+  requireCoachSubscription(),
+  getCoachAllGameReports,
+);
 router.patch(
   '/me/players/:playerId/fitness-status',
   auth('COACH', 'SUPER_ADMIN'),

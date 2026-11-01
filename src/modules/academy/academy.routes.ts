@@ -42,6 +42,7 @@ import {
 import {
   createAcademyProfile,
   getAcademyProfile,
+  getAcademyHomepage,
   getMyAcademyProfile,
   updateMyAcademyProfile,
   updateAcademyProfileById,
@@ -244,6 +245,8 @@ router.put(
 );
 
 router.get('/:academyId/profile', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyProfile);
+router.get('/me/homepage', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyHomepage);
+router.get('/:academyId/homepage', optionalAuth(), getAcademyHomepage);
 router.patch(
   '/:academyId/profile',
   auth('ACADEMY', 'SUPER_ADMIN'),

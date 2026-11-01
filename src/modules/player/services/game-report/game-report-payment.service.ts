@@ -18,7 +18,7 @@ import { resolveOrCreatePlayerProfile } from './game-report.utils';
 
 export class GameReportPaymentService {
   /**
-   * Flow 2 - Step A: "Request From Coach" (Screen 1 & 2 + Coach Selection & $6.99 Payment checkout session)
+   * Flow 2 - Step A: "Request From Coach" (Screen 1 & 2 + Coach Selection & $3.99 Payment checkout session)
    */
   async requestCoachGameReport(userId: string, payload: any) {
     const playerProfile = await resolveOrCreatePlayerProfile(userId, payload);
@@ -114,7 +114,7 @@ export class GameReportPaymentService {
     });
 
     const resolvedPrice = Number(
-      payload.coachReviewPrice || payload.price || payload.amount || 25.0,
+      payload.coachReviewPrice || payload.price || payload.amount || 3.99,
     );
 
     const draftData = {
@@ -289,8 +289,8 @@ export class GameReportPaymentService {
           }
 
           if (academy) {
-            const cost = updatedRecord.coachReview?.paymentAmount || 25.0;
-            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2));
+            const cost = updatedRecord.coachReview?.paymentAmount || 3.99;
+            const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
             const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
             await AcademyFinanceTransaction.findOneAndUpdate(
@@ -363,8 +363,8 @@ export class GameReportPaymentService {
           }
 
           if (academy) {
-            const cost = updatedRecord.coachReview?.paymentAmount || 25.0;
-            const commissionAcademy = parseFloat((cost * 0.4).toFixed(2));
+            const cost = updatedRecord.coachReview?.paymentAmount || 3.99;
+            const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
             const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
             await AcademyFinanceTransaction.findOneAndUpdate(
@@ -416,8 +416,8 @@ export class GameReportPaymentService {
         await notificationService.createNotification({
           recipientId: playerProfile.userId,
           recipientRole: 'ATHLETE',
-          title: 'Payment Successful ($6.99)',
-          message: `Your payment of $6.99 for coach evaluation (${matchTitle}) was successful. Awaiting coach review.`,
+          title: 'Payment Successful ($3.99)',
+          message: `Your payment of $3.99 for coach evaluation (${matchTitle}) was successful. Awaiting coach review.`,
           type: 'PAYMENT_SUCCESS',
           data: { reportId: updatedRecord._id },
         });
@@ -436,7 +436,7 @@ export class GameReportPaymentService {
                 recipientId: parent.userId,
                 recipientRole: 'PARENT',
                 title: 'Child Coach Evaluation Requested',
-                message: `${playerName} requested a coach evaluation for match ${matchTitle} ($6.99 paid).`,
+                message: `${playerName} requested a coach evaluation for match ${matchTitle} ($3.99 paid).`,
                 type: 'CHILD_GAME_REPORT_REQUEST',
                 data: { reportId: updatedRecord._id, childPlayerId: playerProfile._id },
               });

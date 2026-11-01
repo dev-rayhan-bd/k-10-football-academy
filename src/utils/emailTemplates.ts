@@ -309,7 +309,7 @@ export const getCoachReportRequestEmailTemplate = (
     title: 'New Game Report Review Request - K10 Football',
     subtitle: 'COACH EVALUATION REQUEST',
     name: coachName,
-    message: `Player <b>${playerName}</b> has requested your professional match review and verified evaluation for their recent match: <b>${matchDetails.homeTeam} vs ${matchDetails.awayTeam}</b> (${matchDetails.leagueType}) on ${matchDetails.matchDate}.<br><br>The evaluation fee of <b>$6.99</b> has been paid. Please review the match performance, enter the stats, and submit the final evaluation.`,
+    message: `Player <b>${playerName}</b> has requested your professional match review and verified evaluation for their recent match: <b>${matchDetails.homeTeam} vs ${matchDetails.awayTeam}</b> (${matchDetails.leagueType}) on ${matchDetails.matchDate}.<br><br>The evaluation fee of <b>$3.99</b> has been paid. Please review the match performance, enter the stats, and submit the final evaluation.`,
     actionText: 'START MATCH EVALUATION',
     actionUrl,
     footerNote: 'Professional analysis delivered within 48 hours is expected.',
@@ -334,5 +334,43 @@ export const getPlayerReportCompletedEmailTemplate = (
     actionText: 'VIEW MY UPDATED CV',
     actionUrl,
     footerNote: 'Keep striving for excellence on the pitch!',
+  });
+};
+
+/**
+ * Under-16 Parental Consent Request Email Template (Sent to Parent/Guardian)
+ */
+export const getParentConsentRequestEmailTemplate = (
+  childName: string,
+  childEmail: string,
+  consentUrl: string,
+): string => {
+  return renderBaseTemplate({
+    title: 'Parental Consent Required - K10 Football Academy',
+    subtitle: 'UNDER-16 SAFEGUARDING VERIFICATION',
+    name: 'Parent / Legal Guardian',
+    message: `Your child, <b>${childName}</b> (${childEmail}), has initiated registration for a youth player account on the <b>K10 Football Platform</b>.<br><br>In strict accordance with youth safeguarding regulations, players under 16 years of age require verified parental consent before their account and football CV can be activated.<br><br>Please click the button below to confirm your consent and activate your child's player profile.`,
+    actionText: 'VERIFY & APPROVE ACCOUNT',
+    actionUrl: consentUrl,
+    footerNote:
+      'If you did not authorize this registration or believe this was done in error, you can safely ignore this email.',
+  });
+};
+
+/**
+ * Parent Consent Confirmed Email Template (Sent to Parent)
+ */
+export const getParentConsentConfirmedEmailTemplate = (
+  childName: string,
+  loginUrl: string,
+): string => {
+  return renderBaseTemplate({
+    title: 'Parental Consent Confirmed - K10 Football Academy',
+    subtitle: 'ACCOUNT ACTIVATED SUCCESSFULLY',
+    name: 'Parent / Legal Guardian',
+    message: `Thank you for confirming your parental consent. The player profile for <b>${childName}</b> has been activated on K10 Football.<br><br>Your child can now log in, build their player CV, and record match performance evaluations under your supervision.`,
+    actionText: 'VISIT K10 FOOTBALL',
+    actionUrl: loginUrl,
+    footerNote: 'Thank you for supporting youth football development!',
   });
 };

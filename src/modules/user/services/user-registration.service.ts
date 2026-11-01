@@ -1,15 +1,23 @@
+import crypto from 'crypto';
+import { env } from '@/config/env';
 import { StatusCodes } from 'http-status-codes';
 import { IUser, IUserDocument } from '../user.interface';
+import { UserModel } from '../user.model';
 import { userRepository } from '../user.repository';
 import { AppError } from '@/utils/AppError';
 import { emailQueue } from '@/jobs/queues/email.queue';
 import { redisClient } from '@/config/redis';
 import { otpGenerator } from '@/utils/otpGenerator';
-import { getOtpVerificationEmailTemplate } from '@/utils/emailTemplates';
+import {
+  getOtpVerificationEmailTemplate,
+  getParentConsentRequestEmailTemplate,
+} from '@/utils/emailTemplates';
 import { AcademyProfile } from '@/modules/academy/academy.model';
 import { CoachProfile, TacticalFormation } from '@/modules/coach/coach.model';
 import { ClubProfile } from '@/modules/club/club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
+import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
+import { normalizeRelationshipType } from '@/modules/parent/parent.interface';
 import {
   PlayerProfile,
   PlayerAttributes,
@@ -37,7 +45,6 @@ export class UserRegistrationService {
       userData.role = 'PARENT';
       delete (userData as any).accountManagedBy;
     } else if (userData.role === 'PLAYER') {
-      userData.accountManagedBy = userData.accountManagedBy || 'ATHLETE';
       if (userData.dateOfBirth) {
         const birthDate = new Date(userData.dateOfBirth);
         if (!isNaN(birthDate.getTime())) {
@@ -48,13 +55,35 @@ export class UserRegistrationService {
             age--;
           }
           if (age < 16) {
-            const msg =
-              'Players under 16 years old cannot register directly. An account must be created and managed by a parent or legal guardian.';
-            throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
-              { path: 'dateOfBirth', message: msg },
-            ]);
+            if (!userData.parentEmail || !String(userData.parentEmail).trim()) {
+              const msg =
+                'Players under 16 years old must provide a parent or legal guardian email for parental consent and verification.';
+              throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
+                { path: 'parentEmail', message: msg },
+              ]);
+            }
+            userData.parentEmail = String(userData.parentEmail).toLowerCase().trim();
+            const rawRel =
+              (userData as any).relationshipType ||
+              (userData as any).parentRelationship ||
+              (userData as any).relationship ||
+              (userData as any).relationType;
+            userData.parentRelationship = normalizeRelationshipType(rawRel);
+            userData.relationshipType = userData.parentRelationship;
+            userData.accountManagedBy = 'PARENT';
+            userData.isParentConsentVerified = false;
+            userData.verificationStatus = 'PENDING' as any;
+            const consentToken = crypto.randomBytes(32).toString('hex');
+            userData.parentConsentToken = consentToken;
+            userData.parentConsentExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          } else {
+            userData.accountManagedBy = userData.accountManagedBy || 'ATHLETE';
+            userData.isParentConsentVerified = true;
           }
         }
+      } else {
+        userData.accountManagedBy = userData.accountManagedBy || 'ATHLETE';
+        userData.isParentConsentVerified = true;
       }
     } else {
       delete (userData as any).accountManagedBy;
@@ -87,6 +116,58 @@ export class UserRegistrationService {
       if (userData.role) {
         existingUser.role = userData.role;
       }
+
+      if (existingUser.role === 'PARENT' || (existingUser.role as string) === 'GUARDIAN') {
+        const rawRel =
+          (userData as any).relationshipType ||
+          (userData as any).relationship ||
+          (userData as any).parentRelationship ||
+          (userData as any).relationType ||
+          (existingUser.role === 'GUARDIAN' ? 'GUARDIAN' : 'PARENT');
+        const parentRel = normalizeRelationshipType(rawRel);
+        existingUser.relationshipType = parentRel;
+        existingUser.parentRelationship = parentRel;
+
+        const parentProf = await ParentProfile.findOneAndUpdate(
+          { userId: existingUser._id },
+          {
+            userId: existingUser._id,
+            contactPhone: existingUser.phone || userData.phone || (userData as any).contactPhone,
+            firstName: existingUser.name?.split(' ')[0] || '',
+            lastName: existingUser.name?.split(' ').slice(1).join(' ') || '',
+            relationship: parentRel,
+          },
+          { upsert: true, new: true },
+        );
+        if (parentProf) {
+          await userRepository.updateById(existingUser._id.toString(), {
+            parentProfileId: parentProf._id.toString(),
+          });
+          (existingUser as any).parentProfileId = parentProf._id.toString();
+
+          if ((userData as any).linkedChildEmail) {
+            const childEmail = String((userData as any).linkedChildEmail)
+              .toLowerCase()
+              .trim();
+            const childUser = await UserModel.findOne({ email: childEmail, role: 'PLAYER' });
+            if (childUser) {
+              const childProf = await PlayerProfile.findOne({ userId: childUser._id });
+              if (childProf) {
+                await ParentChild.findOneAndUpdate(
+                  { parentId: parentProf._id, childPlayerId: childProf._id },
+                  {
+                    parentId: parentProf._id,
+                    childPlayerId: childProf._id,
+                    relationshipType: parentRel,
+                  },
+                  { upsert: true, new: true },
+                );
+              }
+            }
+          }
+        }
+      }
+
       if (existingUser.role === 'PLAYER') {
         existingUser.accountManagedBy =
           userData.accountManagedBy || existingUser.accountManagedBy || 'ATHLETE';
@@ -159,6 +240,27 @@ export class UserRegistrationService {
           existingUser.country = (userData as any).countryOfOperation || (userData as any).country;
         }
       }
+      if (userData.parentEmail !== undefined) {
+        existingUser.parentEmail = userData.parentEmail;
+      }
+      if (
+        userData.parentRelationship !== undefined ||
+        (userData as any).relationshipType !== undefined
+      ) {
+        existingUser.parentRelationship = normalizeRelationshipType(
+          userData.parentRelationship || (userData as any).relationshipType,
+        );
+        existingUser.relationshipType = existingUser.parentRelationship;
+      }
+      if (userData.isParentConsentVerified !== undefined) {
+        existingUser.isParentConsentVerified = userData.isParentConsentVerified;
+      }
+      if (userData.parentConsentToken !== undefined) {
+        existingUser.parentConsentToken = userData.parentConsentToken;
+      }
+      if (userData.parentConsentExpires !== undefined) {
+        existingUser.parentConsentExpires = userData.parentConsentExpires;
+      }
       await existingUser.save();
 
       // Generate 6-digit OTP
@@ -173,6 +275,25 @@ export class UserRegistrationService {
         subject: 'Verify your K10 Football Academy Account',
         body: getOtpVerificationEmailTemplate(existingUser.name, otp),
       });
+
+      if (
+        existingUser.role === 'PLAYER' &&
+        existingUser.parentEmail &&
+        existingUser.parentConsentToken &&
+        !existingUser.isParentConsentVerified
+      ) {
+        const clientBaseUrl = env.CLIENT_URL || process.env.CLIENT_URL || 'http://localhost:3000';
+        const consentUrl = `${clientBaseUrl}/auth/verify-parent-consent?token=${existingUser.parentConsentToken}&userId=${existingUser._id}`;
+        await emailQueue.add('send-parent-consent-email', {
+          to: existingUser.parentEmail,
+          subject: 'Parental Consent Required: Activate Player Profile - K10 Football',
+          body: getParentConsentRequestEmailTemplate(
+            existingUser.name,
+            existingUser.email,
+            consentUrl,
+          ),
+        });
+      }
 
       if (existingUser.role === 'ACADEMY') {
         const location = (userData as any).location || '';
@@ -434,6 +555,58 @@ export class UserRegistrationService {
       );
     }
 
+    if (newUser.role === 'PARENT' || (newUser.role as string) === 'GUARDIAN') {
+      const rawRel =
+        (userData as any).relationshipType ||
+        (userData as any).relationship ||
+        (userData as any).parentRelationship ||
+        (userData as any).relationType ||
+        (newUser.role === 'GUARDIAN' ? 'GUARDIAN' : 'PARENT');
+      const parentRel = normalizeRelationshipType(rawRel);
+      newUser.relationshipType = parentRel;
+      newUser.parentRelationship = parentRel;
+      await newUser.save();
+
+      const parentProf = await ParentProfile.findOneAndUpdate(
+        { userId: newUser._id },
+        {
+          userId: newUser._id,
+          contactPhone: newUser.phone || userData.phone || (userData as any).contactPhone,
+          firstName: newUser.name?.split(' ')[0] || '',
+          lastName: newUser.name?.split(' ').slice(1).join(' ') || '',
+          relationship: parentRel,
+        },
+        { upsert: true, new: true },
+      );
+      if (parentProf) {
+        await userRepository.updateById(newUser._id.toString(), {
+          parentProfileId: parentProf._id.toString(),
+        });
+        (newUser as any).parentProfileId = parentProf._id.toString();
+
+        if ((userData as any).linkedChildEmail) {
+          const childEmail = String((userData as any).linkedChildEmail)
+            .toLowerCase()
+            .trim();
+          const childUser = await UserModel.findOne({ email: childEmail, role: 'PLAYER' });
+          if (childUser) {
+            const childProf = await PlayerProfile.findOne({ userId: childUser._id });
+            if (childProf) {
+              await ParentChild.findOneAndUpdate(
+                { parentId: parentProf._id, childPlayerId: childProf._id },
+                {
+                  parentId: parentProf._id,
+                  childPlayerId: childProf._id,
+                  relationshipType: parentRel,
+                },
+                { upsert: true, new: true },
+              );
+            }
+          }
+        }
+      }
+    }
+
     if (newUser.role === 'PLAYER') {
       const birthDate = userData.dateOfBirth
         ? new Date(userData.dateOfBirth)
@@ -502,6 +675,21 @@ export class UserRegistrationService {
       subject: 'Verify your K10 Football Academy Account',
       body: getOtpVerificationEmailTemplate(newUser.name, otp),
     });
+
+    if (
+      newUser.role === 'PLAYER' &&
+      newUser.parentEmail &&
+      newUser.parentConsentToken &&
+      !newUser.isParentConsentVerified
+    ) {
+      const clientBaseUrl = env.CLIENT_URL || process.env.CLIENT_URL || 'http://localhost:3000';
+      const consentUrl = `${clientBaseUrl}/auth/verify-parent-consent?token=${newUser.parentConsentToken}&userId=${newUser._id}`;
+      await emailQueue.add('send-parent-consent-email', {
+        to: newUser.parentEmail,
+        subject: 'Parental Consent Required: Activate Player Profile - K10 Football',
+        body: getParentConsentRequestEmailTemplate(newUser.name, newUser.email, consentUrl),
+      });
+    }
 
     void notificationService.notifyAdmins({
       settingKey: 'userRegistrationAlerts',

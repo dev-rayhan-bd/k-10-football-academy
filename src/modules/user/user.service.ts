@@ -32,6 +32,20 @@ export class UserService {
     return await userAuthService.verifyOtp(email, otp);
   }
 
+  async verifyParentConsent(
+    userId: string,
+    token?: string,
+    authenticatedUser?: any,
+    relationshipType?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return await userAuthService.verifyParentConsent(
+      userId,
+      token,
+      authenticatedUser,
+      relationshipType,
+    );
+  }
+
   async resendOtp(email: string): Promise<void> {
     return await userAuthService.resendOtp(email);
   }

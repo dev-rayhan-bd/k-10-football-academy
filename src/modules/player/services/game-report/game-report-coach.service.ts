@@ -319,7 +319,7 @@ export class GameReportCoachService {
 
       const amount = r.coachReview?.paymentAmount
         ? `$ ${Number(r.coachReview.paymentAmount).toFixed(2)}`
-        : '$ 6.99';
+        : '$ 3.99';
 
       const paymentStatus = (r.coachReview?.paymentStatus || 'UNPAID') as
         'PAID' | 'UNPAID' | 'FREE';
@@ -351,6 +351,83 @@ export class GameReportCoachService {
       summary,
       meta,
       reports: formattedReports,
+    };
+  }
+
+  async updateGameReportStatus(
+    reportId: string,
+    _user: any,
+    payload: {
+      status: string;
+      rejectionReason?: string;
+      matchDate?: Date;
+      matchTime?: string;
+      matchLocation?: string;
+    },
+  ) {
+    const matchRecord = await MatchRecord.findById(reportId).populate('playerId');
+    if (!matchRecord) {
+      throw new AppError(404, 'Match record not found.');
+    }
+
+    const validStatuses = [
+      'PENDING',
+      'ACCEPTED',
+      'REJECTED',
+      'AWAITING_SCHEDULING',
+      'SCHEDULED',
+      'COMPLETED',
+      'CANCELLED',
+    ];
+    const newStatus = String(payload.status).toUpperCase();
+    if (!validStatuses.includes(newStatus)) {
+      throw new AppError(400, `Invalid status. Allowed statuses: ${validStatuses.join(', ')}`);
+    }
+
+    if (!matchRecord.coachReview) {
+      matchRecord.coachReview = {
+        paymentStatus: 'FREE',
+        paymentAmount: 0,
+        status: newStatus as any,
+      };
+    } else {
+      matchRecord.coachReview.status = newStatus as any;
+    }
+
+    if (payload.rejectionReason) {
+      (matchRecord.coachReview as any).rejectionReason = payload.rejectionReason;
+    }
+    if (payload.matchDate) {
+      matchRecord.matchDate = new Date(payload.matchDate);
+    }
+    if (payload.matchLocation) {
+      matchRecord.location = payload.matchLocation;
+    }
+
+    await matchRecord.save();
+
+    const playerProfile = (matchRecord.playerId as any) || {};
+
+    if (playerProfile._id) {
+      await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
+    }
+
+    if (playerProfile.userId) {
+      await notificationService.createNotification({
+        recipientId: playerProfile.userId,
+        recipientRole: 'ATHLETE',
+        title: `Game Report Status: ${newStatus}`,
+        message: `Your Game Report request has been updated to: ${newStatus}${payload.rejectionReason ? `. Reason: ${payload.rejectionReason}` : ''}`,
+        type: 'REPORT_STATUS_UPDATED',
+        data: { reportId: matchRecord._id, status: newStatus },
+      });
+    }
+
+    return {
+      message: `Game report status updated to ${newStatus} successfully`,
+      reportId: matchRecord._id,
+      status: newStatus,
+      coachReview: matchRecord.coachReview,
     };
   }
 }

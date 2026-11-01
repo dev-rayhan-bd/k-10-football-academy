@@ -292,7 +292,7 @@ export class AcademyFinanceService {
       }).lean();
 
       for (const m of matchReports) {
-        const cost = m.coachReview?.paymentAmount || 6.99;
+        const cost = m.coachReview?.paymentAmount || 3.99;
         const commissionAcademy = parseFloat((cost * 0.4).toFixed(3));
         const status =
           m.coachReview?.status === 'COMPLETED'

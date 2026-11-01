@@ -12,7 +12,11 @@ export const linkChildZodSchema = z.object({
     .object({
       childPlayerId: z.string().optional(),
       childUserId: z.string().optional(),
-      relationshipType: z.enum(['FATHER', 'MOTHER', 'GUARDIAN']),
+      relationshipType: z
+        .enum(['FATHER', 'MOTHER', 'GUARDIAN', 'PARENT'])
+        .or(z.string())
+        .optional()
+        .default('PARENT'),
     })
     .refine((data) => data.childPlayerId || data.childUserId, {
       message: 'Either childPlayerId or childUserId is required',

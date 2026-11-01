@@ -124,9 +124,11 @@ export class PlayerAnalyticsService {
       },
     };
 
+    const defaultVal = profile.overallRating || 50;
+
     // 2. FULL POTENTIAL (Physical & Technical Attributes)
-    const potentialScore = potentialDoc?.overallPotentialScore ?? 81;
-    const potentialGrowth = potentialDoc?.monthlyGrowth ?? 8;
+    const potentialScore = potentialDoc?.overallPotentialScore ?? defaultVal;
+    const potentialGrowth = potentialDoc?.monthlyGrowth ?? 0;
     const fullPotential = {
       title: 'FULL POTENTIAL',
       subtitle: 'Physical & Technical Attributes',
@@ -139,26 +141,50 @@ export class PlayerAnalyticsService {
       growthText: 'Growth vs last month',
       radarColor: '#EF4444',
       radarData: [
-        { attribute: 'Vision', value: potentialDoc?.vision ?? 85, fullMark: 100 },
-        { attribute: 'Strength', value: potentialDoc?.strength ?? 78, fullMark: 100 },
-        { attribute: 'Pace', value: potentialDoc?.pace ?? 90, fullMark: 100 },
-        { attribute: 'Stamina', value: potentialDoc?.stamina ?? 85, fullMark: 100 },
-        { attribute: 'Shooting', value: potentialDoc?.shooting ?? 82, fullMark: 100 },
-        { attribute: 'Passing', value: potentialDoc?.passing ?? 88, fullMark: 100 },
+        {
+          attribute: 'Vision',
+          value: potentialDoc?.vision ?? attributesDoc?.vision ?? defaultVal,
+          fullMark: 100,
+        },
+        {
+          attribute: 'Strength',
+          value: potentialDoc?.strength ?? attributesDoc?.strength ?? defaultVal,
+          fullMark: 100,
+        },
+        {
+          attribute: 'Pace',
+          value: potentialDoc?.pace ?? attributesDoc?.sprintSpeed ?? defaultVal,
+          fullMark: 100,
+        },
+        {
+          attribute: 'Stamina',
+          value: potentialDoc?.stamina ?? attributesDoc?.stamina ?? defaultVal,
+          fullMark: 100,
+        },
+        {
+          attribute: 'Shooting',
+          value: potentialDoc?.shooting ?? attributesDoc?.shooting ?? defaultVal,
+          fullMark: 100,
+        },
+        {
+          attribute: 'Passing',
+          value: potentialDoc?.passing ?? attributesDoc?.shortPassing ?? defaultVal,
+          fullMark: 100,
+        },
       ],
       attributes: {
-        vision: potentialDoc?.vision ?? 85,
-        strength: potentialDoc?.strength ?? 78,
-        pace: potentialDoc?.pace ?? 90,
-        stamina: potentialDoc?.stamina ?? 85,
-        shooting: potentialDoc?.shooting ?? 82,
-        passing: potentialDoc?.passing ?? 88,
+        vision: potentialDoc?.vision ?? attributesDoc?.vision ?? defaultVal,
+        strength: potentialDoc?.strength ?? attributesDoc?.strength ?? defaultVal,
+        pace: potentialDoc?.pace ?? attributesDoc?.sprintSpeed ?? defaultVal,
+        stamina: potentialDoc?.stamina ?? attributesDoc?.stamina ?? defaultVal,
+        shooting: potentialDoc?.shooting ?? attributesDoc?.shooting ?? defaultVal,
+        passing: potentialDoc?.passing ?? attributesDoc?.shortPassing ?? defaultVal,
       },
     };
 
     // 3. MENTAL ANALYSIS (Psychological Performance Metrics)
-    const mentalScore = mentalDoc?.overallMentalScore ?? 82;
-    const mentalGrowth = mentalDoc?.monthlyGrowth ?? 8;
+    const mentalScore = mentalDoc?.overallMentalScore ?? defaultVal;
+    const mentalGrowth = mentalDoc?.monthlyGrowth ?? 0;
     const mentalAnalysis = {
       title: 'MENTAL ANALYSIS',
       subtitle: 'Psychological Performance Metrics',
@@ -171,44 +197,91 @@ export class PlayerAnalyticsService {
       growthText: 'Growth vs last month',
       radarColor: '#00FF66',
       radarData: [
-        { attribute: 'Creativity', value: mentalDoc?.creativity ?? 88, fullMark: 100 },
-        { attribute: 'Leadership', value: mentalDoc?.leadership ?? 80, fullMark: 100 },
-        { attribute: 'Confidence', value: mentalDoc?.confidence ?? 82, fullMark: 100 },
-        { attribute: 'Composure', value: mentalDoc?.composure ?? 85, fullMark: 100 },
-        { attribute: 'Motivation', value: mentalDoc?.motivation ?? 84, fullMark: 100 },
-        { attribute: 'Focus', value: mentalDoc?.focus ?? 86, fullMark: 100 },
+        { attribute: 'Creativity', value: mentalDoc?.creativity ?? defaultVal, fullMark: 100 },
+        { attribute: 'Leadership', value: mentalDoc?.leadership ?? defaultVal, fullMark: 100 },
+        { attribute: 'Confidence', value: mentalDoc?.confidence ?? defaultVal, fullMark: 100 },
+        {
+          attribute: 'Composure',
+          value: mentalDoc?.composure ?? attributesDoc?.composure ?? defaultVal,
+          fullMark: 100,
+        },
+        { attribute: 'Motivation', value: mentalDoc?.motivation ?? defaultVal, fullMark: 100 },
+        { attribute: 'Focus', value: mentalDoc?.focus ?? defaultVal, fullMark: 100 },
       ],
       attributes: {
-        creativity: mentalDoc?.creativity ?? 88,
-        leadership: mentalDoc?.leadership ?? 80,
-        confidence: mentalDoc?.confidence ?? 82,
-        composure: mentalDoc?.composure ?? 85,
-        motivation: mentalDoc?.motivation ?? 84,
-        focus: mentalDoc?.focus ?? 86,
+        creativity: mentalDoc?.creativity ?? defaultVal,
+        leadership: mentalDoc?.leadership ?? defaultVal,
+        confidence: mentalDoc?.confidence ?? defaultVal,
+        composure: mentalDoc?.composure ?? attributesDoc?.composure ?? defaultVal,
+        motivation: mentalDoc?.motivation ?? defaultVal,
+        focus: mentalDoc?.focus ?? defaultVal,
       },
     };
 
     // 4. SKILLS ANALYSIS (6 Cards: PACE, PASSING, SHOOTING, PHYSICAL, DEFENDING, DRIBBLING)
+    const pacVal =
+      fifaCardDoc?.pac ??
+      Math.round(
+        ((attributesDoc?.acceleration ?? defaultVal) + (attributesDoc?.sprintSpeed ?? defaultVal)) /
+          2,
+      );
+    const pasVal =
+      fifaCardDoc?.pas ??
+      Math.round(
+        (attributesDoc?.shortPassing ?? defaultVal) * 0.4 +
+          (attributesDoc?.vision ?? defaultVal) * 0.3 +
+          (attributesDoc?.longPassing ?? defaultVal) * 0.2 +
+          (attributesDoc?.crossing ?? defaultVal) * 0.1,
+      );
+    const shoVal =
+      fifaCardDoc?.sho ??
+      Math.round(
+        (attributesDoc?.finishing ?? defaultVal) * 0.4 +
+          (attributesDoc?.shotPower ?? defaultVal) * 0.3 +
+          (attributesDoc?.longShots ?? defaultVal) * 0.3,
+      );
+    const phyVal =
+      fifaCardDoc?.phy ??
+      Math.round(
+        (attributesDoc?.strength ?? defaultVal) * 0.5 +
+          (attributesDoc?.stamina ?? defaultVal) * 0.3 +
+          (attributesDoc?.jumping ?? defaultVal) * 0.2,
+      );
+    const defVal =
+      fifaCardDoc?.def ??
+      Math.round(
+        (attributesDoc?.marking ?? defaultVal) * 0.35 +
+          (attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? defaultVal) * 0.35 +
+          (attributesDoc?.interceptions ?? defaultVal) * 0.3,
+      );
+    const driVal =
+      fifaCardDoc?.dri ??
+      Math.round(
+        (attributesDoc?.dribbling ?? defaultVal) * 0.5 +
+          (attributesDoc?.ballControl ?? defaultVal) * 0.3 +
+          (attributesDoc?.agility ?? defaultVal) * 0.2,
+      );
+
     const skillsAnalysis = [
       {
         id: 'pace',
         title: 'PACE',
-        score: fifaCardDoc?.pac ?? 92,
-        percentage: `${fifaCardDoc?.pac ?? 92}%`,
+        score: pacVal,
+        percentage: `${pacVal}%`,
         color: '#00FF66',
         subSkills: [
           {
             key: 'acceleration',
             name: 'ACCELERATION',
-            value: attributesDoc?.acceleration ?? 88,
-            percentage: `${attributesDoc?.acceleration ?? 88}%`,
+            value: attributesDoc?.acceleration ?? defaultVal,
+            percentage: `${attributesDoc?.acceleration ?? defaultVal}%`,
             color: '#00FF66',
           },
           {
             key: 'sprintSpeed',
             name: 'SPRINT SPEED',
-            value: attributesDoc?.sprintSpeed ?? 70,
-            percentage: `${attributesDoc?.sprintSpeed ?? 70}%`,
+            value: attributesDoc?.sprintSpeed ?? defaultVal,
+            percentage: `${attributesDoc?.sprintSpeed ?? defaultVal}%`,
             color: '#00FF66',
           },
         ],
@@ -216,29 +289,29 @@ export class PlayerAnalyticsService {
       {
         id: 'passing',
         title: 'PASSING',
-        score: fifaCardDoc?.pas ?? 82,
-        percentage: `${fifaCardDoc?.pas ?? 82}%`,
+        score: pasVal,
+        percentage: `${pasVal}%`,
         color: '#00FF66',
         subSkills: [
           {
             key: 'vision',
             name: 'VISION',
-            value: attributesDoc?.vision ?? 90,
-            percentage: `${attributesDoc?.vision ?? 90}%`,
+            value: attributesDoc?.vision ?? defaultVal,
+            percentage: `${attributesDoc?.vision ?? defaultVal}%`,
             color: '#FF2222',
           },
           {
             key: 'shortPassing',
             name: 'SHORT PASS',
-            value: attributesDoc?.shortPassing ?? 88,
-            percentage: `${attributesDoc?.shortPassing ?? 88}%`,
+            value: attributesDoc?.shortPassing ?? defaultVal,
+            percentage: `${attributesDoc?.shortPassing ?? defaultVal}%`,
             color: '#FF2222',
           },
           {
             key: 'longPassing',
             name: 'LONG PASS',
-            value: attributesDoc?.longPassing ?? 84,
-            percentage: `${attributesDoc?.longPassing ?? 84}%`,
+            value: attributesDoc?.longPassing ?? defaultVal,
+            percentage: `${attributesDoc?.longPassing ?? defaultVal}%`,
             color: '#FF2222',
           },
         ],
@@ -246,29 +319,29 @@ export class PlayerAnalyticsService {
       {
         id: 'shooting',
         title: 'SHOOTING',
-        score: fifaCardDoc?.sho ?? 85,
-        percentage: `${fifaCardDoc?.sho ?? 85}%`,
+        score: shoVal,
+        percentage: `${shoVal}%`,
         color: '#00FF66',
         subSkills: [
           {
             key: 'finishing',
             name: 'FINISHING',
-            value: attributesDoc?.finishing ?? 79,
-            percentage: `${attributesDoc?.finishing ?? 79}%`,
+            value: attributesDoc?.finishing ?? defaultVal,
+            percentage: `${attributesDoc?.finishing ?? defaultVal}%`,
             color: '#00FF66',
           },
           {
             key: 'longShots',
             name: 'LONG SHOTS',
-            value: attributesDoc?.longShots ?? 80,
-            percentage: `${attributesDoc?.longShots ?? 80}%`,
+            value: attributesDoc?.longShots ?? defaultVal,
+            percentage: `${attributesDoc?.longShots ?? defaultVal}%`,
             color: '#00FF66',
           },
           {
             key: 'penalties',
             name: 'PENALTIES',
-            value: attributesDoc?.penalties ?? 92,
-            percentage: `${attributesDoc?.penalties ?? 92}%`,
+            value: attributesDoc?.penalties ?? defaultVal,
+            percentage: `${attributesDoc?.penalties ?? defaultVal}%`,
             color: '#00FF66',
           },
         ],
@@ -276,29 +349,29 @@ export class PlayerAnalyticsService {
       {
         id: 'physical',
         title: 'PHYSICAL',
-        score: fifaCardDoc?.phy ?? 78,
-        percentage: `${fifaCardDoc?.phy ?? 78}%`,
+        score: phyVal,
+        percentage: `${phyVal}%`,
         color: '#FF2222',
         subSkills: [
           {
             key: 'strength',
             name: 'STRENGTH',
-            value: attributesDoc?.strength ?? 82,
-            percentage: `${attributesDoc?.strength ?? 82}%`,
+            value: attributesDoc?.strength ?? defaultVal,
+            percentage: `${attributesDoc?.strength ?? defaultVal}%`,
             color: '#FF2222',
           },
           {
             key: 'stamina',
             name: 'STAMINA',
-            value: attributesDoc?.stamina ?? 88,
-            percentage: `${attributesDoc?.stamina ?? 88}%`,
+            value: attributesDoc?.stamina ?? defaultVal,
+            percentage: `${attributesDoc?.stamina ?? defaultVal}%`,
             color: '#FF2222',
           },
           {
             key: 'jumping',
             name: 'JUMPING',
-            value: attributesDoc?.jumping ?? 78,
-            percentage: `${attributesDoc?.jumping ?? 78}%`,
+            value: attributesDoc?.jumping ?? defaultVal,
+            percentage: `${attributesDoc?.jumping ?? defaultVal}%`,
             color: '#FF2222',
           },
         ],
@@ -306,29 +379,29 @@ export class PlayerAnalyticsService {
       {
         id: 'defending',
         title: 'DEFENDING',
-        score: fifaCardDoc?.def ?? 65,
-        percentage: `${fifaCardDoc?.def ?? 65}%`,
+        score: defVal,
+        percentage: `${defVal}%`,
         color: '#00FF66',
         subSkills: [
           {
             key: 'marking',
             name: 'MARKING',
-            value: attributesDoc?.defensiveAwareness ?? attributesDoc?.marking ?? 83,
-            percentage: `${attributesDoc?.defensiveAwareness ?? attributesDoc?.marking ?? 83}%`,
+            value: attributesDoc?.defensiveAwareness ?? attributesDoc?.marking ?? defaultVal,
+            percentage: `${attributesDoc?.defensiveAwareness ?? attributesDoc?.marking ?? defaultVal}%`,
             color: '#00FF66',
           },
           {
             key: 'interception',
             name: 'INTERCEPTION',
-            value: attributesDoc?.interception ?? attributesDoc?.anticipation ?? 79,
-            percentage: `${attributesDoc?.interception ?? attributesDoc?.anticipation ?? 79}%`,
+            value: attributesDoc?.interception ?? attributesDoc?.anticipation ?? defaultVal,
+            percentage: `${attributesDoc?.interception ?? attributesDoc?.anticipation ?? defaultVal}%`,
             color: '#00FF66',
           },
           {
             key: 'tackle',
             name: 'TACKLE',
-            value: attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? 82,
-            percentage: `${attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? 82}%`,
+            value: attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? defaultVal,
+            percentage: `${attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? defaultVal}%`,
             color: '#00FF66',
           },
         ],
@@ -336,29 +409,29 @@ export class PlayerAnalyticsService {
       {
         id: 'dribbling',
         title: 'DRIBBLING',
-        score: fifaCardDoc?.dri ?? 88,
-        percentage: `${fifaCardDoc?.dri ?? 88}%`,
+        score: driVal,
+        percentage: `${driVal}%`,
         color: '#FF2222',
         subSkills: [
           {
             key: 'balance',
             name: 'BALANCE',
-            value: attributesDoc?.balance ?? 96,
-            percentage: `${attributesDoc?.balance ?? 96}%`,
+            value: attributesDoc?.balance ?? defaultVal,
+            percentage: `${attributesDoc?.balance ?? defaultVal}%`,
             color: '#FF2222',
           },
           {
             key: 'agility',
             name: 'AGILITY',
-            value: attributesDoc?.agility ?? 81,
-            percentage: `${attributesDoc?.agility ?? 81}%`,
+            value: attributesDoc?.agility ?? defaultVal,
+            percentage: `${attributesDoc?.agility ?? defaultVal}%`,
             color: '#FF2222',
           },
           {
             key: 'ballControl',
             name: 'BALL CONTROL',
-            value: attributesDoc?.ballControl ?? 65,
-            percentage: `${attributesDoc?.ballControl ?? 65}%`,
+            value: attributesDoc?.ballControl ?? defaultVal,
+            percentage: `${attributesDoc?.ballControl ?? defaultVal}%`,
             color: '#FF2222',
           },
         ],

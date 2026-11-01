@@ -96,8 +96,10 @@ export class ClubAnalyticsService {
       }
 
       const rating = typeof p.overallRating === 'number' ? p.overallRating : 0;
-      const tier: 'GOLD' | 'SILVER' | 'BRONZE' =
-        p.cvTier || (rating >= 90 ? 'GOLD' : rating >= 75 ? 'SILVER' : 'BRONZE');
+      const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
+      const tier: 'GOLD' | 'SILVER' | 'BRONZE' = isVerified
+        ? p.cvTier || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
+        : 'BRONZE';
       const pid = p._id.toString();
 
       const views = viewsMap.get(pid) || 0;

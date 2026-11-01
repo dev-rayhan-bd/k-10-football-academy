@@ -19,6 +19,7 @@ export const createPlayerProfileZodSchema = z.object({
   }),
 });
 
+// Update Player Profile
 export const updatePlayerProfileZodSchema = z.object({
   body: z.object({
     fullName: z.string().optional(),
@@ -70,6 +71,9 @@ export const updatePlayerProfileZodSchema = z.object({
     period: z.string().optional(),
     isCurrent: z.union([z.boolean(), z.string()]).optional(),
     addClub: z.union([z.record(z.any()), z.string()]).optional(),
+    attributes: z.union([z.record(z.any()), z.string()]).optional(),
+    analysisOfPlayerAttributes: z.union([z.record(z.any()), z.string()]).optional(),
+    categories: z.union([z.record(z.any()), z.string()]).optional(),
   }),
 });
 

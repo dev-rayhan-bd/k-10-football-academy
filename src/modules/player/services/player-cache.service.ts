@@ -29,7 +29,12 @@ export class PlayerCacheService {
       await redisCache.del(keys);
     }
     if (profileId) {
-      await redisCache.delByPattern(`CACHE:PLAYER:ANALYTICS:${profileId.toString()}*`);
+      const pId = profileId.toString();
+      await redisCache.delByPattern(`CACHE:PLAYER:*${pId}*`);
+    }
+    if (userId) {
+      const uId = userId.toString();
+      await redisCache.delByPattern(`CACHE:PLAYER:*${uId}*`);
     }
   }
 }

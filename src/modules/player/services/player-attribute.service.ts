@@ -3,9 +3,15 @@ import { AppError } from '@/utils/AppError';
 import { redisCache } from '@/utils/redisCache.util';
 import { PlayerProfile, PlayerAttributes } from '../player.model';
 import { playerStatsService } from './player-stats.service';
+import {
+  calculatePositionRating,
+  formatAttributeLabel,
+  normalizePositionKey,
+  POSITION_ATTRIBUTE_COEFFICIENTS,
+} from '@/utils/ratingCalculator';
 
 export class PlayerAttributeService {
-  formatCategorizedAttributes(doc: any) {
+  formatCategorizedAttributes(doc: any, position?: string) {
     if (!doc) return null;
     const raw = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
 
@@ -75,9 +81,42 @@ export class PlayerAttributeService {
       defensiveAwareness: raw.defensiveAwareness ?? 50,
     };
 
+    const normPos = normalizePositionKey(position || 'CM');
+    const coefficients = POSITION_ATTRIBUTE_COEFFICIENTS[normPos] || {};
+    const positionAttributes = Object.entries(coefficients)
+      .sort((a, b) => b[1] - a[1])
+      .map(([attrKey, weight]) => {
+        let val = raw[attrKey];
+        if (val === undefined || val === null) {
+          if (attrKey === 'attPosition') val = raw.attPosition ?? raw.attackingPositioning;
+          else if (attrKey === 'decisions') val = raw.decisions ?? raw.decisionMaking;
+          else if (attrKey === 'composure' || attrKey === 'composition')
+            val = raw.composition ?? raw.composure;
+          else if (attrKey === 'tackling') val = raw.tackling ?? raw.standingTackle;
+          else if (attrKey === 'interceptions') val = raw.interceptions ?? raw.interception;
+          else if (attrKey === 'aerialAbility')
+            val = raw.aerialAbility ?? raw.aerialDuels ?? raw.heading;
+          else if (attrKey === 'oneOnOne') val = raw.oneOnOne ?? raw.standingTackle;
+          else val = 50;
+        }
+        val = val !== undefined && val !== null ? Number(val) : 50;
+        return {
+          key: attrKey,
+          label: formatAttributeLabel(attrKey),
+          weight: Math.round(weight * 100),
+          percentage: `${Math.round(weight * 100)}%`,
+          value: val,
+        };
+      });
+
+    const calculatedPositionRating = calculatePositionRating(normPos, raw);
+
     return {
       _id: raw._id,
       playerId: raw.playerId,
+      position: normPos,
+      calculatedPositionRating,
+      positionAttributes,
       categories: {
         technical,
         tactical,
@@ -103,7 +142,12 @@ export class PlayerAttributeService {
     // Unpack category-wise updates if passed (e.g. { technical: { ballControl: 80 } } or { categories: { ... } })
     const flattenedPayload: Record<string, any> = {};
     const categoryKeys = ['technical', 'tactical', 'physical', 'mental', 'attacking', 'defending'];
-    const sourceObj = payload.categories ? { ...payload, ...payload.categories } : payload;
+    const sourceObj =
+      payload.attributes && typeof payload.attributes === 'object'
+        ? { ...payload, ...payload.attributes }
+        : payload.categories && typeof payload.categories === 'object'
+          ? { ...payload, ...payload.categories }
+          : payload;
 
     for (const [key, value] of Object.entries(sourceObj)) {
       if (categoryKeys.includes(key.toLowerCase()) && typeof value === 'object' && value !== null) {
@@ -159,7 +203,7 @@ export class PlayerAttributeService {
 
     await playerStatsService.recalculatePlayerStats(profile._id);
 
-    return this.formatCategorizedAttributes(attributes);
+    return this.formatCategorizedAttributes(attributes, profile.position);
   }
 
   async getAttributes(playerId: string) {
@@ -201,6 +245,7 @@ export class PlayerAttributeService {
         $project: {
           _id: 1,
           userId: 1,
+          position: 1,
           attributes: '$attributesDoc',
         },
       },
@@ -214,7 +259,7 @@ export class PlayerAttributeService {
       throw new AppError(404, 'Player attributes not found');
     }
 
-    const formatted = this.formatCategorizedAttributes(result.attributes);
+    const formatted = this.formatCategorizedAttributes(result.attributes, result.position);
 
     // Cache attributes in Redis (TTL: 10 minutes = 600s)
     await redisCache.set(cacheKey, formatted, 600);

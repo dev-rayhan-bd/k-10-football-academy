@@ -8,6 +8,7 @@ import { academyService } from './academy.service';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
 import { coachService } from '@/modules/coach/coach.service';
 import { clubService } from '@/modules/club/club.service';
+import { academyStripeConnectService } from './services/academy-stripe-connect.service';
 
 export const createAcademyProfile = catchAsync(async (req: Request, res: Response) => {
   const result = await academyService.createProfile(req.body);
@@ -2105,6 +2106,50 @@ export const getPublicPlayerCv = catchAsync(async (req: Request, res: Response) 
     statusCode: 200,
     success: true,
     message: 'Public player CV fetched successfully',
+    data: result,
+  });
+});
+
+export const createAcademyStripeConnectLink = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const hostOrigin = req.get('origin');
+  const result = await academyStripeConnectService.createConnectOnboardingLink(
+    user,
+    academyIdentifier,
+    hostOrigin,
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getAcademyStripeConnectStatus = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyStripeConnectService.getConnectStatus(user, academyIdentifier);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const getAcademyStripeDashboardLink = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const result = await academyStripeConnectService.createDashboardLoginLink(
+    user,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
     data: result,
   });
 });

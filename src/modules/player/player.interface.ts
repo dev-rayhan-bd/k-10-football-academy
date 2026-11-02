@@ -123,10 +123,18 @@ export interface IPlayerProfile {
   };
   coachVerification?: {
     isVerified?: boolean;
+    coachId?: Types.ObjectId | string;
+    verifiedByCoachId?: Types.ObjectId | string;
     coachName?: string;
     licenseNumber?: string;
     clubManaged?: string;
     verifiedAt?: Date;
+    digitalStamp?: string;
+    officialSealUrl?: string;
+    certificateId?: string;
+    validationPaymentStatus?: 'UNPAID' | 'PAID';
+    validationFee?: number;
+    transactionId?: string;
   };
   perceptionMetrics?: {
     spaceAwareness?: { score: number; trend: number; grade: string };
@@ -319,7 +327,19 @@ export interface ICoachReviewInfo {
   paymentStatus?: 'UNPAID' | 'PAID' | 'FREE';
   paymentAmount?: number;
   transactionId?: string;
-  status?: 'PENDING' | 'COMPLETED' | 'UNREQUESTED';
+  status?:
+    | 'PENDING'
+    | 'ACCEPTED'
+    | 'REJECTED'
+    | 'AWAITING_SCHEDULING'
+    | 'SCHEDULED'
+    | 'COMPLETED'
+    | 'CANCELLED'
+    | 'UNREQUESTED';
+  rejectionReason?: string;
+  scheduledDate?: Date;
+  scheduledTime?: string;
+  scheduledLocation?: string;
   evaluatedAt?: Date;
   coachRating?: number;
   coachFeedback?: string;
@@ -346,7 +366,14 @@ export interface IMatchRecord {
   weather?: string;
   temperature?: number;
   scoutName?: string;
-  reportCompletionType?: 'SELF' | 'COACH';
+  reportCompletionType?: 'SELF' | 'COACH' | 'PARENT';
+  authorName?: string;
+  authorRole?: string;
+  isProfessionallyVerified?: boolean;
+  rejectionReason?: string;
+  scheduledDate?: Date;
+  scheduledTime?: string;
+  scheduledLocation?: string;
   // Legacy optional compatibility
   matchDate?: Date;
   leagueType?: string;

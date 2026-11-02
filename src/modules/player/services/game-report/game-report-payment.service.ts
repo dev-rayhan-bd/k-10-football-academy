@@ -12,6 +12,7 @@ import { notificationService } from '@/modules/notification/notification.service
 import { ParentChild, ParentMatchReport } from '@/modules/parent/parent.model';
 import { parentService } from '@/modules/parent/parent.service';
 import { AcademyFinanceTransaction, AcademyProfile } from '@/modules/academy/academy.model';
+import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { redisClient } from '@/config/redis';
 import { resolveOrCreatePlayerProfile } from './game-report.utils';
@@ -293,7 +294,7 @@ export class GameReportPaymentService {
             const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
             const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
-            await AcademyFinanceTransaction.findOneAndUpdate(
+            const grTx = await AcademyFinanceTransaction.findOneAndUpdate(
               { reportId: updatedRecord._id },
               {
                 academyId: academy._id,
@@ -308,6 +309,13 @@ export class GameReportPaymentService {
                 notes: `Stripe payment via K10 (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
               },
               { upsert: true, new: true, session },
+            );
+
+            void academyStripeConnectService.transferCommissionToAcademy(
+              academy._id,
+              commissionAcademy,
+              `K10 Game Report Commission for Player ${playerProfile.fullName || 'Player'}`,
+              grTx?._id?.toString(),
             );
           }
         }

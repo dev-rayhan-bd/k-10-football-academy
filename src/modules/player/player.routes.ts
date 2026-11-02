@@ -11,6 +11,7 @@ import {
   updatePitchMapZodSchema,
   requestCoachGameReportZodSchema,
   completeCoachGameReportZodSchema,
+  updateGameReportStatusZodSchema,
 } from './player.validation';
 import {
   createPlayerProfile,
@@ -34,6 +35,8 @@ import {
   addClubInterest,
   uploadPlayerDocuments,
   deletePlayerDocument,
+  requestPlayerCvValidation,
+  verifyCvValidationPayment,
   getPlayerDocuments,
   updatePlayerDocument,
   getPlayerAnalytics,
@@ -111,6 +114,17 @@ router.patch('/me/clubs/:clubId', auth(), upload.any() as any, updateClubHistory
 router.delete('/me/clubs/:clubId', auth(), deleteClubHistoryItem);
 router.post('/me/link-parent', auth('PLAYER', 'SUPER_ADMIN'), linkParent);
 router.patch('/me/pitch-map', auth(), validateRequest(updatePitchMapZodSchema), updatePitchMap);
+router.post(
+  '/me/request-cv-validation',
+  auth('PLAYER', 'PARENT', 'SUPER_ADMIN'),
+  requestPlayerCvValidation,
+);
+router.post(
+  '/me/cv-validation/request',
+  auth('PLAYER', 'PARENT', 'SUPER_ADMIN'),
+  requestPlayerCvValidation,
+);
+router.get('/me/cv-validation/verify-payment', optionalAuth(), verifyCvValidationPayment);
 router.get('/me/matches', auth(), getMatchRecords);
 router.post(
   '/me/matches',
@@ -161,11 +175,13 @@ router.patch(
 router.patch(
   '/coach/game-reports/:reportId/status',
   auth('SUPER_ADMIN', 'COACH', 'ACADEMY'),
+  validateRequest(updateGameReportStatusZodSchema),
   updateGameReportStatus,
 );
 router.patch(
   '/game-reports/:reportId/status',
-  auth('SUPER_ADMIN', 'COACH', 'ACADEMY'),
+  auth('SUPER_ADMIN', 'COACH', 'ACADEMY', 'PLAYER', 'PARENT'),
+  validateRequest(updateGameReportStatusZodSchema),
   updateGameReportStatus,
 );
 

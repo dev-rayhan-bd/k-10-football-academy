@@ -363,7 +363,30 @@ export class PlayerCvTransformerService {
         title: awayTeam.toLowerCase().startsWith('vs') ? awayTeam : `vs ${awayTeam}`,
         date: dateStr,
         gameType: match.gameType || match.leagueType || 'FRIENDLY LEAGUE',
-        isVerified: Boolean(match.coachReview && match.coachReview.status === 'COMPLETED'),
+        isVerified: Boolean(
+          match.isProfessionallyVerified ||
+          (match.reportCompletionType === 'COACH' && match.coachReview?.status === 'COMPLETED'),
+        ),
+        isProfessionallyVerified: Boolean(
+          match.isProfessionallyVerified ||
+          (match.reportCompletionType === 'COACH' && match.coachReview?.status === 'COMPLETED'),
+        ),
+        authorName:
+          match.authorName ||
+          (match.reportCompletionType === 'PARENT'
+            ? 'Parent'
+            : match.reportCompletionType === 'COACH'
+              ? match.coachReview?.coachName || 'Coach'
+              : 'Player'),
+        authorRole: match.authorRole || match.reportCompletionType || 'SELF',
+        reportCompletionType: match.reportCompletionType || 'SELF',
+        verificationBadge:
+          match.isProfessionallyVerified ||
+          (match.reportCompletionType === 'COACH' && match.coachReview?.status === 'COMPLETED')
+            ? 'PROFESSIONALLY_VERIFIED'
+            : match.reportCompletionType === 'PARENT'
+              ? 'PARENT_SUBMISSION'
+              : 'SELF_SUBMISSION',
         rating: r10,
         homeTeam,
         awayTeam,

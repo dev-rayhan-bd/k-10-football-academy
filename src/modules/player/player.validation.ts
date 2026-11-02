@@ -312,7 +312,11 @@ export const createMatchRecordZodSchema = z.object({
     weather: z.string().optional(),
     temperature: z.number().optional(),
     scoutName: z.string().optional(),
-    reportCompletionType: z.enum(['SELF', 'COACH']).optional(),
+    reportCompletionType: z.enum(['SELF', 'COACH', 'PARENT']).optional(),
+    authorName: z.string().optional(),
+    authorRole: z.string().optional(),
+    childPlayerId: z.string().optional(),
+    isProfessionallyVerified: z.boolean().optional(),
     playerRating: z.number().min(0).max(100).optional(),
     goals: z.number().optional(),
     assists: z.number().optional(),
@@ -452,5 +456,23 @@ export const completeCoachGameReportZodSchema = z.object({
       )
       .optional(),
     coachFeedback: z.string().optional(),
+  }),
+});
+
+export const updateGameReportStatusZodSchema = z.object({
+  body: z.object({
+    status: z.enum([
+      'PENDING',
+      'ACCEPTED',
+      'REJECTED',
+      'AWAITING_SCHEDULING',
+      'SCHEDULED',
+      'COMPLETED',
+      'CANCELLED',
+    ]),
+    rejectionReason: z.string().optional(),
+    matchDate: z.string().or(z.date()).optional(),
+    matchTime: z.string().optional(),
+    matchLocation: z.string().optional(),
   }),
 });

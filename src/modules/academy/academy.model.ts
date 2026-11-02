@@ -58,6 +58,20 @@ const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
         shareCount: { type: Number, default: 1 },
       },
     ],
+    stripeConnect: {
+      stripeAccountId: { type: String, index: true },
+      accountStatus: {
+        type: String,
+        enum: ['NOT_CONNECTED', 'PENDING', 'ACTIVE', 'RESTRICTED'],
+        default: 'NOT_CONNECTED',
+      },
+      detailsSubmitted: { type: Boolean, default: false },
+      payoutsEnabled: { type: Boolean, default: false },
+      chargesEnabled: { type: Boolean, default: false },
+      country: { type: String },
+      currency: { type: String },
+      connectedAt: { type: Date },
+    },
   },
   { timestamps: true },
 );
@@ -143,6 +157,14 @@ const PlayerEvaluationSchema = new Schema<IPlayerEvaluationDocument>(
     reminderCount: { type: Number, default: 0 },
     coachFeedback: { type: String },
     notes: { type: String },
+    payoutStatus: {
+      type: String,
+      enum: ['NOT_APPLICABLE', 'PENDING_TRANSFER', 'TRANSFERRED', 'FAILED'],
+      default: 'NOT_APPLICABLE',
+    },
+    stripeTransferId: { type: String },
+    transferredAmount: { type: Number },
+    transferredAt: { type: Date },
   },
   { timestamps: true },
 );

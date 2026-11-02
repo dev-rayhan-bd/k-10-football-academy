@@ -16,8 +16,8 @@ export class GameReportService {
   /**
    * Flow 1: "I Will Complete It" (Player submits all steps 1-5 directly)
    */
-  async createSelfGameReport(userId: string, payload: any) {
-    return gameReportSelfService.createSelfGameReport(userId, payload);
+  async createSelfGameReport(userId: string, payload: any, currentUser?: any) {
+    return gameReportSelfService.createSelfGameReport(userId, payload, currentUser);
   }
 
   /**

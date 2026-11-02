@@ -1,21 +1,38 @@
 import { calculateMatchPerformance } from '@/utils/ratingCalculator';
 import { MatchRecord } from '@/modules/player/player.model';
 import { playerStatsService } from '@/modules/player/services/player-stats.service';
+import { getStripeClient } from '@/config/stripe';
+import { env } from '@/config/env';
+import { User } from '@/modules/user/user.model';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { parseTimerInput, resolveOrCreatePlayerProfile } from './game-report.utils';
 
 export class GameReportSelfService {
   /**
-   * Flow 1: "I Will Complete It" (Player submits all steps 1-5 directly)
+   * Flow 1: Option A - "Parent / Self Creates Report"
+   * Author is tagged as Parent or Player.
+   * isProfessionallyVerified is false.
+   * Initiates $3.99 Stripe checkout session for platform fee.
    */
-  async createSelfGameReport(userId: string, payload: any) {
+  async createSelfGameReport(userId: string, payload: any, currentUser?: any) {
     const playerProfile = await resolveOrCreatePlayerProfile(userId, payload);
 
+    const userRole = currentUser?.role || 'PLAYER';
+    const isParent = userRole === 'PARENT';
+
     payload.playerId = playerProfile._id;
-    payload.reportCompletionType = 'SELF';
+    payload.reportCompletionType = isParent ? 'PARENT' : payload.reportCompletionType || 'SELF';
+    payload.authorRole = userRole;
+    payload.authorName =
+      currentUser?.name || (isParent ? 'Parent' : playerProfile.fullName || 'Player');
+    payload.isProfessionallyVerified = false;
+
+    const resolvedPrice = Number(payload.price || payload.amount || 3.99);
+
     payload.coachReview = {
-      paymentStatus: 'FREE',
-      paymentAmount: 0,
-      status: 'UNREQUESTED',
+      paymentStatus: 'UNPAID',
+      paymentAmount: resolvedPrice,
+      status: 'COMPLETED', // Data already completed by author, activates on payment
     };
 
     // Auto-fill playerInfo from Screen 1 if not provided or merge
@@ -129,8 +146,65 @@ export class GameReportSelfService {
 
     const record = await MatchRecord.create(payload);
     await playerStatsService.recalculatePlayerStats(playerProfile._id);
+    await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
 
-    return record;
+    // Create Stripe Checkout Session ($3.99 Platform Fee)
+    const stripe = getStripeClient();
+    const successUrl = env.STRIPE_SUCCESS_URL;
+    const cancelUrl = env.STRIPE_CANCEL_URL;
+    const userDoc = await User.findById(userId);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            unit_amount: Math.round(resolvedPrice * 100),
+            product_data: {
+              name: 'K10 Match Report Platform Fee',
+              description: `${payload.authorRole === 'PARENT' ? 'Parent' : 'Self'} Match Report for ${playerProfile.fullName || 'Player'} (${resolvedHomeTeam} vs ${resolvedOpponent})`,
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        reportType: 'MATCH_RECORD',
+        subType: payload.reportCompletionType,
+        reportId: record._id.toString(),
+        playerId: playerProfile._id.toString(),
+        userId: String(userId),
+      },
+      payment_intent_data: {
+        metadata: {
+          reportType: 'MATCH_RECORD',
+          subType: payload.reportCompletionType,
+          reportId: record._id.toString(),
+          playerId: playerProfile._id.toString(),
+          userId: String(userId),
+        },
+      },
+      customer_email: userDoc?.email || undefined,
+      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${record._id}&type=MATCH_RECORD`,
+      cancel_url: cancelUrl,
+    });
+
+    record.coachReview!.transactionId = session.id;
+    await record.save();
+
+    return {
+      reportId: record._id,
+      checkoutUrl: session.url,
+      sessionId: session.id,
+      amount: resolvedPrice,
+      status: 'AWAITING_PAYMENT',
+      isProfessionallyVerified: false,
+      authorName: payload.authorName,
+      authorRole: payload.authorRole,
+      reportCompletionType: payload.reportCompletionType,
+      record,
+    };
   }
 }
 

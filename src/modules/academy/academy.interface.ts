@@ -36,6 +36,16 @@ export interface IAcademyProfile {
     sharedAt: Date;
     shareCount: number;
   }[];
+  stripeConnect?: {
+    stripeAccountId?: string;
+    accountStatus?: 'NOT_CONNECTED' | 'PENDING' | 'ACTIVE' | 'RESTRICTED';
+    detailsSubmitted?: boolean;
+    payoutsEnabled?: boolean;
+    chargesEnabled?: boolean;
+    country?: string;
+    currency?: string;
+    connectedAt?: Date;
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -132,6 +142,10 @@ export interface IPlayerEvaluation {
   reminderCount?: number;
   coachFeedback?: string;
   notes?: string;
+  payoutStatus?: 'NOT_APPLICABLE' | 'PENDING_TRANSFER' | 'TRANSFERRED' | 'FAILED';
+  stripeTransferId?: string;
+  transferredAmount?: number;
+  transferredAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }

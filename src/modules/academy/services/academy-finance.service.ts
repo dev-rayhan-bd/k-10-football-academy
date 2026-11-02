@@ -293,7 +293,8 @@ export class AcademyFinanceService {
 
       for (const m of matchReports) {
         const cost = m.coachReview?.paymentAmount || 3.99;
-        const commissionAcademy = parseFloat((cost * 0.4).toFixed(3));
+        const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
+        const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
         const status =
           m.coachReview?.status === 'COMPLETED'
             ? 'COMPLETED'
@@ -313,7 +314,38 @@ export class AcademyFinanceService {
             commissionAcademy,
             transactionDate: m.createdAt || m.matchDate || new Date(),
             status,
-            notes: `Stripe payment via ${m.coachReview?.transactionId || 'session'}`,
+            notes: `Stripe payment via K10 (${m.coachReview?.transactionId || 'session'}). K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+          },
+          { upsert: true, new: true },
+        );
+      }
+
+      // Auto-sync any verified player CVs with 50% commission split ($24.00 total -> $12.00 Academy, $12.00 K10)
+      const verifiedPlayers = await PlayerProfile.find({
+        _id: { $in: academyPlayerIds },
+        'coachVerification.isVerifiedByCoach': true,
+      }).lean();
+
+      for (const vp of verifiedPlayers) {
+        const cost = vp.coachVerification?.validationFee || 24.0;
+        const commissionAcademy = parseFloat((cost * 0.5).toFixed(2));
+        const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
+
+        await AcademyFinanceTransaction.findOneAndUpdate(
+          { playerId: vp._id, transactionType: 'CV Validation' },
+          {
+            academyId: academy._id,
+            playerId: vp._id,
+            coachId:
+              (vp.coachVerification as any)?.verifiedByCoachId ||
+              (vp.coachVerification as any)?.coachId,
+            transactionType: 'CV Validation',
+            cost,
+            commissionAcademy,
+            transactionDate:
+              vp.coachVerification?.verifiedAt || (vp as any).updatedAt || new Date(),
+            status: 'COMPLETED',
+            notes: `Official CV Validation Fee ($${cost.toFixed(2)}). K10 Share: $${k10Commission.toFixed(2)}, Academy Share (50%): $${commissionAcademy.toFixed(2)}. Certificate: ${vp.coachVerification?.certificateId || 'K10-CV'}`,
           },
           { upsert: true, new: true },
         );
@@ -457,7 +489,12 @@ export class AcademyFinanceService {
         costFormatted: `$ ${doc.cost.toFixed(2)}`,
         commissionAcademy: doc.commissionAcademy,
         commissionAcademyFormatted: `$ ${doc.commissionAcademy.toFixed(3)}`,
-        commissionPercentage: '40%',
+        commissionPercentage:
+          doc.transactionType === 'CV Validation'
+            ? '50%'
+            : doc.cost === 3.99 && doc.commissionAcademy === 1
+              ? '25%'
+              : '40%',
         transactionDate: doc.transactionDate,
         date: dateIso,
         status: doc.status,
@@ -475,9 +512,42 @@ export class AcademyFinanceService {
         totalEarningsFormatted: `$ ${totalEarnings.toFixed(2)}`,
         thisMonthEarnings,
         thisMonthEarningsFormatted: `$ ${thisMonthEarnings.toFixed(2)}`,
-        commissionRate: '40%',
+        commissionRate: '40% - 50%',
         currency: '$',
       },
+      feeStructure: [
+        {
+          service: 'Game Report (Option A: Parent)',
+          clientFeeUsd: 3.99,
+          clientFeeGbp: 3.99,
+          feeFormatted: '£3.99 / $3.99',
+          revenueShare: '100% K10 Platform',
+          k10Share: 3.99,
+          academyShare: 0.0,
+          cvImpact: 'Added to unverified match history on Player CV',
+        },
+        {
+          service: 'Game Report (Option B: Coach Request)',
+          clientFeeUsd: 3.99,
+          clientFeeGbp: 3.99,
+          feeFormatted: '£3.99 / $3.99 (+ coach fee if applicable)',
+          revenueShare: 'K10 Share: $2.99, Academy Share: $1.00',
+          k10Share: 2.99,
+          academyShare: 1.0,
+          cvImpact: 'Added as official game report with coach name on Player CV',
+        },
+        {
+          service: 'CV Validation',
+          clientFeeUsd: 24.0,
+          clientFeeGbp: 25.0,
+          feeFormatted: '£25.00 / $24.00',
+          revenueShare: '50% Academy / Coach ($12.00), 50% Platform ($12.00)',
+          k10Share: 12.0,
+          academyShare: 12.0,
+          cvImpact:
+            'Player card upgraded from Bronze to Silver/Gold based on overall rating, certified with digital stamp & certificate ID',
+        },
+      ],
       transactions: formattedTransactions,
       meta: {
         page,

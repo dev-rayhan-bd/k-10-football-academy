@@ -171,6 +171,9 @@ import {
   sharePlayerCv,
   getAcademyPerformanceAnalytics,
   getPublicPlayerCv,
+  createAcademyStripeConnectLink,
+  getAcademyStripeConnectStatus,
+  getAcademyStripeDashboardLink,
 } from './academy.controller';
 
 import {
@@ -761,6 +764,32 @@ router.patch(
   auth('ACADEMY', 'SUPER_ADMIN'),
   validateRequest(updateFeePaymentStatusZodSchema),
   updateFeePaymentStatus,
+);
+
+// ==========================================
+// STRIPE CONNECT & AUTOMATED PAYOUT ONBOARDING
+// ==========================================
+router.post('/me/stripe/connect', auth('ACADEMY', 'SUPER_ADMIN'), createAcademyStripeConnectLink);
+router.post(
+  '/:academyId/stripe/connect',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  createAcademyStripeConnectLink,
+);
+router.get('/me/stripe/status', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyStripeConnectStatus);
+router.get(
+  '/:academyId/stripe/status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  getAcademyStripeConnectStatus,
+);
+router.post(
+  '/me/stripe/dashboard-link',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  getAcademyStripeDashboardLink,
+);
+router.post(
+  '/:academyId/stripe/dashboard-link',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  getAcademyStripeDashboardLink,
 );
 
 // ==========================================

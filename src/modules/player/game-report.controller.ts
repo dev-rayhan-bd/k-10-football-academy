@@ -14,7 +14,7 @@ import { env } from '@/config/env';
  */
 export const createSelfGameReport = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId || (req.user as any)?._id;
-  const result = await gameReportService.createSelfGameReport(userId, req.body);
+  const result = await gameReportService.createSelfGameReport(userId, req.body, req.user);
 
   sendResponse(res, {
     statusCode: StatusCodes.CREATED,

@@ -1,3 +1,5 @@
+import { playerCvValidationRequestService } from './services/player-cv-validation-request.service';
+import { StatusCodes } from 'http-status-codes';
 import { Request, Response } from 'express';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
@@ -812,6 +814,41 @@ export const linkParent = catchAsync(async (req: Request, res: Response) => {
     statusCode: 201,
     success: true,
     message: 'Parent account linked successfully',
+    data: result,
+  });
+});
+
+export const requestPlayerCvValidation = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId || (req.user as any)?._id;
+  const result = await playerCvValidationRequestService.requestCvValidation(
+    userId,
+    req.body,
+    req.user,
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.CREATED,
+    success: true,
+    message: result.message || 'CV Validation payment checkout initiated ($24.00)',
+    data: result,
+  });
+});
+
+export const verifyCvValidationPayment = catchAsync(async (req: Request, res: Response) => {
+  const sessionId = (req.query.session_id || req.query.sessionId) as string | undefined;
+  const playerId = (req.query.playerId || req.query.player_id) as string | undefined;
+
+  const result = await playerCvValidationRequestService.verifyCvValidationPayment(
+    sessionId,
+    playerId,
+  );
+
+  sendResponse(res, {
+    statusCode: result.success ? StatusCodes.OK : StatusCodes.BAD_REQUEST,
+    success: result.success,
+    message:
+      result.message ||
+      (result.success ? 'Payment verified successfully' : 'Payment verification failed'),
     data: result,
   });
 });

@@ -2,6 +2,9 @@ import { AppError } from '@/utils/AppError';
 import { UserModel } from '@/modules/user/user.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { CoachProfile } from '../coach.model';
+import { AcademyFinanceTransaction } from '@/modules/academy/academy.model';
+import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
+import { ParentChild } from '@/modules/parent/parent.model';
 import {
   PlayerProfile,
   PlayerAttributes,
@@ -203,7 +206,11 @@ export class CoachCvValidationService {
       );
     }
 
-    // 5. Issue Validation Certificate and lock verification details
+    // 5. Issue Validation Certificate with Digital Stamp and lock verification details
+    const certId =
+      player.coachVerification?.certificateId ||
+      `K10-CV-${player._id.toString().slice(-6).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+
     player.isVerifiedByCoach = true;
     player.verifyingCoachId = coach.userId;
     player.verifyingCoachLicense = coach.licenseStatus || 'UEFA Certified Coach';
@@ -213,12 +220,69 @@ export class CoachCvValidationService {
       licenseNumber: coach.licenseStatus || 'UEFA Licence',
       clubManaged: coachClub,
       verifiedAt: new Date(),
+      digitalStamp: 'OFFICIALLY_VERIFIED_BY_K10',
+      officialSealUrl:
+        'https://res.cloudinary.com/k10-football/image/upload/v1/seals/k10-official-seal.png',
+      certificateId: certId,
+      validationPaymentStatus: 'PAID',
+      validationFee: 24.0,
+      transactionId: player.coachVerification?.transactionId || undefined,
     };
     if (coach.academyId && !player.academyId) {
       player.academyId = coach.academyId;
     }
 
     await player.save({ validateModifiedOnly: true });
+
+    // 5b. Record 50% commission split to Academy in AcademyFinanceTransaction ($24.00 total = $12.00 Academy, $12.00 K10 Platform)
+    const targetAcademyId = coach.academyId || player.academyId;
+    if (targetAcademyId) {
+      const cvTx = await AcademyFinanceTransaction.findOneAndUpdate(
+        { playerId: player._id, transactionType: 'CV Validation' },
+        {
+          academyId: targetAcademyId,
+          playerId: player._id,
+          coachId: coach.userId,
+          transactionType: 'CV Validation',
+          cost: 24.0,
+          commissionAcademy: 12.0, // 50% share
+          transactionDate: new Date(),
+          status: 'COMPLETED',
+          notes: `Official CV Validation Fee ($24.00). K10 Share: $12.00, Academy Share (50%): $12.00. Verified by Coach ${coach.fullName} (${coachClub}). Certificate: ${certId}`,
+        },
+        { upsert: true, new: true },
+      );
+
+      // Automated Stripe payout to Academy if connected
+      void academyStripeConnectService.transferCommissionToAcademy(
+        targetAcademyId,
+        12.0,
+        `K10 Official CV Validation 50% Share for Player ${player.fullName || 'Player'}`,
+        cvTx?._id?.toString(),
+      );
+    }
+
+    // 5c. Send in-app notification to Parent if linked
+    try {
+      const parentLinks = await ParentChild.find({ childPlayerId: player._id }).populate(
+        'parentId',
+      );
+      for (const link of parentLinks) {
+        const parent = link.parentId as any;
+        if (parent?.userId) {
+          await notificationService.createNotification({
+            recipientId: parent.userId,
+            recipientRole: 'PARENT',
+            title: 'Child CV Officially Validated!',
+            message: `Official validation completed for ${player.fullName} by Coach ${coach.fullName}. Digital Seal and upgraded tier unlocked.`,
+            type: 'PLAYER_CV_VALIDATED',
+            data: { playerId: player._id, certificateId: certId, verifiedAt: new Date() },
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
 
     // 6. Recalculate stats & Tier
     await playerStatsService.recalculatePlayerStats(player._id);

@@ -123,6 +123,58 @@ export class CoachProfileService {
     return profile;
   }
 
+  async getAcademyCoachesDropdown(query: Record<string, unknown> = {}) {
+    const filter: any = {
+      $or: [
+        { academyId: { $exists: true, $ne: null } },
+        { isVerifiedByAcademy: true },
+        { currentClub: { $exists: true, $ne: '' } },
+      ],
+    };
+
+    if (query.academyId && Types.ObjectId.isValid(String(query.academyId))) {
+      filter.academyId = new Types.ObjectId(String(query.academyId));
+      delete filter.$or;
+    }
+
+    if (query.search) {
+      filter.fullName = { $regex: new RegExp(String(query.search).trim(), 'i') };
+    }
+
+    const coaches = await CoachProfile.find(filter)
+      .populate('academyId', 'name logo category city country')
+      .populate('userId', 'name email avatar phone')
+      .sort({ overallRatingScore: -1, fullName: 1 })
+      .lean();
+
+    return coaches.map((c: any) => {
+      const academy = c.academyId || {};
+      const user = c.userId || {};
+      const license =
+        typeof c.licenseStatus === 'string'
+          ? c.licenseStatus
+          : c.licenseStatus?.level || c.licenseStatus?.type || 'UEFA Certified';
+
+      return {
+        _id: c._id,
+        id: c._id,
+        coachId: c._id,
+        userId: user._id || c.userId,
+        name: c.fullName || user.name || 'Coach',
+        fullName: c.fullName || user.name || 'Coach',
+        title: c.title || 'Football Coach',
+        avatar: c.profileImage || user.avatar || '',
+        academyId: academy._id || c.academyId || null,
+        academyName: academy.name || c.currentClub || 'Official Academy',
+        academyLogo: academy.logo || c.clubLogo || '',
+        isVerifiedByAcademy: Boolean(c.isVerifiedByAcademy),
+        licenseStatus: license,
+        yearsExperience: c.yearsExperience || 0,
+        overallRatingScore: c.overallRatingScore || 0,
+      };
+    });
+  }
+
   async getAllProfiles(query: Record<string, unknown> = {}) {
     const searchableFields = [
       'fullName',

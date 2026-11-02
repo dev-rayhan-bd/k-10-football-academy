@@ -39,6 +39,10 @@ export class CoachService {
     return await coachProfileService.getMyProfile(userId);
   }
 
+  async getAcademyCoachesDropdown(query: Record<string, unknown> = {}) {
+    return await coachProfileService.getAcademyCoachesDropdown(query);
+  }
+
   async getAllProfiles(query: Record<string, unknown> = {}) {
     return await coachProfileService.getAllProfiles(query);
   }

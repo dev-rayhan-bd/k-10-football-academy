@@ -1,3 +1,4 @@
+import { StatusCodes } from 'http-status-codes';
 import { Request, Response } from 'express';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
@@ -404,6 +405,16 @@ export const getCoachProfile = catchAsync(async (req: Request, res: Response) =>
     statusCode: 200,
     success: true,
     message: 'Coach profile fetched successfully',
+    data: result,
+  });
+});
+
+export const getAcademyCoachesDropdown = catchAsync(async (req: Request, res: Response) => {
+  const result = await coachService.getAcademyCoachesDropdown(req.query);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Academy-assigned coaches for dropdown fetched successfully',
     data: result,
   });
 });

@@ -22,6 +22,7 @@ import {
   getMyCoachProfile,
   getCoachProfile,
   getAllCoachProfiles,
+  getAcademyCoachesDropdown,
   updateMyCoachProfile,
   updateCoachProfile,
   requestRevalidation,
@@ -263,6 +264,9 @@ router.patch(
   updateMyTestimonial,
 );
 router.delete('/me/testimonials/:testimonialId', auth('COACH', 'SUPER_ADMIN'), deleteMyTestimonial);
+
+// Dedicated Dropdown of Coaches assigned to an Academy (for Player/Parent validation requests)
+router.get('/dropdown', optionalAuth(), getAcademyCoachesDropdown);
 
 // ==========================================
 // 5. PUBLIC / ID-BASED ROUTES

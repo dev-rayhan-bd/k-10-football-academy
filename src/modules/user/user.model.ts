@@ -120,6 +120,13 @@ const userSchema = new Schema<IUserDocument>(
     isParentConsentVerified: { type: Boolean, default: false },
     parentConsentToken: { type: String },
     parentConsentExpires: { type: Date },
+    termsAgreement: {
+      accepted: { type: Boolean, default: false },
+      version: { type: String, default: '1.0' },
+      acceptedAt: { type: Date, default: Date.now },
+      ipAddress: { type: String },
+      userAgent: { type: String },
+    },
     notificationSettings: {
       newVideoLikes: { type: Boolean, default: true },
       profileViews: { type: Boolean, default: true },

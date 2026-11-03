@@ -84,6 +84,13 @@ export interface IUser {
   isParentConsentVerified?: boolean;
   parentConsentToken?: string;
   parentConsentExpires?: Date;
+  termsAgreement?: {
+    accepted: boolean;
+    version: string;
+    acceptedAt: Date;
+    ipAddress?: string;
+    userAgent?: string;
+  };
   notificationSettings?: INotificationSettings;
   createdAt?: Date;
   updatedAt?: Date;

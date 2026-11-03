@@ -91,6 +91,13 @@ router.post(
   userController.changePassword,
 );
 
+router.get('/terms-info', userController.getTermsInfo);
+router.patch(
+  '/me/accept-terms',
+  auth(),
+  validateRequest(UserValidation.acceptTermsZodSchema),
+  userController.acceptTerms,
+);
 router.get('/me', auth(), userController.getProfile);
 router.patch(
   '/me',

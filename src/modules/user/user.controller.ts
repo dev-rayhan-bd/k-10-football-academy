@@ -14,7 +14,13 @@ export class UserController {
       req.body.avatar = avatarUrl;
     }
 
-    const { user, isResent } = await this.service.registerUser(req.body);
+    const ipAddress =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.ip ||
+      req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'] as string;
+
+    const { user, isResent } = await this.service.registerUser(req.body, { ipAddress, userAgent });
     const sanitizedUser =
       typeof (user as any)?.toObject === 'function' ? (user as any).toObject() : { ...user };
     delete (sanitizedUser as any).password;
@@ -263,6 +269,41 @@ export class UserController {
       success: true,
       message: result.message,
       data: result,
+    });
+  });
+
+  acceptTerms = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const userId = (req as any).user?.userId || (req as any).user?._id;
+    const ipAddress =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.ip ||
+      req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'] as string;
+    const result = await this.service.acceptTerms(userId, {
+      ipAddress,
+      userAgent,
+      version: req.body?.version || '1.0',
+    });
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  });
+
+  getTermsInfo = catchAsync(async (_req: Request, res: Response): Promise<void> => {
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Platform Terms & Conditions information retrieved successfully',
+      data: {
+        documentTitle:
+          'K10 FOOTBALL CV ANALYSIS PLATFORM TERMS & CONDITIONS, DATA PROTECTION AND MEDIA CONSENT AGREEMENT',
+        version: '1.0',
+        effectiveDate: '2026-11-01',
+        isMandatoryForRegistration: true,
+      },
     });
   });
 }

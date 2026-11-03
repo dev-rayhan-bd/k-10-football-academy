@@ -88,8 +88,29 @@ export const createUserZodSchema = z.object({
         .or(z.literal('')),
       relationship: z.string().optional(),
       relationType: z.string().optional(),
+
+      // Terms & Conditions, Data Protection and Media Consent Agreement (v1.0)
+      termsAccepted: z
+        .union([z.boolean(), z.string()])
+        .optional()
+        .transform((val) => val === true || val === 'true'),
+      acceptedTermsAndConditions: z
+        .union([z.boolean(), z.string()])
+        .optional()
+        .transform((val) => val === true || val === 'true'),
+      termsVersion: z.string().optional().default('1.0'),
     })
     .superRefine((data, ctx) => {
+      // Mandatory Platform Terms & Conditions and Media Consent Agreement Check (Document Version 1.0)
+      const hasAcceptedTerms = Boolean(data.termsAccepted || data.acceptedTermsAndConditions);
+      if (!hasAcceptedTerms) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'Registration blocked: You must read and agree to the K10 Platform Terms & Conditions, Data Protection, and Media Consent Agreement (v1.0) to register.',
+          path: ['termsAccepted'],
+        });
+      }
       // Role: COACH
       if (data.role === 'COACH') {
         if (data.yearsExperience === undefined || data.yearsExperience === '') {
@@ -345,8 +366,25 @@ export const verifyParentConsentZodSchema = z.object({
   }),
 });
 
+export const acceptTermsZodSchema = z.object({
+  body: z
+    .object({
+      termsAccepted: z
+        .union([z.boolean(), z.string()])
+        .optional()
+        .transform((val) => val === true || val === 'true'),
+      version: z.string().optional().default('1.0'),
+    })
+    .refine((data) => data.termsAccepted === true, {
+      message:
+        'You must accept the K10 Platform Terms & Conditions, Data Protection, and Media Consent Agreement (v1.0).',
+      path: ['termsAccepted'],
+    }),
+});
+
 export const UserValidation = {
   createUserZodSchema,
+  acceptTermsZodSchema,
   loginUserZodSchema,
   updateUserZodSchema,
   updateProfileZodSchema,

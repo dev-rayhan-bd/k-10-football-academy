@@ -30,9 +30,31 @@ import { notificationService } from '@/modules/notification/notification.service
 export class UserRegistrationService {
   async registerUser(
     userData: Partial<IUser>,
+    reqMetadata?: { ipAddress?: string; userAgent?: string },
   ): Promise<{ user: IUserDocument; isResent: boolean }> {
     const normalizedEmail = userData.email!.toLowerCase().trim();
     userData.email = normalizedEmail;
+
+    // Strict Legal Enforcement: Registration is 100% blocked without Terms & Media Consent acceptance
+    const hasAcceptedTerms = Boolean(
+      (userData as any).termsAccepted ||
+      (userData as any).acceptedTermsAndConditions ||
+      userData.termsAgreement?.accepted,
+    );
+    if (!hasAcceptedTerms) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        'Registration blocked: You must read and agree to the K10 Platform Terms & Conditions, Data Protection, and Media Consent Agreement (v1.0) to register.',
+      );
+    }
+
+    userData.termsAgreement = {
+      accepted: true,
+      version: (userData as any).termsVersion || '1.0',
+      acceptedAt: new Date(),
+      ipAddress: reqMetadata?.ipAddress || (userData as any).ipAddress,
+      userAgent: reqMetadata?.userAgent || (userData as any).userAgent,
+    };
 
     if (userData.role === 'SUPER_ADMIN' || userData.role === 'ADMIN') {
       throw new AppError(
@@ -260,6 +282,9 @@ export class UserRegistrationService {
       }
       if (userData.parentConsentExpires !== undefined) {
         existingUser.parentConsentExpires = userData.parentConsentExpires;
+      }
+      if (userData.termsAgreement) {
+        existingUser.termsAgreement = userData.termsAgreement;
       }
       await existingUser.save();
 
@@ -707,6 +732,30 @@ export class UserRegistrationService {
       delete (userObj as any).accountManagedBy;
     }
     return { user: userObj as unknown as IUserDocument, isResent: false };
+  }
+
+  async acceptTerms(
+    userId: string,
+    metadata?: { ipAddress?: string; userAgent?: string; version?: string },
+  ) {
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
+    }
+    user.termsAgreement = {
+      accepted: true,
+      version: metadata?.version || '1.0',
+      acceptedAt: new Date(),
+      ipAddress: metadata?.ipAddress,
+      userAgent: metadata?.userAgent,
+    };
+    await user.save();
+    return {
+      success: true,
+      termsAgreement: user.termsAgreement,
+      message:
+        'K10 Terms & Conditions, Data Protection, and Media Consent Agreement (v1.0) accepted successfully.',
+    };
   }
 }
 

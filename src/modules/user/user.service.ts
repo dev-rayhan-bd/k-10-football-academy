@@ -18,8 +18,16 @@ export class UserService {
 
   async registerUser(
     userData: Partial<IUser>,
+    reqMetadata?: { ipAddress?: string; userAgent?: string },
   ): Promise<{ user: IUserDocument; isResent: boolean }> {
-    return await userRegistrationService.registerUser(userData);
+    return await userRegistrationService.registerUser(userData, reqMetadata);
+  }
+
+  async acceptTerms(
+    userId: string,
+    metadata?: { ipAddress?: string; userAgent?: string; version?: string },
+  ) {
+    return await userRegistrationService.acceptTerms(userId, metadata);
   }
 
   // --- UserAuthService Delegates ---

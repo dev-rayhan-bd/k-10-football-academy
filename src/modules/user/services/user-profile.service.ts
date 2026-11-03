@@ -9,6 +9,7 @@ import { AgentProfile } from '@/modules/agent/agent.model';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import { ParentProfile } from '@/modules/parent/parent.model';
 import { formatMarketValue } from '@/utils/ratingCalculator';
+import { cmsService } from '@/modules/cms/cms.service';
 
 export class UserProfileService {
   async getUserById(id: string): Promise<any> {
@@ -115,6 +116,21 @@ export class UserProfileService {
         userObj.address = userObj.address ?? (parentProfile as any).address;
       }
     }
+
+    // Enrich terms agreement with latest version and dynamic re-acceptance requirement
+    const latestVersion = await cmsService.getLatestActiveVersion('TERMS_AND_CONDITIONS');
+    const terms = userObj.termsAgreement || { accepted: false, version: '1.0' };
+    const isAccepted = Boolean(terms.accepted);
+    const userVersion = terms.version || '1.0';
+    const requiresReacceptance = !isAccepted || userVersion !== latestVersion;
+
+    userObj.termsAgreement = {
+      ...terms,
+      accepted: isAccepted,
+      version: userVersion,
+      latestVersion,
+      requiresReacceptance,
+    };
 
     return userObj;
   }

@@ -3,6 +3,7 @@ import app from './app';
 import { env } from '@/config/env';
 import { connectDB, disconnectDB } from '@/config/db';
 import { seedSuperAdmin } from '@/db/seedAdmin';
+import { seedLegalPolicies } from '@/db/seedPolicies';
 import { initBackgroundJobs, closeBackgroundJobs } from '@/jobs';
 import { redisClient } from '@/config/redis';
 import { logger } from '@/utils/logger';
@@ -18,6 +19,7 @@ async function bootstrap() {
 
     // Auto-seed Super Admin if not present
     await seedSuperAdmin();
+    await seedLegalPolicies();
 
     // 2. Initialize BullMQ Background Workers (Only if Redis is configured)
     if (

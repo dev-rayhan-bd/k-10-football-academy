@@ -4,6 +4,7 @@ import { userService, UserService } from './user.service';
 import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
+import { cmsService } from '@/modules/cms/cms.service';
 
 export class UserController {
   constructor(private readonly service: UserService) {}
@@ -293,16 +294,17 @@ export class UserController {
   });
 
   getTermsInfo = catchAsync(async (_req: Request, res: Response): Promise<void> => {
+    const policy = await cmsService.getActivePolicy('TERMS_AND_CONDITIONS');
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,
       message: 'Platform Terms & Conditions information retrieved successfully',
       data: {
-        documentTitle:
-          'K10 FOOTBALL CV ANALYSIS PLATFORM TERMS & CONDITIONS, DATA PROTECTION AND MEDIA CONSENT AGREEMENT',
-        version: '1.0',
-        effectiveDate: '2026-11-01',
+        documentTitle: policy.title,
+        version: policy.version,
+        effectiveDate: policy.effectiveDate,
         isMandatoryForRegistration: true,
+        summaryOfChanges: policy.summaryOfChanges,
       },
     });
   });

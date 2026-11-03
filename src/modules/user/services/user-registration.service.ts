@@ -26,6 +26,7 @@ import {
   FifaCardStats,
 } from '@/modules/player/player.model';
 import { notificationService } from '@/modules/notification/notification.service';
+import { cmsService } from '@/modules/cms/cms.service';
 
 export class UserRegistrationService {
   async registerUser(
@@ -742,19 +743,32 @@ export class UserRegistrationService {
     if (!user) {
       throw new AppError(StatusCodes.NOT_FOUND, 'User not found');
     }
+
+    const latestVersion = await cmsService.getLatestActiveVersion('TERMS_AND_CONDITIONS');
+    const targetVersion = metadata?.version || latestVersion;
+
     user.termsAgreement = {
       accepted: true,
-      version: metadata?.version || '1.0',
+      version: targetVersion,
       acceptedAt: new Date(),
       ipAddress: metadata?.ipAddress,
       userAgent: metadata?.userAgent,
     };
     await user.save();
+
+    const termsObj =
+      typeof (user.termsAgreement as any)?.toObject === 'function'
+        ? (user.termsAgreement as any).toObject()
+        : { ...user.termsAgreement };
+
     return {
       success: true,
-      termsAgreement: user.termsAgreement,
-      message:
-        'K10 Terms & Conditions, Data Protection, and Media Consent Agreement (v1.0) accepted successfully.',
+      termsAgreement: {
+        ...termsObj,
+        latestVersion,
+        requiresReacceptance: false,
+      },
+      message: `K10 Terms & Conditions, Data Protection, and Media Consent Agreement (v${targetVersion}) accepted successfully.`,
     };
   }
 }

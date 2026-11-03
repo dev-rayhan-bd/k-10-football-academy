@@ -14,6 +14,7 @@ import { SubscriptionRoutes } from '@/modules/subscription/subscription.routes';
 import { NotificationRoutes } from '@/modules/notification/notification.routes';
 import { MediaRoutes } from '@/modules/media/media.routes';
 import { AdminRoutes } from '@/modules/admin/admin.routes';
+import { CmsRoutes } from '@/modules/cms/cms.routes';
 
 const router = Router();
 
@@ -36,6 +37,7 @@ const moduleRoutes = [
   { path: '/subscriptions', route: SubscriptionRoutes },
   { path: '/notifications', route: NotificationRoutes },
   { path: '/media', route: MediaRoutes },
+  { path: '/cms', route: CmsRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

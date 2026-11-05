@@ -8,6 +8,7 @@ import {
   subscribe,
   verifyPayment,
   getUserSubscription,
+  getBillingHistory,
 } from './subscription.controller';
 
 const router = Router();
@@ -19,5 +20,6 @@ router.post('/subscribe', auth(), validateRequest(subscribeZodSchema), subscribe
 router.get('/verify-payment', auth(), verifyPayment);
 router.post('/verify-payment', auth(), verifyPayment);
 router.get('/my-subscription', auth(), getUserSubscription);
+router.get('/billing-history', auth(), getBillingHistory);
 
 export const SubscriptionRoutes = router;

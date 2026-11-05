@@ -227,6 +227,10 @@ export class SubscriptionService {
     };
   }
 
+  /**
+   * Current active subscription status and remaining days
+   * (history has been separated into GET /billing-history)
+   */
   async getUserSubscription(userId: string) {
     if (!userId) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'User ID is required');
@@ -234,23 +238,13 @@ export class SubscriptionService {
 
     const user = await UserModel.findById(userId).select('role name email').lean();
 
-    // 1. Fetch all subscription records for this user, latest first
     const subscriptions = await UserSubscription.find({ userId })
       .populate('planId')
       .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
 
-    // 2. Fetch any platform payments for subscriptions
-    const platformPayments = await PlatformPayment.find({
-      userId,
-      category: { $in: ['SUBSCRIPTION', 'MEMBERSHIP_SUBSCRIPTION'] },
-    })
-      .sort({ paymentDate: -1, createdAt: -1 })
-      .lean();
-
     const now = new Date();
 
-    // 3. Find the most relevant active/current subscription
     let currentDoc: any = null;
     for (const sub of subscriptions) {
       const targetDate = sub.endDate || sub.nextBillingDate;
@@ -261,7 +255,6 @@ export class SubscriptionService {
       }
     }
 
-    // If no valid active subscription found, pick the latest subscription document
     if (!currentDoc && subscriptions.length > 0) {
       currentDoc = subscriptions[0];
     }
@@ -324,101 +317,6 @@ export class SubscriptionService {
       };
     }
 
-    // 4. Construct complete chronological history (kobe kobe kince, koto diye kince)
-    const historyMap = new Map<string, any>();
-
-    for (const sub of subscriptions) {
-      const plan: any = sub.planId || {};
-      const targetDate = sub.endDate || sub.nextBillingDate;
-      let daysRemaining = 0;
-      let isExpired = false;
-
-      if (targetDate) {
-        const diffMs = new Date(targetDate).getTime() - now.getTime();
-        daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-        isExpired = diffMs <= 0;
-      }
-
-      const effectiveStatus = isExpired ? 'EXPIRED' : sub.status;
-      const planTitle = plan.title || plan.planName || sub.category || 'Membership Plan';
-      const amountPaid = typeof sub.amountPaid === 'number' ? sub.amountPaid : plan.price || 0;
-      const currency = plan.currency || '$';
-      const key = sub._id.toString();
-
-      historyMap.set(key, {
-        id: key,
-        planTitle,
-        planCategory:
-          plan.targetRole || plan.planCategory || sub.category || user?.role || 'GENERAL',
-        billingCycle: plan.billingCycle || (sub.durationMonths === 12 ? 'YEARLY' : 'MONTHLY'),
-        amountPaid,
-        currency,
-        formattedAmount: `${currency}${amountPaid}`,
-        status: effectiveStatus,
-        startDate: sub.startDate || sub.createdAt,
-        endDate: sub.endDate || sub.nextBillingDate || null,
-        purchasedAt: sub.createdAt || sub.startDate || new Date(),
-        daysRemaining: effectiveStatus === 'ACTIVE' ? daysRemaining : 0,
-        isAdminGrant: Boolean(sub.isAdminGrant),
-        paymentReference:
-          sub.stripeSessionId ||
-          sub.stripePaymentIntentId ||
-          (sub.isAdminGrant ? 'Admin Grant' : 'Stripe Payment'),
-      });
-
-      if (Array.isArray((sub as any).history)) {
-        for (const h of (sub as any).history) {
-          const hKey = h._id
-            ? h._id.toString()
-            : `${sub._id}_${new Date(h.purchasedAt || h.createdAt).getTime()}`;
-          historyMap.set(hKey, {
-            id: hKey,
-            planTitle: h.planTitle || planTitle,
-            planCategory: h.planCategory || plan.targetRole || user?.role || 'GENERAL',
-            billingCycle: h.billingCycle || 'MONTHLY',
-            amountPaid: h.amountPaid || 0,
-            currency: h.currency || '$',
-            formattedAmount: `${h.currency || '$'}${h.amountPaid || 0}`,
-            status: h.status || 'EXPIRED',
-            startDate: h.startDate,
-            endDate: h.endDate,
-            purchasedAt: h.purchasedAt || h.createdAt,
-            daysRemaining: 0,
-            isAdminGrant: Boolean(h.isAdminGrant),
-            paymentReference: h.stripeSessionId || h.stripePaymentIntentId || 'Historical Payment',
-          });
-        }
-      }
-    }
-
-    for (const pp of platformPayments) {
-      const pKey = pp.transactionId || pp.paymentCode || pp._id.toString();
-      if (!historyMap.has(pKey)) {
-        historyMap.set(pKey, {
-          id: pp._id.toString(),
-          planTitle: pp.notes || pp.type || 'Membership Subscription',
-          planCategory: pp.entityRole || user?.role || 'GENERAL',
-          billingCycle: 'MONTHLY',
-          amountPaid: pp.amount || 0,
-          currency: pp.currency || '$',
-          formattedAmount: `${pp.currency || '$'}${pp.amount || 0}`,
-          status: pp.status === 'COMPLETED' ? 'ACTIVE' : pp.status,
-          startDate: pp.paymentDate || pp.createdAt,
-          endDate: null,
-          purchasedAt: pp.paymentDate || pp.createdAt,
-          daysRemaining: 0,
-          isAdminGrant: false,
-          paymentReference: pp.transactionId || pp.paymentCode || 'Stripe Payment',
-        });
-      }
-    }
-
-    const history = Array.from(historyMap.values()).sort(
-      (a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime(),
-    );
-
-    const totalSpent = history.reduce((sum, item) => sum + (Number(item.amountPaid) || 0), 0);
-
     const hasActiveSubscription = Boolean(
       currentSubscription &&
       currentSubscription.status === 'ACTIVE' &&
@@ -431,12 +329,189 @@ export class SubscriptionService {
       currentSubscription: hasActiveSubscription
         ? currentSubscription
         : currentSubscription || null,
-      summary: {
-        totalSpent: parseFloat(totalSpent.toFixed(2)),
-        currency: '$',
-        totalSubscriptionsCount: history.length,
-      },
-      history,
+    };
+  }
+
+  /**
+   * Monthly billing & deduction history
+   * Returns exact charges by month ("kun mas e koto kata hoice"), deduction dates, and transaction invoices
+   */
+  async getBillingHistory(userId: string) {
+    if (!userId) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'User ID is required');
+    }
+
+    const user = await UserModel.findById(userId).select('role name email').lean();
+
+    const subscriptions = await UserSubscription.find({ userId })
+      .populate('planId')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const platformPayments = await PlatformPayment.find({
+      userId,
+      category: { $in: ['SUBSCRIPTION', 'MEMBERSHIP_SUBSCRIPTION'] },
+    })
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .lean();
+
+    const chargeMap = new Map<string, any>();
+
+    const formatDate = (date: Date | string) => {
+      const d = new Date(date);
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+
+    const getMonthName = (date: Date | string) => {
+      const d = new Date(date);
+      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); // e.g. "November 2026"
+    };
+
+    const getMonthKey = (date: Date | string) => {
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${year}-${month}`; // e.g. "2026-11"
+    };
+
+    for (const sub of subscriptions) {
+      const plan: any = sub.planId || {};
+      const amountPaid = typeof sub.amountPaid === 'number' ? sub.amountPaid : plan.price || 0;
+      const chargeDate = sub.startDate || sub.createdAt || new Date();
+      const currency = plan.currency || '$';
+      const key = sub._id.toString();
+
+      const start = sub.startDate || sub.createdAt;
+      const end = sub.endDate || sub.nextBillingDate;
+      const billingPeriod =
+        start && end ? `${formatDate(start)} - ${formatDate(end)}` : formatDate(chargeDate);
+
+      const dObj = new Date(chargeDate);
+      const invYear = dObj.getFullYear();
+      const invMonth = String(dObj.getMonth() + 1).padStart(2, '0');
+      const invoiceNumber = `INV-${invYear}${invMonth}-${key.slice(-4).toUpperCase()}`;
+
+      chargeMap.set(key, {
+        id: key,
+        month: getMonthName(chargeDate),
+        monthKey: getMonthKey(chargeDate),
+        planTitle: plan.title || plan.planName || sub.category || 'Membership Plan',
+        planCategory:
+          plan.targetRole || plan.planCategory || sub.category || user?.role || 'GENERAL',
+        billingCycle: plan.billingCycle || (sub.durationMonths === 12 ? 'YEARLY' : 'MONTHLY'),
+        amountDeducted: amountPaid,
+        currency,
+        formattedAmount: `${currency}${amountPaid}`,
+        chargeDate,
+        billingPeriod,
+        status: sub.status === 'PENDING_PAYMENT' ? 'PENDING' : 'PAID',
+        paymentMethod: sub.isAdminGrant ? 'ADMIN_GRANT' : 'STRIPE',
+        transactionId: sub.stripeSessionId || sub.stripePaymentIntentId || null,
+        invoiceNumber,
+        isAdminGrant: Boolean(sub.isAdminGrant),
+      });
+
+      if (Array.isArray((sub as any).history)) {
+        for (const h of (sub as any).history) {
+          const hChargeDate = h.purchasedAt || h.startDate || h.createdAt || new Date();
+          const hKey = h._id ? h._id.toString() : `${sub._id}_${new Date(hChargeDate).getTime()}`;
+          const hObj = new Date(hChargeDate);
+          const hInv = `INV-${hObj.getFullYear()}${String(hObj.getMonth() + 1).padStart(2, '0')}-${hKey.slice(-4).toUpperCase()}`;
+
+          chargeMap.set(hKey, {
+            id: hKey,
+            month: getMonthName(hChargeDate),
+            monthKey: getMonthKey(hChargeDate),
+            planTitle: h.planTitle || plan.title || 'Membership Plan',
+            planCategory: h.planCategory || plan.targetRole || user?.role || 'GENERAL',
+            billingCycle: h.billingCycle || 'MONTHLY',
+            amountDeducted: h.amountPaid || 0,
+            currency: h.currency || '$',
+            formattedAmount: `${h.currency || '$'}${h.amountPaid || 0}`,
+            chargeDate: hChargeDate,
+            billingPeriod:
+              h.startDate && h.endDate
+                ? `${formatDate(h.startDate)} - ${formatDate(h.endDate)}`
+                : formatDate(hChargeDate),
+            status: 'PAID',
+            paymentMethod: h.isAdminGrant ? 'ADMIN_GRANT' : 'STRIPE',
+            transactionId: h.stripeSessionId || h.stripePaymentIntentId || null,
+            invoiceNumber: hInv,
+            isAdminGrant: Boolean(h.isAdminGrant),
+          });
+        }
+      }
+    }
+
+    for (const pp of platformPayments) {
+      const pKey = pp.transactionId || pp.paymentCode || pp._id.toString();
+      if (!chargeMap.has(pKey)) {
+        const ppDate = pp.paymentDate || pp.createdAt || new Date();
+        chargeMap.set(pKey, {
+          id: pp._id.toString(),
+          month: getMonthName(ppDate),
+          monthKey: getMonthKey(ppDate),
+          planTitle: pp.notes || pp.type || 'Membership Subscription',
+          planCategory: pp.entityRole || user?.role || 'GENERAL',
+          billingCycle: 'MONTHLY',
+          amountDeducted: pp.amount || 0,
+          currency: pp.currency || '$',
+          formattedAmount: `${pp.currency || '$'}${pp.amount || 0}`,
+          chargeDate: ppDate,
+          billingPeriod: formatDate(ppDate),
+          status: pp.status === 'COMPLETED' ? 'PAID' : pp.status,
+          paymentMethod: pp.paymentMethod || 'STRIPE',
+          transactionId: pp.transactionId || pp.paymentCode || null,
+          invoiceNumber:
+            pp.paymentCode ||
+            `INV-${new Date(ppDate).getFullYear()}-${pp._id.toString().slice(-4).toUpperCase()}`,
+          isAdminGrant: false,
+        });
+      }
+    }
+
+    // Sort all charges latest first
+    const allCharges = Array.from(chargeMap.values()).sort(
+      (a, b) => new Date(b.chargeDate).getTime() - new Date(a.chargeDate).getTime(),
+    );
+
+    // Group charges by month ("kun mas e koto kata hoice")
+    const monthlyGroups = new Map<string, any>();
+    for (const charge of allCharges) {
+      const groupKey = charge.monthKey;
+      if (!monthlyGroups.has(groupKey)) {
+        monthlyGroups.set(groupKey, {
+          month: charge.month,
+          monthKey: groupKey,
+          totalDeducted: 0,
+          currency: '$',
+          chargesCount: 0,
+          charges: [],
+        });
+      }
+      const group = monthlyGroups.get(groupKey);
+      group.totalDeducted = parseFloat(
+        (group.totalDeducted + Number(charge.amountDeducted || 0)).toFixed(2),
+      );
+      group.chargesCount += 1;
+      group.charges.push(charge);
+    }
+
+    const monthlyBreakdown = Array.from(monthlyGroups.values()).sort((a, b) =>
+      b.monthKey.localeCompare(a.monthKey),
+    );
+
+    const totalAmountDeducted = allCharges.reduce(
+      (sum, item) => sum + (Number(item.amountDeducted) || 0),
+      0,
+    );
+
+    return {
+      totalAmountDeducted: parseFloat(totalAmountDeducted.toFixed(2)),
+      currency: '$',
+      totalChargesCount: allCharges.length,
+      monthlyBreakdown,
+      allCharges,
     };
   }
 }

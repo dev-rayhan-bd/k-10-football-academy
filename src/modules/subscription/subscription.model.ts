@@ -30,6 +30,30 @@ MembershipPlanSchema.pre('save', function (next) {
   next();
 });
 
+const SubscriptionHistoryItemSchema = new Schema(
+  {
+    planId: { type: Schema.Types.ObjectId, ref: 'MembershipPlan' },
+    planTitle: { type: String, trim: true },
+    planCategory: { type: String, trim: true },
+    billingCycle: { type: String, enum: ['MONTHLY', 'YEARLY'] },
+    amountPaid: { type: Number, default: 0 },
+    currency: { type: String, default: '$' },
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'PENDING_PAYMENT', 'CANCELLED', 'EXPIRED'],
+      default: 'EXPIRED',
+    },
+    startDate: { type: Date },
+    endDate: { type: Date },
+    purchasedAt: { type: Date, default: Date.now },
+    stripeSessionId: { type: String },
+    stripePaymentIntentId: { type: String },
+    isAdminGrant: { type: Boolean, default: false },
+    notes: { type: String, trim: true },
+  },
+  { _id: true, timestamps: true },
+);
+
 const UserSubscriptionSchema = new Schema<IUserSubscriptionDocument>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -51,6 +75,7 @@ const UserSubscriptionSchema = new Schema<IUserSubscriptionDocument>(
     category: { type: String, trim: true },
     duration: { type: String, trim: true },
     durationMonths: { type: Number },
+    history: { type: [SubscriptionHistoryItemSchema], default: [] },
   },
   { timestamps: true },
 );

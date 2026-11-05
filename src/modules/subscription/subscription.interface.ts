@@ -23,6 +23,24 @@ export interface IMembershipPlan {
 
 export interface IMembershipPlanDocument extends IMembershipPlan, Document {}
 
+export interface ISubscriptionHistoryItem {
+  _id?: Types.ObjectId;
+  planId?: Types.ObjectId;
+  planTitle?: string;
+  planCategory?: string;
+  billingCycle?: BillingCycle;
+  amountPaid: number;
+  currency?: string;
+  status: SubscriptionStatus;
+  startDate?: Date;
+  endDate?: Date;
+  purchasedAt?: Date;
+  stripeSessionId?: string;
+  stripePaymentIntentId?: string;
+  isAdminGrant?: boolean;
+  notes?: string;
+}
+
 export interface IUserSubscription {
   userId: Types.ObjectId;
   planId?: Types.ObjectId;
@@ -38,6 +56,7 @@ export interface IUserSubscription {
   category?: string;
   duration?: string;
   durationMonths?: number;
+  history?: ISubscriptionHistoryItem[];
   createdAt?: Date;
   updatedAt?: Date;
 }

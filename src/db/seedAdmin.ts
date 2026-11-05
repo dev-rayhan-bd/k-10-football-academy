@@ -2,6 +2,7 @@ import { UserModel } from '@/modules/user/user.model';
 import { logger } from '@/utils/logger';
 
 export const seedSuperAdmin = async (): Promise<void> => {
+  //
   try {
     const adminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@k10football.com';
     const adminPassword = process.env.SUPER_ADMIN_PASSWORD || '11111111';

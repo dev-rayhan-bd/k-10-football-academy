@@ -14,6 +14,8 @@ import {
   updateGameReportStatusZodSchema,
 } from './player.validation';
 import {
+  getPlatformPublicStats,
+  getCvAnalysisStats,
   createPlayerProfile,
   getPlayerProfile,
   getPlayerCV,
@@ -74,6 +76,12 @@ router.post(
   validateRequest(createPlayerProfileZodSchema),
   createPlayerProfile,
 );
+// Public Platform Overview Stats (Home Page & Services Page)
+router.get('/public-stats', getPlatformPublicStats);
+
+// Public CVs Page Analytics (Formation Pitch Breakdown, Nationality & Age charts)
+router.get('/cv-analytics', getCvAnalysisStats);
+
 router.get('/', optionalAuth(), gateClubOrAgentIfAuthenticated(), getAllPlayerProfiles);
 router.get('/me', auth(), getPlayerProfile);
 router.get('/me/cv', auth(), getPlayerCV);

@@ -64,6 +64,16 @@ export class PlayerProfileService {
   ) {
     const queryObj = { ...query };
 
+    // Support category alias for cvTier & ageGroup alias for ageRange
+    if (queryObj.category && !queryObj.cvTier) {
+      queryObj.cvTier = queryObj.category;
+      delete queryObj.category;
+    }
+    if (queryObj.ageGroup && !queryObj.ageRange) {
+      queryObj.ageRange = queryObj.ageGroup;
+      delete queryObj.ageGroup;
+    }
+
     // Support ageRange string e.g. "16-20", "18-24", "18+"
     if (queryObj.ageRange && typeof queryObj.ageRange === 'string') {
       const parts = queryObj.ageRange.split('-');
@@ -192,8 +202,26 @@ export class PlayerProfileService {
     const rawResult = await playerQuery.modelQuery;
     const meta = await playerQuery.countTotal();
 
+    const playerIds = rawResult.map((p: any) => p._id);
+    const fifaCards = await FifaCardStats.find({ playerId: { $in: playerIds } }).lean();
+    const fifaCardMap = new Map<string, any>();
+    fifaCards.forEach((c: any) => {
+      fifaCardMap.set(c.playerId.toString(), c);
+    });
+
     const result = rawResult.map((p: any) => {
       const obj = p.toObject ? p.toObject() : p;
+      const card = fifaCardMap.get(obj._id?.toString());
+      obj.fifaCardStats = {
+        overallRating: card?.overallRating ?? obj.overallRating ?? 50,
+        position: card?.position ?? obj.position ?? 'Forward',
+        pac: card?.pac ?? 50,
+        sho: card?.sho ?? 50,
+        pas: card?.pas ?? 50,
+        dri: card?.dri ?? 50,
+        def: card?.def ?? 50,
+        phy: card?.phy ?? 50,
+      };
       return playerCvService.applySafeguarding(obj, viewer);
     });
 

@@ -852,3 +852,23 @@ export const verifyCvValidationPayment = catchAsync(async (req: Request, res: Re
     data: result,
   });
 });
+
+export const getPlatformPublicStats = catchAsync(async (_req: Request, res: Response) => {
+  const result = await playerService.getPlatformPublicStats();
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Platform overview stats retrieved successfully',
+    data: result,
+  });
+});
+
+export const getCvAnalysisStats = catchAsync(async (req: Request, res: Response) => {
+  const result = await playerService.getCvAnalysisStats(req.query);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'CV analysis stats retrieved successfully',
+    data: result,
+  });
+});

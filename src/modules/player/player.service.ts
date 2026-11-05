@@ -171,6 +171,15 @@ export class PlayerService {
   async linkParent(userId: string, payload: { parentEmail?: string; relationshipType?: string }) {
     return playerProfileService.linkParent(userId, payload);
   }
+  // 11. Platform Overview Stats (Home & Services Page)
+  async getPlatformPublicStats() {
+    return playerStatsService.getPlatformPublicStats();
+  }
+
+  // 12. CVs Page Analytics & Formation Breakdown (Analysis CVs Page)
+  async getCvAnalysisStats(query: Record<string, unknown> = {}) {
+    return playerStatsService.getCvAnalysisStats(query);
+  }
 }
 
 export const playerService = new PlayerService();

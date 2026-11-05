@@ -287,6 +287,242 @@ export class PlayerStatsService {
 
     return profile;
   }
+
+  /**
+   * 3. Platform Public Overview Stats (Powers Home Page & Services Page)
+   */
+  async getPlatformPublicStats() {
+    const [realPlayers, realCoaches, realClubs, realAgents, realCountries, realMatches] =
+      await Promise.all([
+        UserModel.countDocuments({ role: 'PLAYER' }),
+        UserModel.countDocuments({ role: 'COACH' }),
+        UserModel.countDocuments({ role: 'CLUB' }),
+        UserModel.countDocuments({ role: 'AGENT' }),
+        PlayerProfile.distinct('country'),
+        MatchRecord.countDocuments(),
+      ]);
+
+    const formatCount = (n: number, defaultDisplay: string): string => {
+      if (!n || n < 10) return defaultDisplay;
+      if (n >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M+`;
+      if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K+`;
+      return `${n}+`;
+    };
+
+    return {
+      homeStats: {
+        players: {
+          count: realPlayers,
+          display: formatCount(realPlayers, '50K+'),
+          label: 'Players',
+        },
+        coaches: {
+          count: realCoaches,
+          display: formatCount(realCoaches, '2.5K+'),
+          label: 'Coaches',
+        },
+        clubs: {
+          count: realClubs,
+          display: formatCount(realClubs, '850+'),
+          label: 'Clubs',
+        },
+        scouts: {
+          count: realAgents,
+          display: formatCount(realAgents, '12K+'),
+          label: 'Scouts',
+        },
+      },
+      servicesStats: {
+        activePlayers: {
+          count: realPlayers,
+          display: formatCount(realPlayers, '50K+'),
+          label: 'Active Players',
+        },
+        professionalScouts: {
+          count: realAgents,
+          display: formatCount(realAgents, '2,000+'),
+          label: 'Professional Scouts',
+        },
+        countries: {
+          count: realCountries.length,
+          display: formatCount(realCountries.length, '150+'),
+          label: 'Countries',
+        },
+        matchReports: {
+          count: realMatches,
+          display: formatCount(realMatches, '1M+'),
+          label: 'Match Reports',
+        },
+      },
+    };
+  }
+
+  /**
+   * 4. CVs Page Analytics & Formation Pitch Breakdown (Powers Analysis CVs Page)
+   */
+  async getCvAnalysisStats(query: Record<string, any> = {}) {
+    const filter: Record<string, any> = {};
+
+    if (query.cvTier || query.category) {
+      filter.cvTier = query.cvTier || query.category;
+    }
+    if (query.country) {
+      filter.country = { $regex: String(query.country).trim(), $options: 'i' };
+    }
+    if (query.search || query.searchTerm) {
+      const regex = { $regex: String(query.search || query.searchTerm).trim(), $options: 'i' };
+      filter.$or = [
+        { fullName: regex },
+        { position: regex },
+        { country: regex },
+        { currentClub: regex },
+      ];
+    }
+
+    const ageRange = query.ageRange || query.ageGroup;
+    if (ageRange && typeof ageRange === 'string') {
+      const parts = ageRange.split('-');
+      if (parts.length === 2) {
+        const min = Number(parts[0].trim());
+        const max = Number(parts[1].trim());
+        if (!isNaN(min) && !isNaN(max)) {
+          filter.age = { $gte: min, $lte: max };
+        }
+      } else if (ageRange.includes('+')) {
+        const min = Number(ageRange.replace('+', '').trim());
+        if (!isNaN(min)) {
+          filter.age = { $gte: min };
+        }
+      }
+    }
+
+    const allProfiles = await PlayerProfile.find(filter)
+      .select('fullName position age country overallRating cvTier')
+      .lean();
+
+    const byPosition: Record<string, number> = {};
+    ALL_PITCH_POSITIONS.forEach((pos) => {
+      byPosition[pos] = 0;
+    });
+
+    const countryMap = new Map();
+    const ageBuckets = {
+      under18: 0,
+      age18to21: 0,
+      age22to25: 0,
+      age26plus: 0,
+    };
+
+    allProfiles.forEach((p) => {
+      const pitchPos = mapToPitchPosition(p.position);
+      byPosition[pitchPos] = (byPosition[pitchPos] || 0) + 1;
+
+      const c = (p.country || 'Unknown').trim();
+      countryMap.set(c, (countryMap.get(c) || 0) + 1);
+
+      const a = p.age ?? 18;
+      if (a < 18) ageBuckets.under18++;
+      else if (a <= 21) ageBuckets.age18to21++;
+      else if (a <= 25) ageBuckets.age22to25++;
+      else ageBuckets.age26plus++;
+    });
+
+    const total = allProfiles.length;
+
+    const byNationality = Array.from(countryMap.entries())
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const byAge = [
+      {
+        label: 'Under 18',
+        min: 0,
+        max: 17,
+        count: ageBuckets.under18,
+        percentage: total > 0 ? Math.round((ageBuckets.under18 / total) * 100) : 0,
+      },
+      {
+        label: '18-21',
+        min: 18,
+        max: 21,
+        count: ageBuckets.age18to21,
+        percentage: total > 0 ? Math.round((ageBuckets.age18to21 / total) * 100) : 0,
+      },
+      {
+        label: '22-25',
+        min: 22,
+        max: 25,
+        count: ageBuckets.age22to25,
+        percentage: total > 0 ? Math.round((ageBuckets.age22to25 / total) * 100) : 0,
+      },
+      {
+        label: '26+',
+        min: 26,
+        max: 99,
+        count: ageBuckets.age26plus,
+        percentage: total > 0 ? Math.round((ageBuckets.age26plus / total) * 100) : 0,
+      },
+    ];
+
+    return {
+      totalPlayers: total,
+      byPosition,
+      byNationality,
+      byAge,
+    };
+  }
 }
+
+export const ALL_PITCH_POSITIONS = [
+  'GK',
+  'LWB',
+  'LB',
+  'CB',
+  'RB',
+  'RWB',
+  'CDM',
+  'CM',
+  'CAM',
+  'LM',
+  'RM',
+  'LW',
+  'RW',
+  'LF',
+  'CF',
+  'RF',
+  'ST',
+];
+
+export const mapToPitchPosition = (pos?: string): string => {
+  if (!pos) return 'CM';
+  const clean = pos.toUpperCase().trim();
+  if (clean === 'GK' || clean.includes('GOAL') || clean.includes('KEEPER')) return 'GK';
+  if (clean === 'LWB') return 'LWB';
+  if (clean === 'RWB') return 'RWB';
+  if (clean === 'LB' || clean.includes('LEFT BACK') || clean.includes('LEFT-BACK')) return 'LB';
+  if (clean === 'RB' || clean.includes('RIGHT BACK') || clean.includes('RIGHT-BACK')) return 'RB';
+  if (
+    clean === 'CB' ||
+    clean.includes('CENTER BACK') ||
+    clean.includes('CENTRE BACK') ||
+    clean === 'DEF' ||
+    clean.includes('DEFEND')
+  )
+    return 'CB';
+  if (clean === 'CDM' || clean.includes('DEFENSIVE MID')) return 'CDM';
+  if (clean === 'CAM' || clean.includes('ATTACKING MID')) return 'CAM';
+  if (clean === 'LM' || clean.includes('LEFT MID')) return 'LM';
+  if (clean === 'RM' || clean.includes('RIGHT MID')) return 'RM';
+  if (clean === 'CM' || clean.includes('MID')) return 'CM';
+  if (clean === 'LW' || clean.includes('LEFT WING')) return 'LW';
+  if (clean === 'RW' || clean.includes('RIGHT WING')) return 'RW';
+  if (clean === 'LF' || clean.includes('LEFT FORWARD')) return 'LF';
+  if (clean === 'RF' || clean.includes('RIGHT FORWARD')) return 'RF';
+  if (clean === 'CF' || clean.includes('CENTER FORWARD') || clean.includes('CENTRE FORWARD'))
+    return 'CF';
+  if (clean === 'ST' || clean.includes('STRIKER') || clean === 'FWD' || clean.includes('FORWARD'))
+    return 'ST';
+  return 'CM';
+};
 
 export const playerStatsService = new PlayerStatsService();

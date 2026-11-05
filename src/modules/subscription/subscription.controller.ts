@@ -15,7 +15,7 @@ export const createPlan = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const getPlans = catchAsync(async (req: Request, res: Response) => {
-  const role = req.query.role as string | undefined;
+  const role = req.query.role as string;
   const result = await subscriptionService.getActivePlans(role);
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -26,12 +26,13 @@ export const getPlans = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const subscribe = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.userId || (req as any).user?.id || req.body.userId;
-  const result = await subscriptionService.subscribe(userId, req.body.planId);
+  const userId = (req as any).user.userId || (req as any).user.id;
+  const { planId } = req.body;
+  const result = await subscriptionService.subscribe(userId, planId);
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Stripe checkout session created successfully',
+    message: result.message || 'Subscription process initiated',
     data: result,
   });
 });
@@ -57,6 +58,17 @@ export const getUserSubscription = catchAsync(async (req: Request, res: Response
     statusCode: StatusCodes.OK,
     success: true,
     message: 'User subscription fetched successfully',
+    data: result,
+  });
+});
+
+export const getBillingHistory = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.userId || (req as any).user?.id || req.params.userId;
+  const result = await subscriptionService.getBillingHistory(userId);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Billing history fetched successfully',
     data: result,
   });
 });

@@ -243,6 +243,14 @@ export interface IAcademyFinanceTransaction {
   transactionType: FinanceTransactionType;
   cost: number;
   commissionAcademy: number;
+  commissionCoach?: number;
+  commissionPlatform?: number;
+  payoutStatusAcademy?: 'PENDING' | 'PAID' | 'PROCESSING';
+  payoutStatusCoach?: 'PENDING' | 'PAID' | 'PROCESSING';
+  payoutReferenceAcademy?: string;
+  payoutReferenceCoach?: string;
+  paidAtAcademy?: Date;
+  paidAtCoach?: Date;
   transactionDate: Date;
   status: FinanceTransactionStatus;
   notes?: string;

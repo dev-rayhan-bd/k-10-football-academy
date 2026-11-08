@@ -454,7 +454,12 @@ export class AdminPaymentsService {
 
       const ac = ft.academyId as any;
       const pl = ft.playerId as any;
-      const spend = Number(ft.commissionAcademy) || 0;
+      const coachSpend = Number(ft.commissionCoach) || 0;
+      const academySpend = Number(ft.commissionAcademy) || 0;
+      const spend =
+        ft.transactionType === 'CV Validation'
+          ? coachSpend + academySpend || (gross === 24 ? 18.0 : gross * 0.75)
+          : academySpend;
       const net = parseFloat((gross - spend).toFixed(2));
       const dt = new Date(ft.transactionDate || ft.createdAt || Date.now());
 
@@ -1287,6 +1292,459 @@ export class AdminPaymentsService {
     }
 
     return await this.getPaymentById(targetId);
+  }
+
+  /**
+   * Payouts Management (Client Requirement 7):
+   * Track pending commissions & completed payouts across all Coaches and Academies
+   */
+  async getPayoutsSummaryAndList(query: Record<string, unknown> = {}) {
+    const recipientType = String(query.recipientType || 'ALL')
+      .toUpperCase()
+      .trim();
+    const statusFilter = String(query.status || 'ALL')
+      .toUpperCase()
+      .trim();
+    const targetRecipientId = query.recipientId ? String(query.recipientId).trim() : '';
+
+    // 1. Fetch all AcademyFinanceTransaction documents
+    const allFinanceTxns = await AcademyFinanceTransaction.find()
+      .populate('academyId', 'name contactEmail logo phone')
+      .populate('playerId', 'fullName position profileImage currentClub')
+      .sort({ transactionDate: -1, createdAt: -1 })
+      .lean();
+
+    // 2. Fetch all Coaches and Academies
+    const [allCoaches, allAcademies, allCoachUsers] = await Promise.all([
+      CoachProfile.find()
+        .select('_id userId fullName currentClub licenseStatus profileImage phone email')
+        .lean(),
+      AcademyProfile.find().select('_id userId name contactEmail logo phone').lean(),
+      UserModel.find({ role: 'COACH' }).select('_id name email phone avatar').lean(),
+    ]);
+
+    const coachMap = new Map<string, any>();
+    allCoaches.forEach((c) => {
+      coachMap.set(c._id.toString(), c);
+      if (c.userId) coachMap.set(c.userId.toString(), c);
+    });
+
+    const coachUserMap = new Map<string, any>();
+    allCoachUsers.forEach((u) => {
+      coachUserMap.set(u._id.toString(), u);
+    });
+
+    const academyMap = new Map<string, any>();
+    allAcademies.forEach((a) => {
+      academyMap.set(a._id.toString(), a);
+      if (a.userId) academyMap.set(a.userId.toString(), a);
+    });
+
+    // 3. Aggregate Coaches Payouts
+    const coachesAggMap = new Map<string, any>();
+    let totalCoachPending = 0;
+    let totalCoachPaid = 0;
+
+    for (const tx of allFinanceTxns) {
+      if (tx.commissionCoach && tx.commissionCoach > 0) {
+        const cId = tx.coachId ? tx.coachId.toString() : '';
+        const coachProfile = cId ? coachMap.get(cId) : null;
+        const coachUser = coachProfile?.userId
+          ? coachUserMap.get(coachProfile.userId.toString())
+          : cId
+            ? coachUserMap.get(cId)
+            : null;
+
+        const recId = coachProfile?._id?.toString() || cId || 'UNKNOWN_COACH';
+        if (!coachesAggMap.has(recId)) {
+          coachesAggMap.set(recId, {
+            recipientType: 'COACH',
+            recipientId: recId,
+            recipientUserId: coachProfile?.userId?.toString() || coachUser?._id?.toString() || null,
+            name: coachProfile?.fullName || coachUser?.name || 'Coach',
+            email: coachUser?.email || '',
+            phone: coachProfile?.phone || coachUser?.phone || '',
+            club: coachProfile?.currentClub || 'Official Academy',
+            license: coachProfile?.licenseStatus || 'Certified Coach',
+            totalEarned: 0,
+            pendingAmount: 0,
+            completedPayoutAmount: 0,
+            transactionsCount: 0,
+            transactions: [],
+          });
+        }
+
+        const agg = coachesAggMap.get(recId);
+        const earned = Number(tx.commissionCoach) || 12.0;
+        agg.totalEarned = parseFloat((agg.totalEarned + earned).toFixed(2));
+        agg.transactionsCount += 1;
+
+        const isPaid = tx.payoutStatusCoach === 'PAID';
+        if (isPaid) {
+          agg.completedPayoutAmount = parseFloat((agg.completedPayoutAmount + earned).toFixed(2));
+          totalCoachPaid = parseFloat((totalCoachPaid + earned).toFixed(2));
+        } else {
+          agg.pendingAmount = parseFloat((agg.pendingAmount + earned).toFixed(2));
+          totalCoachPending = parseFloat((totalCoachPending + earned).toFixed(2));
+        }
+
+        agg.transactions.push({
+          transactionId: tx._id.toString(),
+          transactionType: tx.transactionType,
+          grossCost: tx.cost,
+          commission: earned,
+          commissionRate: '50%',
+          payoutStatus: isPaid ? 'PAID' : 'PENDING',
+          payoutReference: tx.payoutReferenceCoach || null,
+          paidAt: tx.paidAtCoach || null,
+          player: (tx.playerId as any)?.fullName || 'Player',
+          date: tx.transactionDate,
+          notes: tx.notes || '',
+        });
+      }
+    }
+
+    // 4. Aggregate Academies Payouts
+    const academiesAggMap = new Map<string, any>();
+    let totalAcademyPending = 0;
+    let totalAcademyPaid = 0;
+
+    for (const tx of allFinanceTxns) {
+      if (tx.commissionAcademy && tx.commissionAcademy > 0) {
+        const aId = tx.academyId ? ((tx.academyId as any)._id || tx.academyId).toString() : '';
+        const acadProfile = aId ? academyMap.get(aId) : (tx.academyId as any);
+
+        const recId = acadProfile?._id?.toString() || aId || 'UNKNOWN_ACADEMY';
+        if (!academiesAggMap.has(recId)) {
+          academiesAggMap.set(recId, {
+            recipientType: 'ACADEMY',
+            recipientId: recId,
+            recipientUserId: acadProfile?.userId?.toString() || null,
+            name: acadProfile?.name || 'Academy',
+            email: acadProfile?.contactEmail || '',
+            phone: acadProfile?.phone || '',
+            totalEarned: 0,
+            pendingAmount: 0,
+            completedPayoutAmount: 0,
+            transactionsCount: 0,
+            transactions: [],
+          });
+        }
+
+        const agg = academiesAggMap.get(recId);
+        const earned = Number(tx.commissionAcademy) || 0;
+        agg.totalEarned = parseFloat((agg.totalEarned + earned).toFixed(2));
+        agg.transactionsCount += 1;
+
+        const isPaid = tx.payoutStatusAcademy === 'PAID';
+        if (isPaid) {
+          agg.completedPayoutAmount = parseFloat((agg.completedPayoutAmount + earned).toFixed(2));
+          totalAcademyPaid = parseFloat((totalAcademyPaid + earned).toFixed(2));
+        } else {
+          agg.pendingAmount = parseFloat((agg.pendingAmount + earned).toFixed(2));
+          totalAcademyPending = parseFloat((totalAcademyPending + earned).toFixed(2));
+        }
+
+        agg.transactions.push({
+          transactionId: tx._id.toString(),
+          transactionType: tx.transactionType,
+          grossCost: tx.cost,
+          commission: earned,
+          payoutStatus: isPaid ? 'PAID' : 'PENDING',
+          payoutReference: tx.payoutReferenceAcademy || null,
+          paidAt: tx.paidAtAcademy || null,
+          player: (tx.playerId as any)?.fullName || 'Player',
+          date: tx.transactionDate,
+          notes: tx.notes || '',
+        });
+      }
+    }
+
+    let coachesList = Array.from(coachesAggMap.values());
+    let academiesList = Array.from(academiesAggMap.values());
+
+    if (targetRecipientId) {
+      coachesList = coachesList.filter(
+        (c) => c.recipientId === targetRecipientId || c.recipientUserId === targetRecipientId,
+      );
+      academiesList = academiesList.filter(
+        (a) => a.recipientId === targetRecipientId || a.recipientUserId === targetRecipientId,
+      );
+    }
+
+    if (statusFilter === 'PENDING') {
+      coachesList = coachesList.filter((c) => c.pendingAmount > 0);
+      academiesList = academiesList.filter((a) => a.pendingAmount > 0);
+    } else if (statusFilter === 'PAID' || statusFilter === 'COMPLETED') {
+      coachesList = coachesList.filter((c) => c.completedPayoutAmount > 0);
+      academiesList = academiesList.filter((a) => a.completedPayoutAmount > 0);
+    }
+
+    const recipients = [];
+    if (recipientType === 'ALL' || recipientType === 'COACH') {
+      recipients.push(...coachesList);
+    }
+    if (recipientType === 'ALL' || recipientType === 'ACADEMY') {
+      recipients.push(...academiesList);
+    }
+
+    return {
+      summary: {
+        totalPendingOverall: parseFloat((totalCoachPending + totalAcademyPending).toFixed(2)),
+        totalPaidOverall: parseFloat((totalCoachPaid + totalAcademyPaid).toFixed(2)),
+        totalCoachPending,
+        totalCoachPaid,
+        totalAcademyPending,
+        totalAcademyPaid,
+        currency: '$',
+      },
+      recipients,
+    };
+  }
+
+  /**
+   * Admin Records Completed Payout (Client Requirement 7: "Record completed payouts")
+   * Disburses pending commissions to a Coach or Academy
+   */
+  async recordPayout(payload: Record<string, any>, adminUserId?: string) {
+    const {
+      recipientType,
+      recipientId,
+      paymentMethod = 'BANK_TRANSFER',
+      payoutReference,
+      notes,
+    } = payload;
+    if (!recipientType || !recipientId) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'recipientType and recipientId are required');
+    }
+
+    const typeUpper = String(recipientType).toUpperCase().trim();
+    if (typeUpper !== 'COACH' && typeUpper !== 'ACADEMY') {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'recipientType must be COACH or ACADEMY');
+    }
+
+    const now = new Date();
+    const resolvedRef =
+      payoutReference && String(payoutReference).trim()
+        ? String(payoutReference).trim()
+        : `PAYOUT-${typeUpper}-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+
+    const rawTxIds: string[] = Array.isArray(payload.transactionIds)
+      ? payload.transactionIds
+      : payload.transactionId && typeof payload.transactionId === 'string'
+        ? [payload.transactionId]
+        : [];
+    const validTxObjectIds = rawTxIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    if (typeUpper === 'COACH') {
+      const coach = await CoachProfile.findOne({
+        $or: [
+          { _id: Types.ObjectId.isValid(recipientId) ? new Types.ObjectId(recipientId) : null },
+          { userId: Types.ObjectId.isValid(recipientId) ? new Types.ObjectId(recipientId) : null },
+        ].filter(Boolean) as any[],
+      });
+
+      if (!coach) {
+        throw new AppError(StatusCodes.NOT_FOUND, 'Coach profile not found with the provided ID');
+      }
+
+      const coachIdentifiers = [coach._id, coach.userId].filter(Boolean);
+
+      const queryFilter: any = {
+        $or: [{ coachId: { $in: coachIdentifiers } }],
+        payoutStatusCoach: { $ne: 'PAID' },
+      };
+
+      if (validTxObjectIds.length > 0) {
+        queryFilter._id = { $in: validTxObjectIds };
+      }
+
+      // Find pending transactions
+      let pendingTxns = await AcademyFinanceTransaction.find(queryFilter);
+
+      // Auto-reconcile any verified players if not yet in transaction table
+      if (pendingTxns.length === 0) {
+        const verifiedPlayers = await PlayerProfile.find({
+          $or: [
+            { verifyingCoachId: { $in: coachIdentifiers } },
+            { 'coachVerification.verifiedByCoachId': { $in: coachIdentifiers } },
+            { 'coachVerification.coachName': coach.fullName },
+          ],
+          $and: [{ $or: [{ isVerifiedByCoach: true }, { 'coachVerification.isVerified': true }] }],
+        });
+
+        for (const pl of verifiedPlayers) {
+          await AcademyFinanceTransaction.findOneAndUpdate(
+            { playerId: pl._id, transactionType: 'CV Validation' },
+            {
+              academyId: pl.academyId || coach.academyId,
+              playerId: pl._id,
+              coachId: coach.userId,
+              transactionType: 'CV Validation',
+              cost: 24.0,
+              commissionAcademy: 6.0,
+              commissionCoach: 12.0,
+              commissionPlatform: 6.0,
+              payoutStatusCoach: 'PENDING',
+              transactionDate: pl.coachVerification?.verifiedAt || new Date(),
+              status: 'COMPLETED',
+              notes: `Official CV Validation Commission ($12.00) for Player ${pl.fullName || 'Player'}`,
+            },
+            { upsert: true, new: true },
+          );
+        }
+
+        pendingTxns = await AcademyFinanceTransaction.find(queryFilter);
+      }
+
+      if (pendingTxns.length === 0) {
+        throw new AppError(StatusCodes.BAD_REQUEST, 'No pending payouts found for this coach');
+      }
+
+      const totalPaidAmount = pendingTxns.reduce(
+        (sum, tx) => sum + (Number(tx.commissionCoach) || 12.0),
+        0,
+      );
+
+      await AcademyFinanceTransaction.updateMany(
+        { _id: { $in: pendingTxns.map((t) => t._id) } },
+        {
+          $set: {
+            payoutStatusCoach: 'PAID',
+            payoutReferenceCoach: resolvedRef,
+            paidAtCoach: now,
+          },
+        },
+      );
+
+      // Log to PlatformPayment audit ledger
+      await PlatformPayment.create({
+        paymentCode: resolvedRef,
+        type: 'Coach Payout',
+        category: 'OTHER',
+        sourceModel: 'AcademyFinanceTransaction',
+        userId: coach.userId,
+        entityId: coach._id,
+        userOrEntityName: coach.fullName || 'Coach',
+        entityRole: 'COACH',
+        amount: totalPaidAmount,
+        spend: totalPaidAmount,
+        commissionPaid: totalPaidAmount,
+        commissionRate: '100%',
+        commissionRecipient: coach.fullName || 'Coach',
+        adminEarnings: 0,
+        currency: '$',
+        paymentDate: now,
+        status: 'COMPLETED',
+        paymentMethod,
+        notes:
+          notes || `Admin completed payout of $${totalPaidAmount} to Coach ${coach.fullName || ''}`,
+        createdByAdminId:
+          adminUserId && Types.ObjectId.isValid(adminUserId)
+            ? new Types.ObjectId(adminUserId)
+            : undefined,
+      });
+
+      return {
+        success: true,
+        recipientType: 'COACH',
+        recipientId: coach._id,
+        recipientName: coach.fullName,
+        amountPaid: parseFloat(totalPaidAmount.toFixed(2)),
+        currency: '$',
+        payoutReference: resolvedRef,
+        paymentMethod,
+        transactionsCount: pendingTxns.length,
+        paidAt: now,
+        notes: notes || 'Payout completed successfully',
+      };
+    } else {
+      // ACADEMY Payout
+      const academy = await AcademyProfile.findOne({
+        $or: [
+          { _id: Types.ObjectId.isValid(recipientId) ? new Types.ObjectId(recipientId) : null },
+          { userId: Types.ObjectId.isValid(recipientId) ? new Types.ObjectId(recipientId) : null },
+        ].filter(Boolean) as any[],
+      });
+
+      if (!academy) {
+        throw new AppError(StatusCodes.NOT_FOUND, 'Academy not found with the provided ID');
+      }
+
+      const queryFilter: any = {
+        academyId: academy._id,
+        payoutStatusAcademy: { $ne: 'PAID' },
+      };
+
+      if (validTxObjectIds.length > 0) {
+        queryFilter._id = { $in: validTxObjectIds };
+      }
+
+      const pendingTxns = await AcademyFinanceTransaction.find(queryFilter);
+
+      if (pendingTxns.length === 0) {
+        throw new AppError(StatusCodes.BAD_REQUEST, 'No pending payouts found for this academy');
+      }
+
+      const totalPaidAmount = pendingTxns.reduce(
+        (sum, tx) => sum + (Number(tx.commissionAcademy) || 0),
+        0,
+      );
+
+      await AcademyFinanceTransaction.updateMany(
+        { _id: { $in: pendingTxns.map((t) => t._id) } },
+        {
+          $set: {
+            payoutStatusAcademy: 'PAID',
+            payoutReferenceAcademy: resolvedRef,
+            paidAtAcademy: now,
+          },
+        },
+      );
+
+      // Log to PlatformPayment audit ledger
+      await PlatformPayment.create({
+        paymentCode: resolvedRef,
+        type: 'Academy Payout',
+        category: 'OTHER',
+        sourceModel: 'AcademyFinanceTransaction',
+        userId: academy.userId,
+        entityId: academy._id,
+        userOrEntityName: academy.name,
+        entityRole: 'ACADEMY',
+        amount: totalPaidAmount,
+        spend: totalPaidAmount,
+        commissionPaid: totalPaidAmount,
+        commissionRate: '100%',
+        commissionRecipient: academy.name,
+        adminEarnings: 0,
+        currency: '$',
+        paymentDate: now,
+        status: 'COMPLETED',
+        paymentMethod,
+        notes: notes || `Admin completed payout of $${totalPaidAmount} to Academy ${academy.name}`,
+        createdByAdminId:
+          adminUserId && Types.ObjectId.isValid(adminUserId)
+            ? new Types.ObjectId(adminUserId)
+            : undefined,
+      });
+
+      return {
+        success: true,
+        recipientType: 'ACADEMY',
+        recipientId: academy._id,
+        recipientName: academy.name,
+        amountPaid: parseFloat(totalPaidAmount.toFixed(2)),
+        currency: '$',
+        payoutReference: resolvedRef,
+        paymentMethod,
+        transactionsCount: pendingTxns.length,
+        paidAt: now,
+        notes: notes || 'Payout completed successfully',
+      };
+    }
   }
 }
 

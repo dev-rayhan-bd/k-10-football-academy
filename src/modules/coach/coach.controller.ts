@@ -602,3 +602,14 @@ export const getCoachTrainingSessions = catchAsync(async (req: Request, res: Res
     data: result,
   });
 });
+
+export const getCoachFinances = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.userId || (req as any).user?.id;
+  const result = await coachService.getCoachFinances(userId, req.query);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Coach finances and commission earnings retrieved successfully',
+    data: result,
+  });
+});

@@ -116,6 +116,39 @@ const uploadToCloudinary = (file: Express.Multer.File, folder: string): Promise<
 };
 
 /**
+ * Uploads an in-memory Buffer directly to Cloudinary (e.g. for generated PDFs)
+ */
+export const uploadBufferToStorage = (
+  buffer: Buffer,
+  filename: string,
+  folder: string = 'game-reports',
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        public_id: `${Date.now()}-${cleanName}`,
+        resource_type: 'raw',
+        format: 'pdf',
+      },
+      (error, result) => {
+        if (error || !result) {
+          return reject(
+            new AppError(
+              StatusCodes.INTERNAL_SERVER_ERROR,
+              `Cloudinary PDF Upload Failed: ${error?.message || 'Unknown error'}`,
+            ),
+          );
+        }
+        resolve(result.secure_url);
+      },
+    );
+    uploadStream.end(buffer);
+  });
+};
+
+/**
  * Deletes a file from AWS S3 or Cloudinary based on the file URL structure.
  */
 export const deleteFromStorage = async (fileUrl: string): Promise<boolean> => {

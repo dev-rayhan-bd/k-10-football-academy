@@ -234,7 +234,8 @@ export class CoachCvValidationService {
 
     await player.save({ validateModifiedOnly: true });
 
-    // 5b. Record 50% commission split to Academy in AcademyFinanceTransaction ($24.00 total = $12.00 Academy, $12.00 K10 Platform)
+    // 5b. Record 3-way commission split in AcademyFinanceTransaction:
+    // Total: $24.00 -> Authorised Coach: $12.00 (50%), Academy Admin: $6.00 (25%), K10 Platform: $6.00 (25%)
     const targetAcademyId = coach.academyId || player.academyId;
     if (targetAcademyId) {
       const cvTx = await AcademyFinanceTransaction.findOneAndUpdate(
@@ -242,22 +243,25 @@ export class CoachCvValidationService {
         {
           academyId: targetAcademyId,
           playerId: player._id,
-          coachId: coach.userId,
+          coachId: coach._id || coach.userId,
           transactionType: 'CV Validation',
           cost: 24.0,
-          commissionAcademy: 12.0, // 50% share
+          commissionAcademy: 6.0, // 25% share
+          commissionCoach: 12.0, // 50% share
+          commissionPlatform: 6.0, // 25% share
+          payoutStatusCoach: 'PENDING',
           transactionDate: new Date(),
           status: 'COMPLETED',
-          notes: `Official CV Validation Fee ($24.00). K10 Share: $12.00, Academy Share (50%): $12.00. Verified by Coach ${coach.fullName} (${coachClub}). Certificate: ${certId}`,
+          notes: `Official CV Validation Fee ($24.00). Authorised Coach Share (50%): $12.00, Academy Admin Share (25%): $6.00, K10 Platform (25%): $6.00. Verified by Coach ${coach.fullName} (${coachClub}). Certificate: ${certId}`,
         },
         { upsert: true, new: true },
       );
 
-      // Automated Stripe payout to Academy if connected
+      // Automated Stripe payout to Academy if connected ($6.00 Academy Share)
       void academyStripeConnectService.transferCommissionToAcademy(
         targetAcademyId,
-        12.0,
-        `K10 Official CV Validation 50% Share for Player ${player.fullName || 'Player'}`,
+        6.0,
+        `K10 Official CV Validation Academy 25% Share ($6.00) for Player ${player.fullName || 'Player'}`,
         cvTx?._id?.toString(),
       );
     }

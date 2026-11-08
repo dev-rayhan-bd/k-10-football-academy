@@ -11,7 +11,8 @@ import { notificationService } from '@/modules/notification/notification.service
 import { ParentChild } from '@/modules/parent/parent.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import QueryBuilder from '@/builder/QueryBuilder';
-import { parseTimerInput } from './game-report.utils';
+import { mapStatsAndEventsToMatchEvents, parseTimerInput } from './game-report.utils';
+import { gameReportPdfService } from './game-report-pdf.service';
 
 export class GameReportCoachService {
   /**
@@ -23,49 +24,45 @@ export class GameReportCoachService {
       throw new AppError(404, 'Match record not found.');
     }
 
+    if (matchRecord.coachReview?.paymentStatus !== 'PAID') {
+      throw new AppError(
+        402,
+        'Payment of $3.99 platform fee is required before submitting the coach evaluation.',
+      );
+    }
+
     const playerProfile = (matchRecord.playerId as any) || {};
     const position = playerProfile.position || 'CM';
 
     const { stats = {}, accurateShots = [], accurateAssists = [], coachFeedback = '' } = payload;
 
-    const timerResult = parseTimerInput(payload);
-    const finalMinutes = timerResult.minutesPlayed;
+    const hasRawTimer =
+      (payload.timer !== undefined && payload.timer !== null && payload.timer !== '') ||
+      (payload.matchTime !== undefined && payload.matchTime !== null && payload.matchTime !== '') ||
+      (payload.matchDuration !== undefined &&
+        payload.matchDuration !== null &&
+        payload.matchDuration !== '') ||
+      (payload.minutesPlayed !== undefined &&
+        payload.minutesPlayed !== null &&
+        payload.minutesPlayed !== '');
+
+    let finalMinutes = matchRecord.minutesPlayed || 90;
+    let finalMatchDuration = matchRecord.matchDuration || '90:00';
+    if (hasRawTimer) {
+      const timerResult = parseTimerInput(payload);
+      finalMinutes = timerResult.minutesPlayed || 90;
+      finalMatchDuration = timerResult.matchDuration || '90:00';
+    }
 
     // Auto-map UI stats counters to MATCH_EVENTS for client's excel formula
-    const eventsMap: Record<string, number> = {};
-    if (stats.goalScored) eventsMap['goal'] = (eventsMap['goal'] || 0) + Number(stats.goalScored);
-    if (stats.assists) eventsMap['assist'] = (eventsMap['assist'] || 0) + Number(stats.assists);
-    if (stats.shotsOnGoal)
-      eventsMap['shot_on_target'] = (eventsMap['shot_on_target'] || 0) + Number(stats.shotsOnGoal);
-    if (stats.passAccurate)
-      eventsMap['key_pass'] = (eventsMap['key_pass'] || 0) + Number(stats.passAccurate);
-    if (stats.standTackle)
-      eventsMap['tackle_won'] = (eventsMap['tackle_won'] || 0) + Number(stats.standTackle);
-    if (stats.slidingTackle)
-      eventsMap['tackle_won'] = (eventsMap['tackle_won'] || 0) + Number(stats.slidingTackle);
-    if (stats.interception)
-      eventsMap['interception'] = (eventsMap['interception'] || 0) + Number(stats.interception);
-    if (stats.fault)
-      eventsMap['foul_committed'] = (eventsMap['foul_committed'] || 0) + Number(stats.fault);
-    if (stats.yellowCard)
-      eventsMap['yellow_card'] = (eventsMap['yellow_card'] || 0) + Number(stats.yellowCard);
-    if (stats.redCard) eventsMap['red_card'] = (eventsMap['red_card'] || 0) + Number(stats.redCard);
-    if (stats.savesAccurate)
-      eventsMap['save'] = (eventsMap['save'] || 0) + Number(stats.savesAccurate);
-    if (stats.goalUnsave)
-      eventsMap['goal_conceded'] = (eventsMap['goal_conceded'] || 0) + Number(stats.goalUnsave);
-
-    const events = Object.entries(eventsMap).map(([eventId, count]) => ({
-      eventId,
-      count,
-    }));
+    const events = mapStatsAndEventsToMatchEvents(stats, payload.events);
 
     // Apply Client's 100% Excel formula
     const perfResult = calculateMatchPerformance(position, finalMinutes, events);
     const finalRating = Math.round((perfResult.overallRating / 10) * 10) / 10;
 
     matchRecord.minutesPlayed = finalMinutes;
-    matchRecord.matchDuration = timerResult.matchDuration;
+    matchRecord.matchDuration = finalMatchDuration;
     matchRecord.stats = stats;
     matchRecord.accurateShots = accurateShots;
     matchRecord.accurateAssists = accurateAssists;
@@ -99,6 +96,16 @@ export class GameReportCoachService {
       matchRecord.coachReview.coachRating = finalRating;
       matchRecord.coachReview.coachFeedback = coachFeedback;
       matchRecord.coachReview.coachId = coachUser._id;
+    }
+
+    matchRecord.isProfessionallyVerified = true;
+    matchRecord.authorName = coachUser.name || 'Coach';
+    matchRecord.authorRole = 'COACH';
+
+    // Generate Official PDF Report (Client Requirement 4)
+    const pdfUrl = await gameReportPdfService.generateAndSaveReportPdf(matchRecord);
+    if (pdfUrl) {
+      matchRecord.reportPdfUrl = pdfUrl;
     }
 
     await matchRecord.save();
@@ -370,12 +377,20 @@ export class GameReportCoachService {
       throw new AppError(404, 'Match record not found.');
     }
 
+    if (matchRecord.coachReview?.paymentStatus !== 'PAID') {
+      throw new AppError(
+        402,
+        'Payment of $3.99 platform fee is required before submitting the coach evaluation.',
+      );
+    }
+
     const validStatuses = [
       'PENDING',
       'ACCEPTED',
       'REJECTED',
       'AWAITING_SCHEDULING',
       'SCHEDULED',
+      'IN_PROGRESS',
       'COMPLETED',
       'CANCELLED',
     ];
@@ -421,6 +436,30 @@ export class GameReportCoachService {
         type: 'REPORT_STATUS_UPDATED',
         data: { reportId: matchRecord._id, status: newStatus },
       });
+    }
+
+    if (newStatus === 'REJECTED' && playerProfile._id) {
+      try {
+        const parentLinks = await ParentChild.find({
+          childPlayerId: playerProfile._id,
+        }).populate('parentId');
+
+        for (const link of parentLinks) {
+          const parent = link.parentId as any;
+          if (parent && parent.userId) {
+            await notificationService.createNotification({
+              recipientId: parent.userId,
+              recipientRole: 'PARENT',
+              title: 'Game Report Request Declined - Free Reassignment Available',
+              message: `The coach declined the Game Report request${payload.rejectionReason ? ` (${payload.rejectionReason})` : ''}. You can re-assign this Game Report to another coach without paying any additional fee.`,
+              type: 'CHILD_GAME_REPORT_REQUEST',
+              data: { reportId: matchRecord._id, status: 'REJECTED' },
+            });
+          }
+        }
+      } catch (err: any) {
+        logger.error({ err }, 'Error sending parent rejection notification');
+      }
     }
 
     return {

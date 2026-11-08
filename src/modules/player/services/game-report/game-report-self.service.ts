@@ -1,3 +1,6 @@
+import { Types } from 'mongoose';
+import { StatusCodes } from 'http-status-codes';
+import { AppError } from '@/utils/AppError';
 import { calculateMatchPerformance } from '@/utils/ratingCalculator';
 import { MatchRecord } from '@/modules/player/player.model';
 import { playerStatsService } from '@/modules/player/services/player-stats.service';
@@ -5,7 +8,12 @@ import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 import { User } from '@/modules/user/user.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
-import { parseTimerInput, resolveOrCreatePlayerProfile } from './game-report.utils';
+import {
+  mapStatsAndEventsToMatchEvents,
+  parseTimerInput,
+  resolveOrCreatePlayerProfile,
+} from './game-report.utils';
+import { gameReportPdfService } from './game-report-pdf.service';
 
 export class GameReportSelfService {
   /**
@@ -29,10 +37,15 @@ export class GameReportSelfService {
 
     const resolvedPrice = Number(payload.price || payload.amount || 3.99);
 
+    const hasStats = Boolean(
+      (payload.stats && Object.keys(payload.stats).length > 0) ||
+      (Array.isArray(payload.events) && payload.events.length > 0),
+    );
+
     payload.coachReview = {
       paymentStatus: 'UNPAID',
       paymentAmount: resolvedPrice,
-      status: 'COMPLETED', // Data already completed by author, activates on payment
+      status: hasStats ? 'COMPLETED' : 'IN_PROGRESS',
     };
 
     // Auto-fill playerInfo from Screen 1 if not provided or merge
@@ -77,40 +90,29 @@ export class GameReportSelfService {
     payload.matchResult = `${resolvedHomeTeam} ${resolvedHomeScore}-${resolvedAwayScore} ${resolvedOpponent}`;
 
     // Auto-map UI stats counters to MATCH_EVENTS for client's excel formula
-    if ((!payload.events || payload.events.length === 0) && payload.stats) {
-      const eventsMap: Record<string, number> = {};
-      const s = payload.stats;
-      if (s.goalScored) eventsMap['goal'] = (eventsMap['goal'] || 0) + Number(s.goalScored);
-      if (s.assists) eventsMap['assist'] = (eventsMap['assist'] || 0) + Number(s.assists);
-      if (s.shotsOnGoal)
-        eventsMap['shot_on_target'] = (eventsMap['shot_on_target'] || 0) + Number(s.shotsOnGoal);
-      if (s.passAccurate)
-        eventsMap['key_pass'] = (eventsMap['key_pass'] || 0) + Number(s.passAccurate);
-      if (s.standTackle)
-        eventsMap['tackle_won'] = (eventsMap['tackle_won'] || 0) + Number(s.standTackle);
-      if (s.slidingTackle)
-        eventsMap['tackle_won'] = (eventsMap['tackle_won'] || 0) + Number(s.slidingTackle);
-      if (s.interception)
-        eventsMap['interception'] = (eventsMap['interception'] || 0) + Number(s.interception);
-      if (s.fault)
-        eventsMap['foul_committed'] = (eventsMap['foul_committed'] || 0) + Number(s.fault);
-      if (s.yellowCard)
-        eventsMap['yellow_card'] = (eventsMap['yellow_card'] || 0) + Number(s.yellowCard);
-      if (s.redCard) eventsMap['red_card'] = (eventsMap['red_card'] || 0) + Number(s.redCard);
-      if (s.savesAccurate) eventsMap['save'] = (eventsMap['save'] || 0) + Number(s.savesAccurate);
-      if (s.goalUnsave)
-        eventsMap['goal_conceded'] = (eventsMap['goal_conceded'] || 0) + Number(s.goalUnsave);
-
-      payload.events = Object.entries(eventsMap).map(([eventId, count]) => ({
-        eventId,
-        count,
-      }));
+    if (payload.stats || payload.events) {
+      payload.events = mapStatsAndEventsToMatchEvents(payload.stats || {}, payload.events || []);
     }
 
-    const timerResult = parseTimerInput(payload);
-    payload.minutesPlayed = timerResult.minutesPlayed;
-    payload.matchDuration = timerResult.matchDuration;
-    const minutes = timerResult.minutesPlayed;
+    const hasRawTimer =
+      (payload.timer !== undefined && payload.timer !== null && payload.timer !== '') ||
+      (payload.matchTime !== undefined && payload.matchTime !== null && payload.matchTime !== '') ||
+      (payload.matchDuration !== undefined &&
+        payload.matchDuration !== null &&
+        payload.matchDuration !== '') ||
+      (payload.minutesPlayed !== undefined &&
+        payload.minutesPlayed !== null &&
+        payload.minutesPlayed !== '');
+
+    if (hasRawTimer) {
+      const timerResult = parseTimerInput(payload);
+      payload.minutesPlayed = timerResult.minutesPlayed;
+      payload.matchDuration = timerResult.matchDuration;
+    } else {
+      payload.minutesPlayed = 0;
+      payload.matchDuration = '00:00';
+    }
+    const minutes = payload.minutesPlayed;
 
     // Apply 100% Client's Excel formula for player rating
     if (payload.events && payload.events.length > 0) {
@@ -198,12 +200,112 @@ export class GameReportSelfService {
       checkoutUrl: session.url,
       sessionId: session.id,
       amount: resolvedPrice,
+      currency: '$',
       status: 'AWAITING_PAYMENT',
+    };
+  }
+
+  /**
+   * Option A - Step 2: Parent / Player Submits 36 Performance Indicators after Payment ($3.99)
+   */
+  async completeSelfGameReport(_userId: string, reportId: string, payload: any, currentUser?: any) {
+    if (!reportId || !Types.ObjectId.isValid(reportId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Valid report ID is required');
+    }
+
+    const matchRecord = await MatchRecord.findById(reportId).populate('playerId');
+    if (!matchRecord) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Game report not found');
+    }
+
+    // STRICT PAYMENT ENFORCEMENT: Client Requirement 5
+    if (matchRecord.coachReview?.paymentStatus !== 'PAID') {
+      throw new AppError(
+        StatusCodes.PAYMENT_REQUIRED,
+        'Payment of $3.99 platform fee is required before submitting the 36 performance evaluation buttons',
+      );
+    }
+
+    const playerProfile: any = matchRecord.playerId || {};
+    const position = playerProfile.position || matchRecord.playerInfo?.position || 'CM';
+
+    const { stats = {}, accurateShots = [], accurateAssists = [], events: rawEvents } = payload;
+
+    const hasRawTimer =
+      (payload.timer !== undefined && payload.timer !== null && payload.timer !== '') ||
+      (payload.matchTime !== undefined && payload.matchTime !== null && payload.matchTime !== '') ||
+      (payload.matchDuration !== undefined &&
+        payload.matchDuration !== null &&
+        payload.matchDuration !== '') ||
+      (payload.minutesPlayed !== undefined &&
+        payload.minutesPlayed !== null &&
+        payload.minutesPlayed !== '');
+
+    let finalMinutes = matchRecord.minutesPlayed || 90;
+    let finalMatchDuration = matchRecord.matchDuration || '90:00';
+    if (hasRawTimer) {
+      const timerResult = parseTimerInput(payload);
+      finalMinutes = timerResult.minutesPlayed || 90;
+      finalMatchDuration = timerResult.matchDuration || '90:00';
+    }
+
+    // Auto-map UI stats counters and 36 events for client's excel formula
+    const events = mapStatsAndEventsToMatchEvents(stats, rawEvents);
+
+    // Calculate Rating via Client's 100% Excel Formula
+    const perfResult = calculateMatchPerformance(position, finalMinutes, events);
+    const finalRating = Math.round((perfResult.overallRating / 10) * 10) / 10;
+
+    matchRecord.minutesPlayed = finalMinutes;
+    matchRecord.matchDuration = finalMatchDuration;
+    matchRecord.stats = stats;
+    matchRecord.accurateShots = accurateShots;
+    matchRecord.accurateAssists = accurateAssists;
+    matchRecord.events = events;
+    matchRecord.playerRating = finalRating;
+    matchRecord.positivePoints = perfResult.positivePoints;
+    matchRecord.negativePoints = perfResult.negativePoints;
+    matchRecord.netContribution = perfResult.netContribution;
+    matchRecord.interpretation = perfResult.interpretation;
+    matchRecord.categoryScores = perfResult.categoryAdjustedScores as any;
+    matchRecord.categoryRatings = perfResult.categoryRatings as any;
+
+    if (stats.goalScored !== undefined) matchRecord.goals = stats.goalScored;
+    if (stats.assists !== undefined) matchRecord.assists = stats.assists;
+
+    matchRecord.isProfessionallyVerified = false;
+    matchRecord.authorRole = currentUser?.role || 'PARENT';
+    matchRecord.authorName = currentUser?.name || 'Parent (Unverified Self-Evaluation)';
+
+    if (matchRecord.coachReview) {
+      matchRecord.coachReview.status = 'COMPLETED';
+      matchRecord.coachReview.evaluatedAt = new Date();
+      matchRecord.coachReview.coachRating = finalRating;
+      matchRecord.coachReview.coachFeedback =
+        payload.coachFeedback || payload.feedback || 'Parent Self-Evaluation';
+    }
+
+    // Generate Official PDF Report (Client Requirement 4)
+    const pdfUrl = await gameReportPdfService.generateAndSaveReportPdf(matchRecord);
+    if (pdfUrl) {
+      matchRecord.reportPdfUrl = pdfUrl;
+    }
+
+    await matchRecord.save();
+
+    if (playerProfile._id) {
+      await playerStatsService.recalculatePlayerStats(playerProfile._id);
+      await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
+    }
+
+    return {
+      success: true,
+      message: '36 performance indicators saved and official PDF generated',
+      reportId: matchRecord._id,
+      overallRating: finalRating,
+      reportPdfUrl: matchRecord.reportPdfUrl,
+      status: 'COMPLETED',
       isProfessionallyVerified: false,
-      authorName: payload.authorName,
-      authorRole: payload.authorRole,
-      reportCompletionType: payload.reportCompletionType,
-      record,
     };
   }
 }

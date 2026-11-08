@@ -178,6 +178,15 @@ export class AdminService {
     return adminPaymentsService.updatePayment(id, payload, adminUserId);
   }
 
+  // --- 5b. Payouts Management (Coach & Academy Commissions) ---
+  async getPayouts(query: Record<string, unknown>) {
+    return adminPaymentsService.getPayoutsSummaryAndList(query);
+  }
+
+  async recordPayout(payload: Record<string, any>, adminUserId?: string) {
+    return adminPaymentsService.recordPayout(payload, adminUserId);
+  }
+
   // --- 6. Platform Analytics (MongoDB $lookup & $facet Aggregation) ---
   async getAnalytics(query: IAdminAnalyticsQuery) {
     return adminAnalyticsService.getAnalytics(query);

@@ -103,17 +103,6 @@ export class ParentChildrenService {
       return existingLink;
     }
 
-    // Enforce 1-child limit per parent for now
-    const existingLinksCount = await ParentChild.countDocuments({
-      parentId: effectiveParentId,
-    });
-    if (existingLinksCount >= 1) {
-      const msg = 'A parent can only link or create one child account at this time.';
-      throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
-        { path: 'childPlayerId', message: msg },
-      ]);
-    }
-
     const relType = normalizeRelationshipType(payload.relationshipType);
     const link = await ParentChild.create({
       parentId: effectiveParentId,
@@ -174,17 +163,6 @@ export class ParentChildrenService {
     }
 
     const effectiveParentId = parentProfile ? parentProfile._id : parent._id;
-
-    // Enforce 1-child limit per parent for now
-    const existingCount = await ParentChild.countDocuments({
-      parentId: effectiveParentId,
-    });
-    if (existingCount >= 1) {
-      const msg = 'A parent can only link or create one child account at this time.';
-      throw new AppError(StatusCodes.BAD_REQUEST, msg, true, '', [
-        { path: 'childPlayerId', message: msg },
-      ]);
-    }
 
     let childEmail = payload.email ? String(payload.email).toLowerCase().trim() : '';
     if (!childEmail) {

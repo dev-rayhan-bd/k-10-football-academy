@@ -16,9 +16,6 @@ interface IEmailTemplateOptions {
   footerNote?: string;
 }
 
-const LOGO_URL =
-  'https://res.cloudinary.com/da1uxchgo/image/upload/v1789203555/avatars/lgslkuvuy28gwznlrlzr.png';
-
 /**
  * Base Responsive Dark Mode HTML Wrapper matching K10 Football Website
  */
@@ -181,7 +178,14 @@ const renderBaseTemplate = (options: IEmailTemplateOptions): string => {
           <div class="container">
             <!-- Header with Seamless Black Background Matching Logo -->
             <div class="header">
-              <img src="${LOGO_URL}" alt="K10 Football Analysis" class="logo-img" />
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 12px auto;">
+                <tr>
+                  <td style="padding: 8px 24px; border: 1.5px solid #00FF66; border-radius: 8px; background-color: #061A0C; text-align: center;">
+                    <span style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 26px; font-weight: 900; letter-spacing: 2px; color: #00FF66;">K10</span>
+                    <span style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 4px; color: #FFFFFF; margin-left: 8px;">FOOTBALL</span>
+                  </td>
+                </tr>
+              </table>
               <div class="brand-subtitle">${subtitle}</div>
             </div>
 
@@ -309,7 +313,7 @@ export const getCoachReportRequestEmailTemplate = (
     title: 'New Game Report Review Request - K10 Football',
     subtitle: 'COACH EVALUATION REQUEST',
     name: coachName,
-    message: `Player <b>${playerName}</b> has requested your professional match review and verified evaluation for their recent match: <b>${matchDetails.homeTeam} vs ${matchDetails.awayTeam}</b> (${matchDetails.leagueType}) on ${matchDetails.matchDate}.<br><br>The evaluation fee of <b>$3.99</b> has been paid. Please review the match performance, enter the stats, and submit the final evaluation.`,
+    message: `Player <b>${playerName}</b> has requested your professional match review and verified evaluation for their recent match: <b>${matchDetails.homeTeam} vs ${matchDetails.awayTeam}</b> (${matchDetails.leagueType}) on ${matchDetails.matchDate}.<br><br>Please review the match performance, enter the stats, and submit the final evaluation.`,
     actionText: 'START MATCH EVALUATION',
     actionUrl,
     footerNote: 'Professional analysis delivered within 48 hours is expected.',

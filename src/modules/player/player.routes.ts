@@ -49,6 +49,7 @@ import {
 } from './player.controller';
 import {
   createSelfGameReport,
+  completeSelfGameReport,
   requestCoachGameReport,
   getCoachPendingReports,
   getCoachAllGameReports,
@@ -57,6 +58,10 @@ import {
   getPlayerGameReports,
   getGameReportDetails,
   updateGameReportStatus,
+  getReportByAccessLink,
+  respondToAccessLink,
+  submitReportByAccessLink,
+  reassignGameReport,
 } from './game-report.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -145,10 +150,15 @@ router.post(
 // Dedicated Game Report Flows (Screen 1 & 2 vs Screen 3, 4, 5)
 router.post(
   '/me/game-reports/self',
-  auth('PLAYER', 'SUPER_ADMIN'),
+  auth('PLAYER', 'PARENT', 'SUPER_ADMIN'),
   requirePlayerSubscription(),
   validateRequest(createMatchRecordZodSchema),
   createSelfGameReport,
+);
+router.patch(
+  '/me/game-reports/:reportId/complete-self',
+  auth('PLAYER', 'PARENT', 'SUPER_ADMIN'),
+  completeSelfGameReport,
 );
 router.post(
   '/me/game-reports/request-coach',
@@ -191,6 +201,18 @@ router.patch(
   auth('SUPER_ADMIN', 'COACH', 'ACADEMY', 'PLAYER', 'PARENT'),
   validateRequest(updateGameReportStatusZodSchema),
   updateGameReportStatus,
+);
+
+// Option B: Public Secure Access Link (Zero login required for external evaluator)
+router.get('/game-report/access-link/:token', getReportByAccessLink);
+router.post('/game-report/access-link/:token/respond', respondToAccessLink);
+router.patch('/game-report/access-link/:token/submit', submitReportByAccessLink);
+
+// Re-assign Rejected Game Report to another coach ($0 charge)
+router.post(
+  '/game-reports/:reportId/reassign',
+  auth('PARENT', 'PLAYER', 'SUPER_ADMIN'),
+  reassignGameReport,
 );
 
 router.get('/me/media', auth(), getMediaGallery);

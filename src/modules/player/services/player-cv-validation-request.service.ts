@@ -149,7 +149,7 @@ export class PlayerCvValidationRequestService {
 
     await playerProfile.save({ validateModifiedOnly: true });
 
-    // 50% Academy Commission Split ($12.00 to Academy, $12.00 to Platform)
+    // 3-way Commission Split: Total $24.00 -> Authorised Coach: $12.00 (50%), Academy Admin: $6.00 (25%), K10 Platform: $6.00 (25%)
     let academy = null;
     if (playerProfile.academyId) {
       academy = await AcademyProfile.findById(playerProfile.academyId);
@@ -170,10 +170,13 @@ export class PlayerCvValidationRequestService {
           coachId: playerProfile.verifyingCoachId,
           transactionType: 'CV Validation',
           cost: 24.0,
-          commissionAcademy: 12.0, // 50%
+          commissionAcademy: 6.0, // 25% share
+          commissionCoach: 12.0, // 50% share
+          commissionPlatform: 6.0, // 25% share
+          payoutStatusCoach: 'PENDING',
           transactionDate: new Date(),
           status: 'COMPLETED',
-          notes: `Official CV Validation Fee ($24.00). K10 Share: $12.00, Academy Share (50%): $12.00.`,
+          notes: `Official CV Validation Fee ($24.00). Authorised Coach Share (50%): $12.00, Academy Admin Share (25%): $6.00, K10 Platform Share (25%): $6.00.`,
         },
         { upsert: true, new: true },
       );

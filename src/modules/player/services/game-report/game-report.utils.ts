@@ -2,6 +2,87 @@ import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { PlayerProfile } from '@/modules/player/player.model';
 import { User } from '@/modules/user/user.model';
+import { MATCH_EVENTS } from '@/utils/ratingCalculator';
+
+/**
+ * Map legacy UI stats keys and camelCase/canonical event keys to MATCH_EVENTS
+ */
+export function mapStatsAndEventsToMatchEvents(
+  stats: Record<string, any> = {},
+  rawEvents: Array<{ eventId: string; count?: number }> = [],
+): Array<{ eventId: string; count: number }> {
+  const eventsMap: Record<string, number> = {};
+
+  const legacyMapping: Record<string, string> = {
+    goalScored: 'goal',
+    assists: 'assist',
+    shotsOnGoal: 'shot_on_target',
+    shotsOffTarget: 'shot_off_target',
+    passAccurate: 'key_pass',
+    wrongPass: 'incomplete_pass',
+    standTackle: 'tackle_won',
+    slidingTackle: 'tackle_won',
+    interception: 'interception',
+    fault: 'foul_committed',
+    yellowCard: 'yellow_card',
+    redCard: 'red_card',
+    savesAccurate: 'save',
+    goalUnsave: 'goal_conceded',
+    penaltiesTaken: 'penalty_won',
+    penaltiesSaves: 'save',
+    reflex: 'big_save',
+    aerialAbility: 'aerial_duel_won',
+    punching: 'cross_claimed',
+    handling: 'save',
+    reactions: 'recovery',
+    freeKick: 'free_kick_won',
+    cornerKick: 'cross_completed',
+  };
+
+  // 1. Process legacy mapped fields from stats
+  for (const [key, targetEvent] of Object.entries(legacyMapping)) {
+    if (stats[key] !== undefined && stats[key] !== null) {
+      const val = Number(stats[key]) || 0;
+      if (val > 0) {
+        eventsMap[targetEvent] = (eventsMap[targetEvent] || 0) + val;
+      }
+    }
+  }
+
+  // 2. Process direct or camelCase MATCH_EVENTS from stats
+  for (const [rawKey, rawVal] of Object.entries(stats)) {
+    if (rawVal === undefined || rawVal === null) continue;
+    const num = Number(rawVal);
+    if (isNaN(num) || num <= 0) continue;
+
+    // Direct snake_case key matching MATCH_EVENTS (e.g. "shot_on_target", "aerial_duel_won")
+    if (MATCH_EVENTS[rawKey] && !legacyMapping[rawKey]) {
+      eventsMap[rawKey] = (eventsMap[rawKey] || 0) + num;
+      continue;
+    }
+
+    // camelCase to snake_case converter (e.g. "bigChanceCreated" -> "big_chance_created")
+    const snakeKey = rawKey.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+    if (MATCH_EVENTS[snakeKey] && !legacyMapping[rawKey]) {
+      eventsMap[snakeKey] = (eventsMap[snakeKey] || 0) + num;
+    }
+  }
+
+  // 3. Process rawEvents array if passed
+  if (Array.isArray(rawEvents)) {
+    for (const ev of rawEvents) {
+      if (ev && ev.eventId) {
+        const c = Number(ev.count) || 1;
+        eventsMap[ev.eventId] = (eventsMap[ev.eventId] || 0) + c;
+      }
+    }
+  }
+
+  return Object.entries(eventsMap).map(([eventId, count]) => ({
+    eventId,
+    count,
+  }));
+}
 
 /**
  * Parse timer formatted as min:sec (e.g. "08:08", "76:30") or numeric minutes

@@ -320,7 +320,7 @@ export class AcademyFinanceService {
         );
       }
 
-      // Auto-sync any verified player CVs with 50% commission split ($24.00 total -> $12.00 Academy, $12.00 K10)
+      // Auto-sync any verified player CVs with 3-way commission split ($24.00 total -> $12.00 Coach, $6.00 Academy, $6.00 K10 Platform)
       const verifiedPlayers = await PlayerProfile.find({
         _id: { $in: academyPlayerIds },
         'coachVerification.isVerifiedByCoach': true,
@@ -328,8 +328,9 @@ export class AcademyFinanceService {
 
       for (const vp of verifiedPlayers) {
         const cost = vp.coachVerification?.validationFee || 24.0;
-        const commissionAcademy = parseFloat((cost * 0.5).toFixed(2));
-        const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
+        const commissionAcademy = 6.0;
+        const commissionCoach = 12.0;
+        const k10Commission = 6.0;
 
         await AcademyFinanceTransaction.findOneAndUpdate(
           { playerId: vp._id, transactionType: 'CV Validation' },
@@ -338,14 +339,18 @@ export class AcademyFinanceService {
             playerId: vp._id,
             coachId:
               (vp.coachVerification as any)?.verifiedByCoachId ||
-              (vp.coachVerification as any)?.coachId,
+              (vp.coachVerification as any)?.coachId ||
+              vp.verifyingCoachId,
             transactionType: 'CV Validation',
             cost,
             commissionAcademy,
+            commissionCoach,
+            commissionPlatform: k10Commission,
+            payoutStatusCoach: 'PENDING',
             transactionDate:
               vp.coachVerification?.verifiedAt || (vp as any).updatedAt || new Date(),
             status: 'COMPLETED',
-            notes: `Official CV Validation Fee ($${cost.toFixed(2)}). K10 Share: $${k10Commission.toFixed(2)}, Academy Share (50%): $${commissionAcademy.toFixed(2)}. Certificate: ${vp.coachVerification?.certificateId || 'K10-CV'}`,
+            notes: `Official CV Validation Fee ($${cost.toFixed(2)}). Coach Share (50%): $${commissionCoach.toFixed(2)}, Academy Share (25%): $${commissionAcademy.toFixed(2)}, K10 Share (25%): $${k10Commission.toFixed(2)}. Certificate: ${vp.coachVerification?.certificateId || 'K10-CV'}`,
           },
           { upsert: true, new: true },
         );
@@ -391,6 +396,13 @@ export class AcademyFinanceService {
       filter.status = String(query.status).toUpperCase();
     }
 
+    if (
+      query.payoutStatus &&
+      ['PENDING', 'PAID', 'PROCESSING'].includes(String(query.payoutStatus).toUpperCase())
+    ) {
+      filter.payoutStatusAcademy = String(query.payoutStatus).toUpperCase().trim();
+    }
+
     if (query.transactionType) {
       filter.transactionType = { $regex: new RegExp(String(query.transactionType).trim(), 'i') };
     }
@@ -428,43 +440,62 @@ export class AcademyFinanceService {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [gameReportsCount, pendingCount, rejectedCount, totalEarningsAgg, thisMonthAgg] =
-      await Promise.all([
-        academyPlayerIds.length > 0
-          ? MatchRecord.countDocuments({ playerId: { $in: academyPlayerIds } })
-          : AcademyFinanceTransaction.countDocuments({
-              academyId: academy._id,
-              transactionType: { $regex: /Game Report|Parent Match Report|Match Report/i },
-            }),
-        AcademyFinanceTransaction.countDocuments({
-          academyId: academy._id,
-          status: 'PENDING',
-        }),
-        AcademyFinanceTransaction.countDocuments({
-          academyId: academy._id,
-          status: 'REJECTED',
-        }),
-        AcademyFinanceTransaction.aggregate([
-          { $match: { academyId: academy._id, status: 'COMPLETED' } },
-          { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
-        ]),
-        AcademyFinanceTransaction.aggregate([
-          {
-            $match: {
-              academyId: academy._id,
-              status: 'COMPLETED',
-              transactionDate: { $gte: startOfMonth },
-            },
+    const [
+      gameReportsCount,
+      pendingCount,
+      rejectedCount,
+      totalEarningsAgg,
+      thisMonthAgg,
+      paidAgg,
+      pendingPayoutAgg,
+    ] = await Promise.all([
+      academyPlayerIds.length > 0
+        ? MatchRecord.countDocuments({ playerId: { $in: academyPlayerIds } })
+        : AcademyFinanceTransaction.countDocuments({
+            academyId: academy._id,
+            transactionType: { $regex: /Game Report|Parent Match Report|Match Report/i },
+          }),
+      AcademyFinanceTransaction.countDocuments({
+        academyId: academy._id,
+        status: 'PENDING',
+      }),
+      AcademyFinanceTransaction.countDocuments({
+        academyId: academy._id,
+        status: 'REJECTED',
+      }),
+      AcademyFinanceTransaction.aggregate([
+        { $match: { academyId: academy._id, status: 'COMPLETED' } },
+        { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
+      ]),
+      AcademyFinanceTransaction.aggregate([
+        {
+          $match: {
+            academyId: academy._id,
+            status: 'COMPLETED',
+            transactionDate: { $gte: startOfMonth },
           },
-          { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
-        ]),
-      ]);
+        },
+        { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
+      ]),
+      AcademyFinanceTransaction.aggregate([
+        { $match: { academyId: academy._id, payoutStatusAcademy: 'PAID' } },
+        { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
+      ]),
+      AcademyFinanceTransaction.aggregate([
+        { $match: { academyId: academy._id, payoutStatusAcademy: { $ne: 'PAID' } } },
+        { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
+      ]),
+    ]);
 
     const totalEarnings = totalEarningsAgg[0]?.total
       ? parseFloat(totalEarningsAgg[0].total.toFixed(2))
       : 0;
     const thisMonthEarnings = thisMonthAgg[0]?.total
       ? parseFloat(thisMonthAgg[0].total.toFixed(2))
+      : 0;
+    const completedPayouts = paidAgg[0]?.total ? parseFloat(paidAgg[0].total.toFixed(2)) : 0;
+    const pendingPayouts = pendingPayoutAgg[0]?.total
+      ? parseFloat(pendingPayoutAgg[0].total.toFixed(2))
       : 0;
 
     const formattedTransactions = transactionDocs.map((doc: any) => {
@@ -491,13 +522,16 @@ export class AcademyFinanceService {
         commissionAcademyFormatted: `$ ${doc.commissionAcademy.toFixed(3)}`,
         commissionPercentage:
           doc.transactionType === 'CV Validation'
-            ? '50%'
+            ? '25%'
             : doc.cost === 3.99 && doc.commissionAcademy === 1
               ? '25%'
               : '40%',
         transactionDate: doc.transactionDate,
         date: dateIso,
         status: doc.status,
+        payoutStatus: doc.payoutStatusAcademy || 'PENDING',
+        payoutReference: doc.payoutReferenceAcademy || null,
+        paidAt: doc.paidAtAcademy || null,
         notes: doc.notes || '',
         createdAt: doc.createdAt,
       };
@@ -512,6 +546,10 @@ export class AcademyFinanceService {
         totalEarningsFormatted: `$ ${totalEarnings.toFixed(2)}`,
         thisMonthEarnings,
         thisMonthEarningsFormatted: `$ ${thisMonthEarnings.toFixed(2)}`,
+        pendingPayouts,
+        pendingPayoutsFormatted: `$ ${pendingPayouts.toFixed(2)}`,
+        completedPayouts,
+        completedPayoutsFormatted: `$ ${completedPayouts.toFixed(2)}`,
         commissionRate: '40% - 50%',
         currency: '$',
       },
@@ -541,9 +579,11 @@ export class AcademyFinanceService {
           clientFeeUsd: 24.0,
           clientFeeGbp: 25.0,
           feeFormatted: '£25.00 / $24.00',
-          revenueShare: '50% Academy / Coach ($12.00), 50% Platform ($12.00)',
-          k10Share: 12.0,
-          academyShare: 12.0,
+          revenueShare:
+            'Authorised Coach: $12.00 (50%), Academy Admin: $6.00 (25%), K10 Platform: $6.00 (25%)',
+          coachShare: 12.0,
+          academyShare: 6.0,
+          k10Share: 6.0,
           cvImpact:
             'Player card upgraded from Bronze to Silver/Gold based on overall rating, certified with digital stamp & certificate ID',
         },

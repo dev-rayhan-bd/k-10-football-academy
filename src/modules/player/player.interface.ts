@@ -333,6 +333,7 @@ export interface ICoachReviewInfo {
     | 'REJECTED'
     | 'AWAITING_SCHEDULING'
     | 'SCHEDULED'
+    | 'IN_PROGRESS'
     | 'COMPLETED'
     | 'CANCELLED'
     | 'UNREQUESTED';
@@ -406,6 +407,21 @@ export interface IMatchRecord {
   categoryRatings?: Record<string, number>;
   plottedEventsJson?: string;
   reportPdfUrl?: string;
+  accessLinkToken?: string;
+  tokenExpiresAt?: Date;
+  tokenUsedAt?: Date;
+  evaluatorInfo?: {
+    name?: string;
+    role?: string;
+    email?: string;
+    clubOrOrg?: string;
+  };
+  reassignmentHistory?: Array<{
+    previousCoachEmail?: string;
+    previousCoachName?: string;
+    rejectionReason?: string;
+    rejectedAt?: Date;
+  }>;
   createdAt?: Date;
   updatedAt?: Date;
 }

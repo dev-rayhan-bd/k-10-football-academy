@@ -443,6 +443,7 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
           'REJECTED',
           'AWAITING_SCHEDULING',
           'SCHEDULED',
+          'IN_PROGRESS',
           'COMPLETED',
           'CANCELLED',
           'UNREQUESTED',
@@ -461,11 +462,29 @@ const MatchRecordSchema = new Schema<IMatchRecordDocument>(
     categoryRatings: { type: Map, of: Number },
     plottedEventsJson: { type: String },
     reportPdfUrl: { type: String },
+    accessLinkToken: { type: String, index: true },
+    tokenExpiresAt: { type: Date },
+    tokenUsedAt: { type: Date },
+    evaluatorInfo: {
+      name: { type: String },
+      role: { type: String },
+      email: { type: String },
+      clubOrOrg: { type: String },
+    },
+    reassignmentHistory: [
+      {
+        previousCoachEmail: { type: String },
+        previousCoachName: { type: String },
+        rejectionReason: { type: String },
+        rejectedAt: { type: Date },
+      },
+    ],
   },
   { timestamps: true },
 );
 
 MatchRecordSchema.index({ playerId: 1, matchDate: -1 });
+MatchRecordSchema.index({ accessLinkToken: 1 });
 
 const PlayerCvValidationSchema = new Schema<IPlayerCvValidationDocument>(
   {

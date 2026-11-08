@@ -50,6 +50,7 @@ import {
   tickPlayerAttendance,
   bulkUpdateCoachAttendance,
   getCoachTrainingSessions,
+  getCoachFinances,
 } from './coach.controller';
 import { getCoachAllGameReports } from '@/modules/player/game-report.controller';
 
@@ -155,6 +156,8 @@ router.post(
 // ==========================================
 // 2. COACH CV & UNIFIED PROFILE (LIKE PLAYER CV)
 // ==========================================
+router.get('/me/finances', auth('COACH', 'SUPER_ADMIN'), getCoachFinances);
+router.get('/my-finances', auth('COACH', 'SUPER_ADMIN'), getCoachFinances);
 router.get('/me/cv', auth(), getMyCoachCV);
 router.get('/my-cv', auth(), getMyCoachCV);
 router.get('/me/analytics', auth(), getMyCoachAnalytics);

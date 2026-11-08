@@ -308,6 +308,24 @@ const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDoc
     transactionType: { type: String, required: true, default: 'Game Report' },
     cost: { type: Number, required: true },
     commissionAcademy: { type: Number, required: true },
+    commissionCoach: { type: Number, default: 0 },
+    commissionPlatform: { type: Number, default: 0 },
+    payoutStatusAcademy: {
+      type: String,
+      enum: ['PENDING', 'PAID', 'PROCESSING'],
+      default: 'PENDING',
+      index: true,
+    },
+    payoutReferenceAcademy: { type: String, trim: true },
+    paidAtAcademy: { type: Date },
+    payoutStatusCoach: {
+      type: String,
+      enum: ['PENDING', 'PAID', 'PROCESSING'],
+      default: 'PENDING',
+      index: true,
+    },
+    payoutReferenceCoach: { type: String, trim: true },
+    paidAtCoach: { type: Date },
     transactionDate: { type: Date, required: true, default: Date.now },
     status: {
       type: String,
@@ -321,6 +339,7 @@ const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDoc
 );
 
 AcademyFinanceTransactionSchema.index({ academyId: 1, transactionDate: -1 });
+AcademyFinanceTransactionSchema.index({ coachId: 1, transactionDate: -1 });
 
 export const AcademyFinanceTransaction = model<IAcademyFinanceTransactionDocument>(
   'AcademyFinanceTransaction',

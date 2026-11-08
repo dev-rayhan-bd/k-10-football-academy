@@ -321,6 +321,30 @@ export class AdminController {
   });
 
   // ==========================================
+  // PAYOUTS MANAGEMENT (Coach & Academy Commissions)
+  // ==========================================
+
+  getPayouts = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.getPayouts(req.query as any);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Admin payouts summary and recipient list fetched successfully',
+      data: result,
+    });
+  });
+
+  recordPayout = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.recordPayout(req.body, req.user?.userId);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Payout recorded and completed successfully',
+      data: result,
+    });
+  });
+
+  // ==========================================
   // ANALYTICS (User Growth, Role Distribution & Revenue Breakdown)
   // ==========================================
 

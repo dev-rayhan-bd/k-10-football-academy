@@ -368,7 +368,7 @@ export const createMatchRecordZodSchema = z.object({
         paymentStatus: z.enum(['UNPAID', 'PAID', 'FREE']).optional(),
         paymentAmount: z.number().optional(),
         transactionId: z.string().optional(),
-        status: z.enum(['PENDING', 'COMPLETED', 'UNREQUESTED']).optional(),
+        status: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'UNREQUESTED']).optional(),
       })
       .optional(),
     events: z
@@ -429,6 +429,14 @@ export const completeCoachGameReportZodSchema = z.object({
       ])
       .optional(),
     stats: z.record(z.any()).optional(),
+    events: z
+      .array(
+        z.object({
+          eventId: z.string(),
+          count: z.number().optional(),
+        }),
+      )
+      .optional(),
     accurateShots: z
       .array(
         z

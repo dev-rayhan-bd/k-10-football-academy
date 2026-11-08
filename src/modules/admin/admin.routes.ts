@@ -83,6 +83,14 @@ router.patch(
   adminController.updatePayment,
 );
 
+// 7b. Admin Controlled Payouts (Coach & Academy Commission Disbursements)
+router.get('/payouts', adminController.getPayouts);
+router.post(
+  '/payouts/record',
+  validateRequest(AdminValidation.recordPayoutZodSchema),
+  adminController.recordPayout,
+);
+
 // 8. Platform Analytics (Top Cards, User Growth by Role, Role Distribution, Revenue Breakdown)
 router.get('/analytics', adminController.getAnalytics);
 

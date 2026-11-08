@@ -186,6 +186,22 @@ export const updatePaymentZodSchema = z.object({
   }),
 });
 
+export const recordPayoutZodSchema = z.object({
+  body: z.object({
+    recipientType: z.enum(['COACH', 'ACADEMY']),
+    recipientId: z.string().min(1, 'Recipient ID is required'),
+    amount: z.union([z.number(), z.string()]).optional(),
+    transactionId: z.string().optional(),
+    transactionIds: z.array(z.string()).optional(),
+    paymentMethod: z
+      .enum(['BANK_TRANSFER', 'WIRE', 'PAYPAL', 'STRIPE', 'CASH', 'CHEQUE', 'OTHER'])
+      .optional()
+      .default('BANK_TRANSFER'),
+    payoutReference: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
+  }),
+});
+
 export const AdminValidation = {
   updateUserStatusZodSchema,
   createMembershipPlanZodSchema,
@@ -194,4 +210,5 @@ export const AdminValidation = {
   reviewDecisionZodSchema,
   createPaymentZodSchema,
   updatePaymentZodSchema,
+  recordPayoutZodSchema,
 };

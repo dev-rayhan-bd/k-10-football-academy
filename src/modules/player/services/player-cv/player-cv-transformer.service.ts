@@ -481,10 +481,8 @@ export class PlayerCvTransformerService {
     // Minimalistic array for the "NEW GAME REPORTS" UI card
     const newGameReports: { title: string; rating: number }[] = matchRecords
       .filter((m) => {
-        if (m.reportCompletionType === 'COACH') {
-          return m.coachReview?.paymentStatus === 'PAID' || m.coachReview?.status === 'COMPLETED';
-        }
-        return true;
+        // Only paid or completed match reports can ever appear on the Player CV
+        return m.coachReview?.paymentStatus === 'PAID' || m.coachReview?.status === 'COMPLETED';
       })
       .map((m) => {
         const opponent =

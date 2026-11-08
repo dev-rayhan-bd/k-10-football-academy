@@ -19,7 +19,28 @@ export const createSelfGameReport = catchAsync(async (req: Request, res: Respons
   sendResponse(res, {
     statusCode: StatusCodes.CREATED,
     success: true,
-    message: 'Game report completed and verified with Excel performance formula',
+    message: 'Game report initiated and Stripe payment checkout created ($3.99)',
+    data: result,
+  });
+});
+
+/**
+ * 1.b Self Flow - Step 2: Submit 36 Performance Indicators after Payment
+ */
+export const completeSelfGameReport = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId || (req.user as any)?._id;
+  const reportId = req.params.reportId || req.params.id;
+  const result = await gameReportService.completeSelfGameReport(
+    userId,
+    reportId,
+    req.body,
+    req.user,
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
     data: result,
   });
 });
@@ -206,6 +227,67 @@ export const getGameReportDetails = catchAsync(async (req: Request, res: Respons
     statusCode: StatusCodes.OK,
     success: true,
     message: 'Game report details retrieved successfully',
+    data: result,
+  });
+});
+
+/**
+ * 9. Option B: View Game Report by Secure Token (Zero account required for external evaluator)
+ */
+export const getReportByAccessLink = catchAsync(async (req: Request, res: Response) => {
+  const token = req.params.token;
+  const result = await gameReportService.getReportByAccessLink(token);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Game report details fetched via secure access link',
+    data: result,
+  });
+});
+
+/**
+ * 10. Option B: Evaluator Responds to Secure Access Link (ACCEPT or REJECT)
+ */
+export const respondToAccessLink = catchAsync(async (req: Request, res: Response) => {
+  const token = req.params.token;
+  const result = await gameReportService.respondToAccessLink(token, req.body);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/**
+ * 11. Option B: Evaluator Submits 36 Performance Indicators via Secure Link
+ */
+export const submitReportByAccessLink = catchAsync(async (req: Request, res: Response) => {
+  const token = req.params.token;
+  const result = await gameReportService.submitReportByAccessLink(token, req.body);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/**
+ * 12. Re-assign Rejected Game Report to another Coach / Person WITHOUT extra payment ($0 charge)
+ */
+export const reassignGameReport = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId || (req.user as any)?._id;
+  const reportId = req.params.reportId || req.params.id;
+  const result = await gameReportService.reassignGameReport(userId, reportId, req.body);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: result.message,
     data: result,
   });
 });

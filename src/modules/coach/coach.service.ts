@@ -10,6 +10,7 @@ import { coachCvValidationService } from './services/coach-cv-validation.service
 import { coachAnalyticsService } from './services/coach-analytics.service';
 import { coachSquadService } from './services/coach-squad.service';
 import { coachEvaluationsService } from './services/coach-evaluations.service';
+import { coachFinancesService } from './services/coach-finances.service';
 
 /**
  * Enterprise Facade: CoachService
@@ -197,6 +198,12 @@ export class CoachService {
 
   async submitPlayerEvaluation(userId: string, targetId: string, payload: any) {
     return await coachEvaluationsService.submitPlayerEvaluation(userId, targetId, payload);
+  }
+
+  // --- CoachFinancesService Delegates ---
+
+  async getCoachFinances(coachUserId: string, query: Record<string, unknown> = {}) {
+    return await coachFinancesService.getCoachFinances(coachUserId, query);
   }
 }
 

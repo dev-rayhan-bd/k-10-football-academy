@@ -16,6 +16,8 @@ import { academyStripeConnectService } from '@/modules/academy/services/academy-
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { redisClient } from '@/config/redis';
 import { resolveOrCreatePlayerProfile } from './game-report.utils';
+import { gameReportAccessLinkService } from './game-report-access-link.service';
+import { gameReportPdfService } from './game-report-pdf.service';
 
 export class GameReportPaymentService {
   /**
@@ -160,6 +162,17 @@ export class GameReportPaymentService {
       },
     };
 
+    const { token: accessLinkToken, expiresAt: tokenExpiresAt } =
+      gameReportAccessLinkService.generateSecureToken();
+
+    (draftData as any).accessLinkToken = matchRecord?.accessLinkToken || accessLinkToken;
+    (draftData as any).tokenExpiresAt = matchRecord?.tokenExpiresAt || tokenExpiresAt;
+    (draftData as any).evaluatorInfo = {
+      name: targetCoachName || 'Coach',
+      email: targetCoachEmail,
+      role: 'Coach / Scout',
+    };
+
     if (matchRecord) {
       Object.assign(matchRecord, draftData);
       await matchRecord.save();
@@ -207,10 +220,15 @@ export class GameReportPaymentService {
     matchRecord.coachReview!.transactionId = session.id;
     await matchRecord.save();
 
+    const resolvedToken = matchRecord.accessLinkToken || (draftData as any).accessLinkToken;
+    const accessLink = gameReportAccessLinkService.formatAccessUrl(resolvedToken);
+
     return {
       reportId: matchRecord._id,
       checkoutUrl: session.url,
       sessionId: session.id,
+      token: resolvedToken,
+      accessLink,
       amount: resolvedPrice,
       status: 'AWAITING_PAYMENT',
     };
@@ -261,6 +279,11 @@ export class GameReportPaymentService {
 
       try {
         session.startTransaction();
+        const isSelfOrParent =
+          existingRecord.reportCompletionType === 'PARENT' ||
+          existingRecord.reportCompletionType === 'SELF';
+        const newStatus = isSelfOrParent ? 'COMPLETED' : 'PENDING';
+
         updatedRecord = await MatchRecord.findOneAndUpdate(
           {
             _id: reportId,
@@ -269,12 +292,20 @@ export class GameReportPaymentService {
           {
             $set: {
               'coachReview.paymentStatus': 'PAID',
-              'coachReview.status': 'PENDING',
+              'coachReview.status': newStatus,
               ...(transactionId ? { 'coachReview.transactionId': transactionId } : {}),
             },
           },
           { new: true, session },
         ).populate('playerId');
+
+        if (isSelfOrParent && updatedRecord) {
+          const pdfUrl = await gameReportPdfService.generateAndSaveReportPdf(updatedRecord);
+          if (pdfUrl) {
+            updatedRecord.reportPdfUrl = pdfUrl;
+            await updatedRecord.save({ session });
+          }
+        }
 
         if (updatedRecord) {
           const playerProfile = (updatedRecord.playerId as any) || {};
@@ -468,11 +499,19 @@ export class GameReportPaymentService {
         });
       }
 
-      // 9. Email Notification to Coach (Guaranteed Exactly Once via BullMQ job deduplication)
+      // 9. Email Notification to Coach with Secure Access Link
       const coachEmail = updatedRecord.coachReview?.coachEmail;
       const coachName = updatedRecord.coachReview?.coachName || 'Coach';
       if (coachEmail) {
-        const evaluationUrl = `${env.CLIENT_URL || 'https://k-10-football-academy.onrender.com'}/coach/evaluate/${updatedRecord._id}`;
+        if (!updatedRecord.accessLinkToken) {
+          const { token, expiresAt } = gameReportAccessLinkService.generateSecureToken();
+          updatedRecord.accessLinkToken = token;
+          updatedRecord.tokenExpiresAt = expiresAt;
+          await updatedRecord.save();
+        }
+        const evaluationUrl = gameReportAccessLinkService.formatAccessUrl(
+          updatedRecord.accessLinkToken,
+        );
         const emailHtml = getCoachReportRequestEmailTemplate(
           coachName,
           playerName,

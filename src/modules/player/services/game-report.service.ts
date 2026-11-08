@@ -3,6 +3,7 @@ import { gameReportSelfService } from './game-report/game-report-self.service';
 import { gameReportPaymentService } from './game-report/game-report-payment.service';
 import { gameReportCoachService } from './game-report/game-report-coach.service';
 import { gameReportQueryService } from './game-report/game-report-query.service';
+import { gameReportAccessLinkService } from './game-report/game-report-access-link.service';
 
 // Export parseTimerInput for external callers (such as player-match.service.ts)
 export { parseTimerInput };
@@ -18,6 +19,13 @@ export class GameReportService {
    */
   async createSelfGameReport(userId: string, payload: any, currentUser?: any) {
     return gameReportSelfService.createSelfGameReport(userId, payload, currentUser);
+  }
+
+  /**
+   * Flow 1 - Step 2: Parent / Player submits 36 performance indicators after payment ($3.99)
+   */
+  async completeSelfGameReport(userId: string, reportId: string, payload: any, currentUser?: any) {
+    return gameReportSelfService.completeSelfGameReport(userId, reportId, payload, currentUser);
   }
 
   /**
@@ -100,6 +108,34 @@ export class GameReportService {
    */
   async getGameReportDetails(userIdOrPlayerId: string, reportId: string) {
     return gameReportQueryService.getGameReportDetails(userIdOrPlayerId, reportId);
+  }
+
+  /**
+   * Option B: View Game Report by Secure Token (Zero account required for external evaluator)
+   */
+  async getReportByAccessLink(token: string) {
+    return gameReportAccessLinkService.getReportByToken(token);
+  }
+
+  /**
+   * Option B: External Evaluator Responds (ACCEPT or REJECT)
+   */
+  async respondToAccessLink(token: string, payload: any) {
+    return gameReportAccessLinkService.respondToAccessLink(token, payload);
+  }
+
+  /**
+   * Option B: External Evaluator Submits 36 Performance Indicators (Generates PDF + CV Integration)
+   */
+  async submitReportByAccessLink(token: string, payload: any) {
+    return gameReportAccessLinkService.submitReportByToken(token, payload);
+  }
+
+  /**
+   * Re-assign Rejected Game Report to another Coach / Person WITHOUT extra payment ($0 charge)
+   */
+  async reassignGameReport(userId: string, reportId: string, payload: any) {
+    return gameReportAccessLinkService.reassignGameReport(userId, reportId, payload);
   }
 }
 

@@ -31,7 +31,10 @@ export const getAcademyProfile = catchAsync(async (req: Request, res: Response) 
 });
 
 export const getAcademyHomepage = catchAsync(async (req: Request, res: Response) => {
-  const identifier = req.params.academyId || req.params.id || (req as any).user?.userId;
+  const rawParam = req.params.academyId || req.params.id;
+  const userId = (req as any).user?.userId || (req as any).user?._id;
+  const identifier =
+    !rawParam || rawParam === 'me' || rawParam === 'my-academy' ? userId : rawParam;
   if (!identifier) {
     throw new AppError(StatusCodes.BAD_REQUEST, 'Academy ID or authentication required');
   }

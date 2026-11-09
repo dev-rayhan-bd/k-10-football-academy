@@ -2,7 +2,20 @@ import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { IAcademyProfile } from '../academy.interface';
-import { AcademyProfile, Team, AcademyCoach, ExtraEvent, AcademyNews } from '../academy.model';
+import {
+  AcademyProfile,
+  Team,
+  AcademyCoach,
+  ExtraEvent,
+  AcademyNews,
+  AcademyMatch,
+  AcademySponsor,
+  AcademySuccessStory,
+} from '../academy.model';
+import { TrainingSession } from '@/modules/training/training.model';
+import { PlayerProfile } from '@/modules/player/player.model';
+import { CoachProfile } from '@/modules/coach/coach.model';
+import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { User } from '@/modules/user/user.model';
@@ -244,37 +257,281 @@ export class AcademyProfileService {
       profile = await AcademyProfile.findOne({
         $or: [{ _id: identifier }, { userId: identifier }],
       }).populate('userId', 'name email avatar phone');
+
+      // 1. If identifier belongs to a Player, resolve their associated AcademyProfile
+      if (!profile) {
+        const player = await PlayerProfile.findOne({
+          $or: [{ _id: identifier }, { userId: identifier }],
+        })
+          .select('_id academyId')
+          .lean();
+        if (player) {
+          let resolvedAcademyId = player.academyId;
+          if (!resolvedAcademyId) {
+            const playerTeam = await Team.findOne({ playerIds: player._id })
+              .select('academyId')
+              .lean();
+            resolvedAcademyId = playerTeam?.academyId;
+          }
+          if (resolvedAcademyId) {
+            profile = await AcademyProfile.findById(resolvedAcademyId).populate(
+              'userId',
+              'name email avatar phone',
+            );
+          }
+        }
+      }
+
+      // 2. If identifier belongs to a Coach, resolve their associated AcademyProfile
+      if (!profile) {
+        const coach = await CoachProfile.findOne({
+          $or: [{ _id: identifier }, { userId: identifier }],
+        })
+          .select('_id userId academyId')
+          .lean();
+        let resolvedAcademyId = (coach as any)?.academyId;
+        if (!resolvedAcademyId) {
+          const targetCoachIds: any[] = [new Types.ObjectId(identifier)];
+          if (coach?._id) targetCoachIds.push(coach._id);
+          if (coach?.userId) targetCoachIds.push(coach.userId);
+
+          const affiliation = await AcademyCoach.findOne({
+            $or: [{ coachId: { $in: targetCoachIds } }, { coachUserId: { $in: targetCoachIds } }],
+            status: 'APPROVED',
+          })
+            .select('academyId')
+            .lean();
+          resolvedAcademyId = affiliation?.academyId;
+
+          if (!resolvedAcademyId && coach?._id) {
+            const coachTeam = await Team.findOne({ coachIds: coach._id })
+              .select('academyId')
+              .lean();
+            resolvedAcademyId = coachTeam?.academyId;
+          }
+        }
+        if (resolvedAcademyId) {
+          profile = await AcademyProfile.findById(resolvedAcademyId).populate(
+            'userId',
+            'name email avatar phone',
+          );
+        }
+      }
+
+      // 3. If identifier belongs to a Parent, resolve their child's associated AcademyProfile
+      if (!profile) {
+        const targetParentIds: any[] = [new Types.ObjectId(identifier)];
+        const parentProf = await ParentProfile.findOne({
+          $or: [{ _id: identifier }, { userId: identifier }],
+        })
+          .select('_id userId')
+          .lean();
+        if (parentProf) {
+          targetParentIds.push(parentProf._id);
+          if (parentProf.userId) targetParentIds.push(parentProf.userId);
+        }
+        const childLinks = await ParentChild.find({ parentId: { $in: targetParentIds } }).lean();
+        for (const link of childLinks) {
+          if (!link.childPlayerId) continue;
+          const childPlayer = await PlayerProfile.findById(link.childPlayerId)
+            .select('_id academyId')
+            .lean();
+          let resolvedAcademyId = childPlayer?.academyId;
+          if (!resolvedAcademyId && childPlayer?._id) {
+            const childTeam = await Team.findOne({ playerIds: childPlayer._id })
+              .select('academyId')
+              .lean();
+            resolvedAcademyId = childTeam?.academyId;
+          }
+          if (resolvedAcademyId) {
+            profile = await AcademyProfile.findById(resolvedAcademyId).populate(
+              'userId',
+              'name email avatar phone',
+            );
+            if (profile) break;
+          }
+        }
+      }
     }
+
     if (!profile) {
       profile = await AcademyProfile.findOne({
         name: { $regex: new RegExp(`^${identifier.trim()}$`, 'i') },
       }).populate('userId', 'name email avatar phone');
     }
+
     if (!profile) {
       throw new AppError(StatusCodes.NOT_FOUND, 'Academy profile not found');
     }
 
     const academyId = profile._id;
 
-    // Fetch existing dashboard data for presentation
-    const [teams, coaches, events, news] = await Promise.all([
-      Team.find({ academyId, status: 'ACTIVE' })
-        .select('teamName ageGroup playersCount coachesCount')
-        .lean(),
-      AcademyCoach.find({ academyId, status: 'APPROVED' })
-        .populate('coachId', 'fullName title profileImage licenseStatus yearsExperience')
-        .lean(),
-      ExtraEvent.find({ academyId, status: { $ne: 'CANCELLED' } })
-        .sort({ eventDate: 1 })
-        .limit(5)
-        .lean(),
-      AcademyNews.find({ academyId }).sort({ publishDate: -1 }).limit(5).lean(),
-    ]);
+    // Fetch all implemented Academy resources in parallel
+    const [teams, trainingSessions, matches, coaches, events, news, sponsors, successStories] =
+      await Promise.all([
+        Team.find({ academyId })
+          .select('teamName ageGroup playersCount coachesCount totalMembers status')
+          .lean(),
+        TrainingSession.find({ academyId })
+          .populate('teamId', 'teamName ageGroup')
+          .populate('coachId', 'fullName title')
+          .sort({ sessionDate: -1 })
+          .limit(30)
+          .lean(),
+        AcademyMatch.find({ academyId })
+          .populate('ourTeamId', 'teamName ageGroup')
+          .sort({ matchDate: -1 })
+          .limit(30)
+          .lean(),
+        AcademyCoach.find({ academyId, status: { $in: ['APPROVED', 'PENDING'] } })
+          .populate('coachId', 'fullName title profileImage licenseStatus yearsExperience')
+          .lean(),
+        ExtraEvent.find({ academyId }).sort({ eventDate: -1 }).limit(30).lean(),
+        AcademyNews.find({
+          academyId,
+          isDeleted: { $ne: true },
+          status: { $ne: 'BIN' },
+        })
+          .sort({ publishDate: -1 })
+          .limit(20)
+          .lean(),
+        AcademySponsor.find({ academyId }).sort({ createdAt: -1 }).lean(),
+        AcademySuccessStory.find({
+          academyId,
+          isDeleted: { $ne: true },
+          status: { $ne: 'REJECTED' },
+        })
+          .sort({ date: -1 })
+          .limit(20)
+          .lean(),
+      ]);
+
+    const mappedTeams = teams.map((t: any) => ({
+      _id: t._id,
+      teamName: t.teamName,
+      ageGroup: t.ageGroup,
+      playersCount: t.playersCount || 0,
+      coachesCount: t.coachesCount || 0,
+      totalMembers: t.totalMembers || (t.playersCount || 0) + (t.coachesCount || 0),
+      status: t.status || 'ACTIVE',
+    }));
+
+    const mappedTrainingSessions = trainingSessions.map((s: any) => ({
+      _id: s._id,
+      sessionName: s.sessionName,
+      sessionTitle: s.sessionTitle || s.sessionName,
+      sessionDate: s.sessionDate,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      trainingLocation: s.trainingLocation,
+      locationField: s.locationField || '',
+      sessionType: s.sessionType,
+      focusArea: s.focusArea,
+      teamName: (s.teamId as any)?.teamName || '',
+      ageGroup: (s.teamId as any)?.ageGroup || '',
+      coachName: (s.coachId as any)?.fullName || '',
+    }));
+
+    const mappedMatches = matches.map((m: any) => ({
+      _id: m._id,
+      matchTitle: m.matchTitle,
+      ourTeamName: (m.ourTeamId as any)?.teamName || '',
+      ageGroup: (m.ourTeamId as any)?.ageGroup || '',
+      opponentTeam: m.opponentTeam,
+      matchType: m.matchType,
+      competitionName: m.competitionName || '',
+      homeOrAway: m.homeOrAway,
+      venueName: m.venueName,
+      venueAddress: m.venueAddress,
+      matchDate: m.matchDate,
+      kickOffTime: m.kickOffTime,
+      status: m.status,
+    }));
+
+    const mappedCoaches = coaches.map((c: any) => {
+      const coachProfile = c.coachId || {};
+      return {
+        _id: c._id,
+        coachId: coachProfile._id || null,
+        name: coachProfile.fullName || c.role || 'Academy Coach',
+        title: coachProfile.title || c.role || 'Academy Coach',
+        role: c.role || 'Academy Coach',
+        status: c.status,
+        profileImage: coachProfile.profileImage || '',
+        licenseStatus: coachProfile.licenseStatus || 'UEFA / AFC Licensed',
+        yearsExperience: coachProfile.yearsExperience || 0,
+      };
+    });
+
+    const mappedExtraEvents = events.map((e: any) => ({
+      _id: e._id,
+      eventName: e.eventName,
+      eventType: e.eventType,
+      group: e.group,
+      ageGroup: e.ageGroup,
+      targetAttendees: e.targetAttendees,
+      eventDate: e.eventDate,
+      eventEndDate: e.eventEndDate,
+      formattedDateRange: e.formattedDateRange || '',
+      startTime: e.startTime,
+      endTime: e.endTime,
+      registrationDeadline: e.registrationDeadline,
+      venueName: e.venueName,
+      venueAddress: e.venueAddress,
+      registrationFee: e.registrationFee ?? 0,
+      currency: e.currency || '$',
+      maxCapacity: e.maxCapacity,
+      currentAttendees: e.currentAttendees ?? 0,
+      status: e.status,
+      tournamentStatus: e.tournamentStatus,
+      bannerImage: e.bannerImage || '',
+      description: e.description || '',
+    }));
+
+    const mappedNews = news.map((n: any) => ({
+      _id: n._id,
+      articleTitle: n.articleTitle || 'Announcement',
+      category: n.category || 'General News',
+      author: n.author || 'Admin',
+      publishDate: n.publishDate,
+      formattedPublishDate: n.formattedPublishDate || '',
+      featuredImage: n.featuredImage || '',
+      excerpt: n.excerpt || '',
+      fullArticle: n.fullArticle || n.excerpt || '',
+      priority: n.priority || 'MEDIUM',
+      status: n.status || 'PUBLISHED',
+    }));
+
+    const mappedSponsors = sponsors.map((s: any) => ({
+      _id: s._id,
+      companyName: s.companyName,
+      contactPerson: s.contactPerson || '',
+      sponsorshipType: s.sponsorshipType,
+      sponsorshipStatus: s.sponsorshipStatus,
+      formattedContractPeriod: s.formattedContractPeriod || '',
+      description: s.sponsorshipDescription || '',
+      logo: s.logo || '',
+    }));
+
+    const mappedSuccessStories = successStories.map((st: any) => ({
+      _id: st._id,
+      storyTitle: st.storyTitle,
+      playerName: st.playerName || '',
+      position: st.position || '',
+      currentAcademy: st.currentAcademy || '',
+      category: st.category,
+      date: st.date,
+      formattedDate: st.formattedDate || '',
+      photo: st.photo || '',
+      storyContent: st.storyContent || '',
+      status: st.status,
+    }));
 
     return {
       academyId: profile._id,
-      // 1. Academy Information
+      // 1. Academy Profile & Info (AcademyProfile)
       academyInfo: {
+        _id: profile._id,
         name: profile.name,
         logo: profile.logo || '',
         coverPhoto: profile.coverPhoto || '',
@@ -288,8 +545,10 @@ export class AcademyProfileService {
         establishedDate: profile.establishedDate,
         category: profile.category || 'General Academy',
         registrationId: profile.registrationId || '',
+        estimatedAcademySize: profile.estimatedAcademySize || '',
+        league: profile.league || '',
+        achievements: profile.achievements || [],
       },
-      // 2. Academy Introduction
       academyIntroduction: {
         mission:
           profile.visionAndMission ||
@@ -303,76 +562,64 @@ export class AcademyProfileService {
           profile.trainingPhilosophy ||
           'Holistic player development combining professional coaching with modern analytics.',
       },
-      // 3. Training Information
+      // 2. Teams / Age Groups (Team)
+      teams: mappedTeams,
+      // 3. Coaches (AcademyCoach)
+      coaches: mappedCoaches,
+      coachingStaff: mappedCoaches,
+      // 4. Training Sessions Schedule (TrainingSession)
+      trainingSessions: mappedTrainingSessions,
+      // 5. Academy Matches Schedule (AcademyMatch)
+      matches: mappedMatches,
       trainingInformation: {
-        totalTeams: teams.length,
-        ageGroups: teams.map((t) => ({
-          _id: t._id,
-          teamName: t.teamName,
-          ageGroup: t.ageGroup,
-          playersCount: t.playersCount || 0,
-        })),
+        totalTeams: mappedTeams.length,
         trainingFacilities: profile.location || 'Official Training Ground',
+        ageGroups: mappedTeams,
+        trainingSchedule: mappedTrainingSessions,
+        matchSchedule: mappedMatches,
       },
-      // 4. Registration Information
-      registrationInformation: {
-        howToRegister:
-          'Parents can register their children through the K10 Parent Dashboard by selecting the Academy membership plan.',
-        membershipPlans: [
-          {
-            planName: 'Monthly Academy Membership',
-            description:
-              'Includes regular weekly training sessions, attendance monitoring, and quarterly coach evaluations.',
-            includesQuarterlyEvaluation: true,
-          },
-        ],
-      },
-      // 5. Academy Shop (Link to existing shop section)
-      academyShop: {
-        sectionUrl: `/academies/${profile._id}/shop`,
-        description:
-          'Purchase official Academy kits, uniforms, and equipment directly from the Academy Shop.',
-      },
-      // 6. Fees & Payments (Link to existing fees section)
-      feesAndPayments: {
-        sectionUrl: `/academies/${profile._id}/payments`,
-        description:
-          'View and pay registration fees, monthly membership dues, and event fees securely.',
-      },
-      // 7. Events and Announcements
+      // 6. Extra Events & Event Registration Fee (ExtraEvent)
+      extraEvents: mappedExtraEvents,
+      // 7. News, Sponsors & Success Stories (AcademyNews, AcademySponsor, AcademySuccessStory)
+      news: mappedNews,
+      sponsors: mappedSponsors,
+      successStories: mappedSuccessStories,
       eventsAndAnnouncements: [
-        ...events.map((e: any) => ({
+        ...mappedExtraEvents.map((e: any) => ({
           _id: e._id,
           title: e.eventName || 'Academy Event',
           type: 'EVENT',
+          eventType: e.eventType,
           date: e.eventDate,
-          location: e.location || 'Training Ground',
+          formattedDateRange: e.formattedDateRange || '',
+          location: e.venueName || e.venueAddress || 'Training Ground',
+          registrationFee: e.registrationFee ?? 0,
+          currency: e.currency || '$',
+          status: e.status,
+          bannerImage: e.bannerImage || '',
           description: e.description || '',
         })),
-        ...news.map((n: any) => ({
+        ...mappedNews.map((n: any) => ({
           _id: n._id,
           title: n.articleTitle || 'Announcement',
           type: 'ANNOUNCEMENT',
+          category: n.category || 'General News',
           date: n.publishDate,
+          formattedPublishDate: n.formattedPublishDate || '',
+          featuredImage: n.featuredImage || '',
+          excerpt: n.excerpt || '',
           content: n.fullArticle || n.excerpt || '',
         })),
       ],
-      // 8. Coaching Staff
-      coachingStaff: coaches.map((c: any) => {
-        const coachProfile = c.coachId || {};
-        return {
-          _id: c._id,
-          name: coachProfile.fullName || c.role || 'Academy Coach',
-          title: coachProfile.title || c.role || 'Academy Coach',
-          profileImage: coachProfile.profileImage || '',
-          licenseStatus: coachProfile.licenseStatus || 'UEFA / AFC Licensed',
-          yearsExperience: coachProfile.yearsExperience || 0,
-        };
-      }),
       meta: {
-        teamsCount: teams.length,
-        coachesCount: coaches.length,
-        eventsCount: events.length,
+        teamsCount: mappedTeams.length,
+        coachesCount: mappedCoaches.length,
+        trainingSessionsCount: mappedTrainingSessions.length,
+        matchesCount: mappedMatches.length,
+        eventsCount: mappedExtraEvents.length,
+        newsCount: mappedNews.length,
+        sponsorsCount: mappedSponsors.length,
+        successStoriesCount: mappedSuccessStories.length,
       },
     };
   }

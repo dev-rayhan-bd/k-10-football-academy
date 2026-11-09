@@ -6,6 +6,7 @@ import { sendResponse } from '@/utils/sendResponse';
 import { playerService } from './player.service';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
 import { AppError } from '@/utils/AppError';
+import { subscriptionService } from '@/modules/subscription/subscription.service';
 
 export const createPlayerProfile = catchAsync(async (req: Request, res: Response) => {
   const payload = {
@@ -36,6 +37,18 @@ export const getPlayerProfile = catchAsync(async (req: Request, res: Response) =
   const targetId =
     req.params.id === 'me' || !req.params.id ? req.user?.userId || req.params.id : req.params.id;
   const result = await playerService.getProfileById(targetId, req.user);
+
+  if (req.user?.userId && result) {
+    try {
+      const subInfo = await subscriptionService.getUserSubscription(req.user.userId);
+      result.hasActiveSubscription = subInfo.hasActiveSubscription;
+      result.currentSubscription = subInfo.currentSubscription;
+    } catch {
+      result.hasActiveSubscription = false;
+      result.currentSubscription = null;
+    }
+  }
+
   sendResponse(res, {
     statusCode: 200,
     success: true,

@@ -35,7 +35,7 @@ export class AgentAnalyticsService {
     const user = await UserModel.findById(userId).lean();
 
     const playerShareBase =
-      env.SCOUTING_BOARD_SHARE_PLAYER || 'https://k-10-football-academy.onrender.com/players/share';
+      env.SCOUTING_BOARD_SHARE_PLAYER || 'http://localhost:3000/players/share';
 
     // 1. Agent Profile Details (Screenshot 1: 74% PROFILE, ACTIVE AGENT, JOHN DOE, Badges)
     const rawDob = (agentProfile as any)?.dateOfBirth || user?.dateOfBirth;

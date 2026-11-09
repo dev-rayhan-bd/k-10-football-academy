@@ -24,6 +24,13 @@ export class GameReportCoachService {
       throw new AppError(404, 'Match record not found.');
     }
 
+    if (matchRecord.coachReview?.status === 'COMPLETED') {
+      throw new AppError(
+        400,
+        'This Game Report has already been evaluated and completed. Repeated submissions are not allowed.',
+      );
+    }
+
     if (matchRecord.coachReview?.paymentStatus !== 'PAID') {
       throw new AppError(
         402,
@@ -171,7 +178,7 @@ export class GameReportCoachService {
     // Send Completion Notification Email to Player
     const playerUser = await User.findById(playerProfile.userId);
     if (playerUser && playerUser.email) {
-      const cvUrl = `${env.CLIENT_URL || 'https://k-10-football-academy.onrender.com'}/player/cv`;
+      const cvUrl = `${(env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '')}/player/cv`;
       const emailHtml = getPlayerReportCompletedEmailTemplate(
         playerProfile.fullName || playerUser.name,
         coachUser.name || 'Your Coach',
@@ -375,6 +382,13 @@ export class GameReportCoachService {
     const matchRecord = await MatchRecord.findById(reportId).populate('playerId');
     if (!matchRecord) {
       throw new AppError(404, 'Match record not found.');
+    }
+
+    if (matchRecord.coachReview?.status === 'COMPLETED') {
+      throw new AppError(
+        400,
+        'This Game Report has already been evaluated and completed. Repeated submissions are not allowed.',
+      );
     }
 
     if (matchRecord.coachReview?.paymentStatus !== 'PAID') {

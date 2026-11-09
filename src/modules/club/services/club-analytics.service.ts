@@ -329,9 +329,8 @@ export class ClubAnalyticsService {
     const user = await User.findById(userId).select('name email phone avatar');
 
     const playerShareBase =
-      env.SCOUTING_BOARD_SHARE_PLAYER || 'https://k-10-football-academy.onrender.com/players/share';
-    const coachShareBase =
-      env.SCOUTING_BOARD_SHARE_COACH || 'https://k-10-football-academy.onrender.com/coach/share';
+      env.SCOUTING_BOARD_SHARE_PLAYER || 'http://localhost:3000/players/share';
+    const coachShareBase = env.SCOUTING_BOARD_SHARE_COACH || 'http://localhost:3000/coach/share';
 
     // 1. Club Header / Banner Info
     const clubInfo = {

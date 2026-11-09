@@ -7,6 +7,7 @@ import { playerStatsService } from '@/modules/player/services/player-stats.servi
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 import { User } from '@/modules/user/user.model';
+import { ParentChild, ParentProfile } from '@/modules/parent/parent.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import {
   mapStatsAndEventsToMatchEvents,
@@ -152,7 +153,7 @@ export class GameReportSelfService {
 
     // Create Stripe Checkout Session ($3.99 Platform Fee)
     const stripe = getStripeClient();
-    const successUrl = env.STRIPE_SUCCESS_URL;
+    const clientBaseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
     const cancelUrl = env.STRIPE_CANCEL_URL;
     const userDoc = await User.findById(userId);
 
@@ -188,12 +189,25 @@ export class GameReportSelfService {
         },
       },
       customer_email: userDoc?.email || undefined,
-      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${record._id}&type=MATCH_RECORD`,
+      success_url: `${clientBaseUrl}/dashboard/player/game-reports/create?step=statistics&reportId=${record._id}&session_id={CHECKOUT_SESSION_ID}&position=${encodeURIComponent(
+        payload.playerInfo?.position ||
+          payload.position ||
+          record.playerInfo?.position ||
+          playerProfile?.position ||
+          'CM',
+      )}`,
       cancel_url: cancelUrl,
     });
 
     record.coachReview!.transactionId = session.id;
     await record.save();
+
+    const chosenPosition =
+      payload.playerInfo?.position ||
+      payload.position ||
+      record.playerInfo?.position ||
+      playerProfile?.position ||
+      'CM';
 
     return {
       reportId: record._id,
@@ -201,6 +215,7 @@ export class GameReportSelfService {
       sessionId: session.id,
       amount: resolvedPrice,
       currency: '$',
+      position: chosenPosition,
       status: 'AWAITING_PAYMENT',
     };
   }
@@ -208,7 +223,7 @@ export class GameReportSelfService {
   /**
    * Option A - Step 2: Parent / Player Submits 36 Performance Indicators after Payment ($3.99)
    */
-  async completeSelfGameReport(_userId: string, reportId: string, payload: any, currentUser?: any) {
+  async completeSelfGameReport(userId: string, reportId: string, payload: any, currentUser?: any) {
     if (!reportId || !Types.ObjectId.isValid(reportId)) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Valid report ID is required');
     }
@@ -218,7 +233,23 @@ export class GameReportSelfService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Game report not found');
     }
 
-    // STRICT PAYMENT ENFORCEMENT: Client Requirement 5
+    // 1. REPEAT SUBMISSION PROTECTION: Prevent multiple submissions on the same finalized report
+    // A report is finalized only if it has already been marked COMPLETED AND has recorded events/stats
+    const hasExistingStats = Boolean(
+      (matchRecord.events && matchRecord.events.length > 0) ||
+      (matchRecord.stats &&
+        Object.entries(
+          matchRecord.stats.toObject ? matchRecord.stats.toObject() : matchRecord.stats,
+        ).some(([k, v]) => k !== 'appearances' && Number(v) > 0)),
+    );
+    if (matchRecord.coachReview?.status === 'COMPLETED' && hasExistingStats) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        'This Game Report has already been completed and finalized. Repeated submissions are not allowed.',
+      );
+    }
+
+    // 2. STRICT PAYMENT ENFORCEMENT: Client Requirement 5
     if (matchRecord.coachReview?.paymentStatus !== 'PAID') {
       throw new AppError(
         StatusCodes.PAYMENT_REQUIRED,
@@ -226,7 +257,37 @@ export class GameReportSelfService {
       );
     }
 
+    // 3. OWNERSHIP SECURITY: Ensure requesting user owns this report or is parent/admin
     const playerProfile: any = matchRecord.playerId || {};
+    const requesterRole = currentUser?.role || '';
+    if (requesterRole !== 'SUPER_ADMIN' && requesterRole !== 'ADMIN') {
+      const isDirectPlayer =
+        String(playerProfile.userId) === String(userId) ||
+        String(playerProfile._id) === String(userId);
+
+      if (!isDirectPlayer) {
+        const parentProfile = await ParentProfile.findOne({
+          $or: [
+            { userId },
+            { _id: Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : null },
+          ],
+        });
+        const isLinkedParent =
+          parentProfile &&
+          (await ParentChild.exists({
+            parentId: parentProfile._id,
+            childPlayerId: playerProfile._id,
+          }));
+
+        if (!isLinkedParent) {
+          throw new AppError(
+            StatusCodes.FORBIDDEN,
+            'Access denied. You do not have permission to submit this Game Report.',
+          );
+        }
+      }
+    }
+
     const position = playerProfile.position || matchRecord.playerInfo?.position || 'CM';
 
     const { stats = {}, accurateShots = [], accurateAssists = [], events: rawEvents } = payload;
@@ -253,8 +314,13 @@ export class GameReportSelfService {
     const events = mapStatsAndEventsToMatchEvents(stats, rawEvents);
 
     // Calculate Rating via Client's 100% Excel Formula
+    const isGK =
+      position === 'GK' ||
+      position.toUpperCase().includes('GOAL') ||
+      position.toUpperCase().includes('GK');
     const perfResult = calculateMatchPerformance(position, finalMinutes, events);
-    const finalRating = Math.round((perfResult.overallRating / 10) * 10) / 10;
+    const ratingOutOf10 = Math.round((perfResult.overallRating / 10) * 10) / 10;
+    const finalRating = ratingOutOf10;
 
     matchRecord.minutesPlayed = finalMinutes;
     matchRecord.matchDuration = finalMatchDuration;
@@ -298,12 +364,22 @@ export class GameReportSelfService {
       await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
     }
 
+    const apiBase = env.PUBLIC_API_URL
+      ? env.PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '')
+      : `http://localhost:${env.PORT || 5000}`;
+    const pdfViewUrl = `${apiBase}/api/v1/players/game-reports/${matchRecord._id}/pdf`;
+    const pdfDownloadUrl = `${apiBase}/api/v1/players/game-reports/${matchRecord._id}/pdf?download=true`;
+
+    const indicatorCount = isGK ? 45 : 36;
     return {
       success: true,
-      message: '36 performance indicators saved and official PDF generated',
+      message: `${indicatorCount} performance indicators saved and official PDF generated`,
       reportId: matchRecord._id,
-      overallRating: finalRating,
-      reportPdfUrl: matchRecord.reportPdfUrl,
+      overallRating: ratingOutOf10,
+      overallScore: perfResult.overallRating,
+      reportPdfUrl: matchRecord.reportPdfUrl || pdfViewUrl,
+      pdfViewUrl,
+      pdfDownloadUrl,
       status: 'COMPLETED',
       isProfessionallyVerified: false,
     };

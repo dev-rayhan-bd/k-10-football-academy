@@ -699,6 +699,10 @@ export class PlayerCvTransformerService {
         : defaultStat);
     const headingScoreVal = headingScore || defaultStat;
 
+    const isGK =
+      String(aggregatedProfile.position).toUpperCase().includes('GK') ||
+      String(aggregatedProfile.position).toUpperCase().includes('GOAL');
+
     const strength = {
       pace: pacScore,
       shooting: shoScore,
@@ -707,15 +711,24 @@ export class PlayerCvTransformerService {
       defending: defScore,
       physical: phyScore,
       heading: headingScoreVal,
-      items: [
-        { key: 'pace', label: 'PACE', value: pacScore },
-        { key: 'shooting', label: 'SHOOTING', value: shoScore },
-        { key: 'passing', label: 'PASSING', value: pasScore },
-        { key: 'dribbling', label: 'DRIBBLING', value: driScore },
-        { key: 'defending', label: 'DEFENDING', value: defScore },
-        { key: 'physical', label: 'PHYSICAL', value: phyScore },
-        { key: 'heading', label: 'HEADING', value: headingScoreVal },
-      ],
+      items: isGK
+        ? [
+            { key: 'diving', label: 'DIVING', value: pacScore },
+            { key: 'handling', label: 'HANDLING', value: shoScore },
+            { key: 'kicking', label: 'KICKING', value: pasScore },
+            { key: 'reflexes', label: 'REFLEXES', value: driScore },
+            { key: 'speed', label: 'SPEED', value: defScore },
+            { key: 'positioning', label: 'POSITIONING', value: phyScore },
+          ]
+        : [
+            { key: 'pace', label: 'PACE', value: pacScore },
+            { key: 'shooting', label: 'SHOOTING', value: shoScore },
+            { key: 'passing', label: 'PASSING', value: pasScore },
+            { key: 'dribbling', label: 'DRIBBLING', value: driScore },
+            { key: 'defending', label: 'DEFENDING', value: defScore },
+            { key: 'physical', label: 'PHYSICAL', value: phyScore },
+            { key: 'heading', label: 'HEADING', value: headingScoreVal },
+          ],
     };
 
     const fifaCardStats = {
@@ -728,6 +741,13 @@ export class PlayerCvTransformerService {
       def: defScore,
       phy: phyScore,
       heading: headingScoreVal,
+      isGoalkeeper: isGK,
+      div: isGK ? pacScore : undefined,
+      han: isGK ? shoScore : undefined,
+      kic: isGK ? pasScore : undefined,
+      ref: isGK ? driScore : undefined,
+      spe: isGK ? defScore : undefined,
+      pos: isGK ? phyScore : undefined,
     };
 
     const hasAttributes = Boolean(aggregatedProfile.attributesDoc);

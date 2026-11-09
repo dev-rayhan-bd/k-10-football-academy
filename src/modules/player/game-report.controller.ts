@@ -8,6 +8,9 @@ import { subscriptionService } from '@/modules/subscription/subscription.service
 import { shopService } from '@/modules/shop/shop.service';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
+import { MatchRecord } from '@/modules/player/player.model';
+import { gameReportPdfService } from './services/game-report/game-report-pdf.service';
+import { AppError } from '@/utils/AppError';
 
 /**
  * 1. Self Flow: Player submits Game Report (Screen 1 to 5) directly
@@ -290,4 +293,41 @@ export const reassignGameReport = catchAsync(async (req: Request, res: Response)
     message: result.message,
     data: result,
   });
+});
+
+/**
+ * 13. Download or Stream Official Game Report PDF (Client Requirement 4)
+ */
+export const downloadGameReportPdf = catchAsync(async (req: Request, res: Response) => {
+  const reportId = req.params.reportId || req.params.id;
+  const matchRecord = await MatchRecord.findById(reportId).populate('playerId');
+  if (!matchRecord) {
+    throw new AppError(StatusCodes.NOT_FOUND, 'Game report not found');
+  }
+
+  const pdfBuffer = await gameReportPdfService.buildPdfBuffer(matchRecord);
+  const playerName =
+    matchRecord.playerInfo?.playerName || (matchRecord.playerId as any)?.fullName || 'Player';
+  const cleanFilename = `Game_Report_${playerName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${matchRecord._id}.pdf`;
+
+  if (!matchRecord.reportPdfUrl) {
+    try {
+      const savedUrl = await gameReportPdfService.generateAndSaveReportPdf(matchRecord);
+      if (savedUrl) {
+        matchRecord.reportPdfUrl = savedUrl;
+        await matchRecord.save();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const isDownload = req.query.download === 'true';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `${isDownload ? 'attachment' : 'inline'}; filename="${cleanFilename}"`,
+  );
+  res.setHeader('Content-Length', pdfBuffer.length);
+  res.status(StatusCodes.OK).send(pdfBuffer);
 });

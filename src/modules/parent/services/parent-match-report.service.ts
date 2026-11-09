@@ -298,7 +298,13 @@ export class ParentMatchReportService {
         },
       },
       customer_email: parentUser?.email || undefined,
-      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${report._id}&type=PARENT_MATCH_REPORT`,
+      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${report._id}&type=PARENT_MATCH_REPORT&position=${encodeURIComponent(
+        (payload as any)?.playerInfo?.position ||
+          (payload as any)?.position ||
+          (report as any)?.playerInfo?.position ||
+          player?.position ||
+          'CM',
+      )}`,
       cancel_url: cancelUrl,
     });
 
@@ -317,6 +323,7 @@ export class ParentMatchReportService {
       checkoutUrl: session.url,
       sessionId: session.id,
       amount: coachReviewPrice,
+      position: player?.position || 'CM',
       status: 'AWAITING_PAYMENT',
     };
   }

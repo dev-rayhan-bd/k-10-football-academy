@@ -1,8 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import { v2 as cloudinary } from 'cloudinary';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { env } from '@/config/env';
 import { AppError } from '@/utils/AppError';
 import { StatusCodes } from 'http-status-codes';
+import { logger } from '@/utils/logger';
 
 // Configure Cloudinary if credentials are available
 const cloudName = env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME;
@@ -116,36 +119,106 @@ const uploadToCloudinary = (file: Express.Multer.File, folder: string): Promise<
 };
 
 /**
- * Uploads an in-memory Buffer directly to Cloudinary (e.g. for generated PDFs)
+ * Uploads an in-memory Buffer: First tries Cloudinary, then if S3 credentials are available
+ * automatically switches to AWS S3, with reliable fallback to local disk storage.
  */
-export const uploadBufferToStorage = (
+export const uploadBufferToStorage = async (
   buffer: Buffer,
   filename: string,
   folder: string = 'game-reports',
 ): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder,
-        public_id: `${Date.now()}-${cleanName}`,
-        resource_type: 'raw',
-        format: 'pdf',
-      },
-      (error, result) => {
-        if (error || !result) {
-          return reject(
-            new AppError(
-              StatusCodes.INTERNAL_SERVER_ERROR,
-              `Cloudinary PDF Upload Failed: ${error?.message || 'Unknown error'}`,
-            ),
-          );
-        }
-        resolve(result.secure_url);
-      },
-    );
-    uploadStream.end(buffer);
-  });
+  const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeFilename = `${Date.now()}_${cleanName}.pdf`;
+
+  // 1. First: Try Cloudinary
+  if (cloudName && apiKey && apiSecret) {
+    try {
+      const cloudinaryUrl = await new Promise<string>((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder,
+            public_id: `${Date.now()}-${cleanName}`,
+            resource_type: 'raw',
+            format: 'pdf',
+          },
+          (error, result) => {
+            if (error || !result) {
+              return reject(error || new Error('No result returned from Cloudinary'));
+            }
+            resolve(result.secure_url);
+          },
+        );
+        uploadStream.end(buffer);
+      });
+      return cloudinaryUrl;
+    } catch (err: any) {
+      logger.warn(
+        { err: err?.message },
+        '⚠️ Cloudinary PDF upload failed. Checking S3 credentials...',
+      );
+    }
+  }
+
+  // 2. Next: If S3 credentials are configured, auto-switch to AWS S3
+  const awsAccessKeyId = env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+  const awsSecretAccessKey = env.AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  const awsBucketName = env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME;
+  const awsRegion = env.AWS_REGION || process.env.AWS_REGION || 'us-east-1';
+
+  const isS3Enabled = Boolean(
+    awsAccessKeyId &&
+    awsAccessKeyId.trim() !== '' &&
+    awsSecretAccessKey &&
+    awsSecretAccessKey.trim() !== '' &&
+    awsBucketName &&
+    awsBucketName.trim() !== '',
+  );
+
+  if (isS3Enabled) {
+    try {
+      const s3 = new S3Client({
+        region: awsRegion,
+        credentials: {
+          accessKeyId: awsAccessKeyId!,
+          secretAccessKey: awsSecretAccessKey!,
+        },
+      });
+
+      const s3Key = `${folder}/${safeFilename}`;
+      const command = new PutObjectCommand({
+        Bucket: awsBucketName!,
+        Key: s3Key,
+        Body: buffer,
+        ContentType: 'application/pdf',
+      });
+
+      await s3.send(command);
+      return `https://${awsBucketName}.s3.${awsRegion}.amazonaws.com/${s3Key}`;
+    } catch (s3Error: any) {
+      logger.warn(
+        { err: s3Error?.message },
+        '⚠️ AWS S3 PDF upload failed. Falling back to local storage...',
+      );
+    }
+  }
+
+  // 3. Local disk fallback (Always guaranteed to succeed, returns full accessible URL)
+  try {
+    const uploadDir = path.join(process.cwd(), 'uploads', folder);
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const filePath = path.join(uploadDir, safeFilename);
+    fs.writeFileSync(filePath, buffer);
+
+    const apiBase = env.PUBLIC_API_URL
+      ? env.PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '')
+      : `http://localhost:${env.PORT || 5000}`;
+    return `${apiBase}/uploads/${folder}/${safeFilename}`;
+  } catch (localErr: any) {
+    logger.error({ err: localErr }, 'Failed to save PDF to local storage');
+    throw new AppError(StatusCodes.INTERNAL_SERVER_ERROR, 'Failed to store generated PDF');
+  }
 };
 
 /**

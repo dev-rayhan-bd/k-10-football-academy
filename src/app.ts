@@ -86,6 +86,11 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(parseBodyData);
 
 /**
+ * 5.1 Static File Serving (Uploads Directory)
+ */
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+/**
  * 5. Data Sanitization & Parameter Pollution Protection
  */
 app.use(mongoSanitizer as unknown as express.RequestHandler);

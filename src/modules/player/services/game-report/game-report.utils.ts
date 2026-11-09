@@ -37,6 +37,23 @@ export function mapStatsAndEventsToMatchEvents(
     reactions: 'recovery',
     freeKick: 'free_kick_won',
     cornerKick: 'cross_completed',
+    save: 'save',
+    bigSave: 'big_save',
+    save1v1: 'save_1v1',
+    '1v1Save': 'save_1v1',
+    '1v1_save': 'save_1v1',
+    goalConceded: 'goal_conceded',
+    cleanSheet: 'clean_sheet',
+    crossClaimed: 'cross_claimed',
+    crossMissed: 'cross_missed',
+    distributionCompleted: 'distribution_completed',
+    distributionFailed: 'distribution_failed',
+    ballRetentionUnderPressure: 'ball_retention',
+    turnoverPossessionLost: 'turnover',
+    possessionLost: 'turnover',
+    fouledFreeKickWon: 'free_kick_won',
+    freeKickWon: 'free_kick_won',
+    fouled: 'free_kick_won',
   };
 
   // 1. Process legacy mapped fields from stats

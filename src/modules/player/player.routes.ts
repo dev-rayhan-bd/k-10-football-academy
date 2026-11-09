@@ -62,6 +62,7 @@ import {
   respondToAccessLink,
   submitReportByAccessLink,
   reassignGameReport,
+  downloadGameReportPdf,
 } from './game-report.controller';
 
 import { upload } from '@/middlewares/multer';
@@ -171,6 +172,8 @@ router.get('/me/game-reports', auth(), getPlayerGameReports);
 router.get('/me/game-reports/verify-payment', optionalAuth(), verifyGameReportPayment);
 router.get('/me/game-reports/:reportId', auth(), getGameReportDetails);
 router.get('/game-reports/:reportId', auth(), getGameReportDetails);
+router.get('/me/game-reports/:reportId/pdf', auth(), downloadGameReportPdf);
+router.get('/game-reports/:reportId/pdf', optionalAuth(), downloadGameReportPdf);
 router.get('/me/evaluations', auth('PLAYER', 'SUPER_ADMIN'), getMyPlayerEvaluations);
 router.get(
   '/coach/game-reports',

@@ -7,9 +7,10 @@ import { CoachProfile, TacticalFormation } from '@/modules/coach/coach.model';
 import { ClubProfile } from '@/modules/club/club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
-import { ParentProfile } from '@/modules/parent/parent.model';
+import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
 import { formatMarketValue } from '@/utils/ratingCalculator';
 import { cmsService } from '@/modules/cms/cms.service';
+import { subscriptionService } from '@/modules/subscription/subscription.service';
 
 export class UserProfileService {
   async getUserById(id: string): Promise<any> {
@@ -131,6 +132,48 @@ export class UserProfileService {
       latestVersion,
       requiresReacceptance,
     };
+
+    // Attach universal subscription status for all roles
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') {
+      userObj.hasActiveSubscription = true;
+      userObj.currentSubscription = {
+        status: 'ACTIVE',
+        planTitle: 'Platform Administrator Grant',
+        isExpired: false,
+        daysRemaining: 9999,
+        isAdminGrant: true,
+      };
+    } else {
+      try {
+        const subInfo = await subscriptionService.getUserSubscription(String(user._id));
+        userObj.hasActiveSubscription = subInfo.hasActiveSubscription;
+        userObj.currentSubscription = subInfo.currentSubscription;
+      } catch {
+        userObj.hasActiveSubscription = false;
+        userObj.currentSubscription = null;
+      }
+
+      if (
+        !userObj.hasActiveSubscription &&
+        user.role === 'PLAYER' &&
+        user.accountManagedBy === 'PARENT'
+      ) {
+        try {
+          const parentLink = await ParentChild.findOne({ childUserId: user._id });
+          if (parentLink) {
+            const parentSub = await subscriptionService.getUserSubscription(
+              String(parentLink.parentId),
+            );
+            if (parentSub.hasActiveSubscription) {
+              userObj.hasActiveSubscription = true;
+              userObj.currentSubscription = parentSub.currentSubscription;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
 
     return userObj;
   }

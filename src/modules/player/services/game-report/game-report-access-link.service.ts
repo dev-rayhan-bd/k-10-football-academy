@@ -28,11 +28,12 @@ export class GameReportAccessLinkService {
   }
 
   /**
-   * Format full public frontend URL with token
+   * Format full public frontend URL with token and player position
    */
-  formatAccessUrl(token: string): string {
-    const baseUrl = env.CLIENT_URL || 'https://k-10-football-academy.onrender.com';
-    return `${baseUrl}/game-report/evaluate?token=${token}`;
+  formatAccessUrl(token: string, position?: string): string {
+    const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const posParam = position ? `&position=${encodeURIComponent(position)}` : '';
+    return `${baseUrl}/game-report/evaluate?token=${token}${posParam}`;
   }
 
   /**
@@ -353,12 +354,20 @@ export class GameReportAccessLinkService {
       report._id,
     );
 
+    const apiBase = env.PUBLIC_API_URL
+      ? env.PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '')
+      : `http://localhost:${env.PORT || 5000}`;
+    const pdfViewUrl = `${apiBase}/api/v1/players/game-reports/${report._id}/pdf`;
+    const pdfDownloadUrl = `${apiBase}/api/v1/players/game-reports/${report._id}/pdf?download=true`;
+
     return {
       success: true,
       message: 'Game report evaluation submitted successfully and integrated into Player CV',
       reportId: report._id,
       overallRating: finalRating,
-      reportPdfUrl: report.reportPdfUrl,
+      reportPdfUrl: report.reportPdfUrl || pdfViewUrl,
+      pdfViewUrl,
+      pdfDownloadUrl,
       isProfessionallyVerified: true,
       author: `${resolvedEvaluatorName} (${resolvedEvaluatorRole})`,
     };

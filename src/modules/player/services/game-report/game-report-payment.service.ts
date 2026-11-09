@@ -212,7 +212,13 @@ export class GameReportPaymentService {
         },
       },
       customer_email: (await User.findById(playerProfile.userId))?.email || undefined,
-      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${matchRecord._id}&type=MATCH_RECORD`,
+      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}&reportId=${matchRecord._id}&type=MATCH_RECORD&position=${encodeURIComponent(
+        playerInfo?.position ||
+          payload.position ||
+          matchRecord.playerInfo?.position ||
+          playerProfile?.position ||
+          'CM',
+      )}`,
       cancel_url: cancelUrl,
     });
 
@@ -220,8 +226,15 @@ export class GameReportPaymentService {
     matchRecord.coachReview!.transactionId = session.id;
     await matchRecord.save();
 
+    const chosenPosition =
+      playerInfo?.position ||
+      payload.position ||
+      matchRecord.playerInfo?.position ||
+      playerProfile?.position ||
+      'CM';
+
     const resolvedToken = matchRecord.accessLinkToken || (draftData as any).accessLinkToken;
-    const accessLink = gameReportAccessLinkService.formatAccessUrl(resolvedToken);
+    const accessLink = gameReportAccessLinkService.formatAccessUrl(resolvedToken, chosenPosition);
 
     return {
       reportId: matchRecord._id,
@@ -230,6 +243,7 @@ export class GameReportPaymentService {
       token: resolvedToken,
       accessLink,
       amount: resolvedPrice,
+      position: chosenPosition,
       status: 'AWAITING_PAYMENT',
     };
   }
@@ -282,7 +296,20 @@ export class GameReportPaymentService {
         const isSelfOrParent =
           existingRecord.reportCompletionType === 'PARENT' ||
           existingRecord.reportCompletionType === 'SELF';
-        const newStatus = isSelfOrParent ? 'COMPLETED' : 'PENDING';
+        const hasStatsAlready = Boolean(
+          (existingRecord.events && existingRecord.events.length > 0) ||
+          (existingRecord.stats &&
+            Object.entries(
+              existingRecord.stats.toObject
+                ? existingRecord.stats.toObject()
+                : existingRecord.stats,
+            ).some(([k, v]) => k !== 'appearances' && Number(v) > 0)),
+        );
+        const newStatus = isSelfOrParent
+          ? hasStatsAlready
+            ? 'COMPLETED'
+            : 'IN_PROGRESS'
+          : 'PENDING';
 
         updatedRecord = await MatchRecord.findOneAndUpdate(
           {
@@ -299,7 +326,7 @@ export class GameReportPaymentService {
           { new: true, session },
         ).populate('playerId');
 
-        if (isSelfOrParent && updatedRecord) {
+        if (isSelfOrParent && hasStatsAlready && updatedRecord) {
           const pdfUrl = await gameReportPdfService.generateAndSaveReportPdf(updatedRecord);
           if (pdfUrl) {
             updatedRecord.reportPdfUrl = pdfUrl;
@@ -509,8 +536,11 @@ export class GameReportPaymentService {
           updatedRecord.tokenExpiresAt = expiresAt;
           await updatedRecord.save();
         }
+        const coachChosenPos =
+          updatedRecord.playerInfo?.position || (updatedRecord.playerId as any)?.position || 'CM';
         const evaluationUrl = gameReportAccessLinkService.formatAccessUrl(
           updatedRecord.accessLinkToken,
+          coachChosenPos,
         );
         const emailHtml = getCoachReportRequestEmailTemplate(
           coachName,

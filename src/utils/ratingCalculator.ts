@@ -215,6 +215,111 @@ export const MATCH_EVENTS: Record<string, IMatchEventDefinition> = {
   },
 };
 
+/**
+ * 12 Yellow Indicators (Excel rows 12-16, 20-22, 33, 35, 38-39)
+ */
+export const YELLOW_INDICATORS = [
+  'shot_on_target',
+  'shot_off_target',
+  'big_chance_created',
+  'big_chance_missed',
+  'successful_dribble',
+  'completed_pass',
+  'incomplete_pass',
+  'key_pass',
+  'interception',
+  'block',
+  'ground_duel_won',
+  'ground_duel_lost',
+] as const;
+
+/**
+ * 12 Blue Indicators (Excel rows 11, 17-19, 23-30)
+ */
+export const BLUE_INDICATORS = [
+  'assist',
+  'failed_dribble',
+  'penalty_won',
+  'penalty_missed',
+  'through_ball_completed',
+  'long_pass_completed',
+  'cross_completed',
+  'cross_failed',
+  'ball_retention',
+  'turnover',
+  'free_kick_won',
+  'successful_carry',
+] as const;
+
+/**
+ * 12 White Indicators (Excel rows 10, 31-32, 34, 36-37, 40-45)
+ */
+export const WHITE_INDICATORS = [
+  'goal',
+  'tackle_won',
+  'tackle_lost',
+  'clearance',
+  'aerial_duel_won',
+  'aerial_duel_lost',
+  'recovery',
+  'defensive_error',
+  'error_leading_to_goal',
+  'foul_committed',
+  'yellow_card',
+  'red_card',
+] as const;
+
+/**
+ * 9 Red Goalkeeping Indicators (Excel rows 46-54)
+ */
+export const RED_INDICATORS = [
+  'save',
+  'big_save',
+  'goal_conceded',
+  'clean_sheet',
+  'cross_claimed',
+  'cross_missed',
+  'save_1v1',
+  'distribution_completed',
+  'distribution_failed',
+] as const;
+
+/**
+ * Client Instruction Sequence for Field Players:
+ * First Yellow (12), Second Blue (12), Third White (12) -> Exactly 36 indicators
+ */
+export const FIELD_PLAYER_INDICATORS = [
+  ...YELLOW_INDICATORS,
+  ...BLUE_INDICATORS,
+  ...WHITE_INDICATORS,
+] as const;
+
+/**
+ * Client Instruction Sequence for Goalkeepers:
+ * First Red plus (red card, Yellow card and foul committed) (12), Second Yellow (12), Third Blue (12), Fourth White (9) -> Exactly 45 indicators
+ */
+export const GOALKEEPER_INDICATORS = [
+  // First: 9 Red Goalkeeping + 3 Discipline
+  ...RED_INDICATORS,
+  'red_card',
+  'yellow_card',
+  'foul_committed',
+  // Second: 12 Yellow
+  ...YELLOW_INDICATORS,
+  // Third: 12 Blue
+  ...BLUE_INDICATORS,
+  // Fourth: 9 White (remaining defending/attacking white indicators)
+  'goal',
+  'tackle_won',
+  'tackle_lost',
+  'clearance',
+  'aerial_duel_won',
+  'aerial_duel_lost',
+  'recovery',
+  'defensive_error',
+  'error_leading_to_goal',
+] as const;
+
 export const POSITION_CATEGORY_MULTIPLIERS: Record<PositionKey, Record<CategoryKey, number>> = {
   GK: {
     Attack: 0.15,

@@ -226,59 +226,118 @@ export class PlayerStatsService {
 
     await profile.save({ validateModifiedOnly: true });
 
+    const isGK =
+      String(profile.position).toUpperCase().includes('GK') ||
+      String(profile.position).toUpperCase().includes('GOAL');
+
+    const pacVal = isGK
+      ? attributes
+        ? Math.round(
+            (Number((attributes as any).reflexes ?? (profile.overallRating || 50)) +
+              Number((attributes as any).shotStopping ?? (profile.overallRating || 50))) /
+              2,
+          )
+        : profile.overallRating || 50
+      : attributes
+        ? Math.round(
+            (Number((attributes as any).acceleration ?? (profile.overallRating || 50)) +
+              Number((attributes as any).sprintSpeed ?? (profile.overallRating || 50))) /
+              2,
+          )
+        : profile.overallRating || 50;
+
+    const shoVal = isGK
+      ? attributes
+        ? Math.round(
+            Number((attributes as any).handling ?? (profile.overallRating || 50)) * 0.6 +
+              Number((attributes as any).crossClaiming ?? (profile.overallRating || 50)) * 0.4,
+          )
+        : profile.overallRating || 50
+      : attributes
+        ? Math.round(
+            Number((attributes as any).finishing ?? (profile.overallRating || 50)) * 0.4 +
+              Number((attributes as any).shotPower ?? (profile.overallRating || 50)) * 0.3 +
+              Number((attributes as any).longShots ?? (profile.overallRating || 50)) * 0.3,
+          )
+        : profile.overallRating || 50;
+
+    const pasVal = isGK
+      ? attributes
+        ? Math.round(
+            Number((attributes as any).distribution ?? (profile.overallRating || 50)) * 0.7 +
+              Number((attributes as any).footwork ?? (profile.overallRating || 50)) * 0.3,
+          )
+        : profile.overallRating || 50
+      : attributes
+        ? Math.round(
+            Number((attributes as any).shortPassing ?? (profile.overallRating || 50)) * 0.4 +
+              Number((attributes as any).vision ?? (profile.overallRating || 50)) * 0.3 +
+              Number((attributes as any).longPassing ?? (profile.overallRating || 50)) * 0.2 +
+              Number((attributes as any).crossing ?? (profile.overallRating || 50)) * 0.1,
+          )
+        : profile.overallRating || 50;
+
+    const driVal = isGK
+      ? attributes
+        ? Math.round(
+            Number((attributes as any).reflexes ?? (profile.overallRating || 50)) * 0.7 +
+              Number((attributes as any).oneOnOne ?? (profile.overallRating || 50)) * 0.3,
+          )
+        : profile.overallRating || 50
+      : attributes
+        ? Math.round(
+            Number((attributes as any).dribbling ?? (profile.overallRating || 50)) * 0.5 +
+              Number((attributes as any).ballControl ?? (profile.overallRating || 50)) * 0.3 +
+              Number((attributes as any).agility ?? (profile.overallRating || 50)) * 0.2,
+          )
+        : profile.overallRating || 50;
+
+    const defVal = isGK
+      ? attributes
+        ? Math.round(
+            Number((attributes as any).footwork ?? (profile.overallRating || 50)) * 0.6 +
+              Number((attributes as any).acceleration ?? (profile.overallRating || 50)) * 0.4,
+          )
+        : profile.overallRating || 50
+      : attributes
+        ? Math.round(
+            Number((attributes as any).marking ?? (profile.overallRating || 50)) * 0.35 +
+              Number(
+                (attributes as any).standingTackle ??
+                  (attributes as any).tackling ??
+                  (profile.overallRating || 50),
+              ) *
+                0.35 +
+              Number((attributes as any).interceptions ?? (profile.overallRating || 50)) * 0.3,
+          )
+        : profile.overallRating || 50;
+
+    const phyVal = isGK
+      ? attributes
+        ? Math.round(
+            Number((attributes as any).positioning ?? (profile.overallRating || 50)) * 0.6 +
+              Number((attributes as any).decisions ?? (profile.overallRating || 50)) * 0.4,
+          )
+        : profile.overallRating || 50
+      : attributes
+        ? Math.round(
+            Number((attributes as any).strength ?? (profile.overallRating || 50)) * 0.5 +
+              Number((attributes as any).stamina ?? (profile.overallRating || 50)) * 0.3 +
+              Number((attributes as any).jumping ?? (profile.overallRating || 50)) * 0.2,
+          )
+        : profile.overallRating || 50;
+
     await FifaCardStats.findOneAndUpdate(
       { playerId: profile._id },
       {
         overallRating: profile.overallRating,
         position: profile.position,
-        pac: attributes
-          ? Math.round(
-              (Number((attributes as any).acceleration ?? (profile.overallRating || 50)) +
-                Number((attributes as any).sprintSpeed ?? (profile.overallRating || 50))) /
-                2,
-            )
-          : profile.overallRating || 50,
-        sho: attributes
-          ? Math.round(
-              Number((attributes as any).finishing ?? (profile.overallRating || 50)) * 0.4 +
-                Number((attributes as any).shotPower ?? (profile.overallRating || 50)) * 0.3 +
-                Number((attributes as any).longShots ?? (profile.overallRating || 50)) * 0.3,
-            )
-          : profile.overallRating || 50,
-        pas: attributes
-          ? Math.round(
-              Number((attributes as any).shortPassing ?? (profile.overallRating || 50)) * 0.4 +
-                Number((attributes as any).vision ?? (profile.overallRating || 50)) * 0.3 +
-                Number((attributes as any).longPassing ?? (profile.overallRating || 50)) * 0.2 +
-                Number((attributes as any).crossing ?? (profile.overallRating || 50)) * 0.1,
-            )
-          : profile.overallRating || 50,
-        dri: attributes
-          ? Math.round(
-              Number((attributes as any).dribbling ?? (profile.overallRating || 50)) * 0.5 +
-                Number((attributes as any).ballControl ?? (profile.overallRating || 50)) * 0.3 +
-                Number((attributes as any).agility ?? (profile.overallRating || 50)) * 0.2,
-            )
-          : profile.overallRating || 50,
-        def: attributes
-          ? Math.round(
-              Number((attributes as any).marking ?? (profile.overallRating || 50)) * 0.35 +
-                Number(
-                  (attributes as any).standingTackle ??
-                    (attributes as any).tackling ??
-                    (profile.overallRating || 50),
-                ) *
-                  0.35 +
-                Number((attributes as any).interceptions ?? (profile.overallRating || 50)) * 0.3,
-            )
-          : profile.overallRating || 50,
-        phy: attributes
-          ? Math.round(
-              Number((attributes as any).strength ?? (profile.overallRating || 50)) * 0.5 +
-                Number((attributes as any).stamina ?? (profile.overallRating || 50)) * 0.3 +
-                Number((attributes as any).jumping ?? (profile.overallRating || 50)) * 0.2,
-            )
-          : profile.overallRating || 50,
+        pac: pacVal,
+        sho: shoVal,
+        pas: pasVal,
+        dri: driVal,
+        def: defVal,
+        phy: phyVal,
       },
       { upsert: true },
     );

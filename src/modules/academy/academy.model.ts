@@ -36,6 +36,8 @@ const AcademyProfileSchema = new Schema<IAcademyProfileDocument>(
     description: { type: String },
     visionAndMission: { type: String },
     trainingPhilosophy: { type: String },
+    monthlyTrainingFee: { type: Number, default: 45 },
+    monthlyFeeTitle: { type: String, default: 'Monthly Training Fee' },
     currentPlan: {
       type: String,
       enum: ['FREE', 'BASIC', 'PRO', 'PREMIUM', 'ELITE'],

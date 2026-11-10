@@ -10,7 +10,9 @@ import {
   ExtraEvent,
   AcademyFeePayment,
   AcademyFinanceTransaction,
+  AcademyProfile,
 } from '@/modules/academy/academy.model';
+import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
 import { IAcademyInvoice } from './invoice.interface';
 import { AcademyInvoice } from './invoice.model';
 
@@ -54,7 +56,16 @@ export class InvoiceService {
    * Parent Portal: Get Event Entry Fees for Parent's Linked Children
    * Strictly filters ONLY event entry fees and syncs from child's academy ExtraEvents
    */
-  async getParentEventInvoices(user: any, query: { status?: string } = {}) {
+  async getParentEventInvoices(
+    user: any,
+    query: {
+      status?: string;
+      feeType?: string;
+      search?: string;
+      page?: string | number;
+      limit?: string | number;
+    } = {},
+  ) {
     const parentUserId = user?.userId || user?._id || user?.id;
 
     // Resolve parent profile
@@ -73,8 +84,18 @@ export class InvoiceService {
     const links = await ParentChild.find({ parentId: { $in: targetParentIds } }).lean();
     const childPlayerIds = links.map((l) => l.childPlayerId);
 
+    const emptyResult = {
+      invoices: [],
+      meta: {
+        page: 1,
+        limit: 10,
+        total: 0,
+        totalPages: 1,
+      },
+    };
+
     if (childPlayerIds.length === 0) {
-      return [];
+      return emptyResult;
     }
 
     // 2. Fetch children profiles to find their academies
@@ -84,6 +105,84 @@ export class InvoiceService {
     for (const player of players) {
       if (player.academyId) {
         academyIds.push(player.academyId);
+      }
+    }
+
+    // 2.1 Auto-generate Monthly Training Fee Invoices for Current Month if configured on Academy
+    if (academyIds.length > 0) {
+      const academies = await AcademyProfile.find({ _id: { $in: academyIds } }).lean();
+      const academyMap = new Map<string, any>();
+      academies.forEach((ac: any) => academyMap.set(ac._id.toString(), ac));
+
+      const now = new Date();
+      const monthNames = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+      const currentMonthName = monthNames[now.getMonth()];
+      const currentYear = now.getFullYear();
+
+      // End of current month as due date
+      const endOfMonthDueDate = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59);
+
+      for (const player of players) {
+        if (!player.academyId) continue;
+        const academy = academyMap.get(player.academyId.toString());
+        const monthlyFeeAmount =
+          typeof academy?.monthlyTrainingFee === 'number' ? academy.monthlyTrainingFee : 45; // Default $45.00 if unset
+
+        if (monthlyFeeAmount > 0) {
+          const expectedTitle = `${currentMonthName} Training Fee`;
+          const existingMonthlyInvoice = await AcademyInvoice.findOne({
+            childPlayerId: player._id,
+            academyId: player.academyId,
+            $or: [
+              { title: expectedTitle },
+              { title: { $regex: new RegExp(`^${currentMonthName}.*Training Fee`, 'i') } },
+            ],
+          });
+
+          // Check if already recorded in AcademyFeePayment for this month
+          const startOfMonth = new Date(currentYear, now.getMonth(), 1);
+          const feePaidRecord = await AcademyFeePayment.findOne({
+            playerId: player._id,
+            academyId: player.academyId,
+            paymentDate: { $gte: startOfMonth },
+            status: 'PAID',
+          });
+
+          if (!existingMonthlyInvoice) {
+            const count = await AcademyInvoice.countDocuments();
+            const invoiceNumber = `INV-${currentYear}-${(count + 1).toString().padStart(3, '0')}`;
+
+            await AcademyInvoice.create({
+              parentId: targetParentIds[0],
+              childPlayerId: player._id,
+              academyId: player.academyId,
+              feeType: 'MONTHLY_TRAINING_FEE',
+              title: expectedTitle,
+              invoiceNumber,
+              amount: monthlyFeeAmount,
+              dueDate: endOfMonthDueDate,
+              status: feePaidRecord ? 'PAID' : 'UNPAID',
+              paidAt: feePaidRecord ? feePaidRecord.paymentDate || now : undefined,
+            });
+          } else if (feePaidRecord && existingMonthlyInvoice.status !== 'PAID') {
+            existingMonthlyInvoice.status = 'PAID';
+            existingMonthlyInvoice.paidAt = feePaidRecord.paymentDate || now;
+            await existingMonthlyInvoice.save();
+          }
+        }
       }
     }
 
@@ -137,14 +236,9 @@ export class InvoiceService {
       }
     }
 
-    // 4. Query only event entry fee invoices for these children
+    // 4. Query all active fee invoices (Monthly Training Fees, Event Entry Fees, Uniform Fees) for these children
     const invoiceFilter: any = {
       childPlayerId: { $in: childPlayerIds },
-      $or: [
-        { feeType: 'EVENT_ENTRY_FEE' },
-        { eventId: { $exists: true, $ne: null } },
-        { title: { $regex: /Entry Fee|Event/i } },
-      ],
     };
 
     const statusParam = (query.status || 'ALL').toUpperCase().trim();
@@ -154,14 +248,33 @@ export class InvoiceService {
       invoiceFilter.status = { $in: ['UNPAID', 'OVERDUE'] };
     }
 
-    const invoices = await AcademyInvoice.find(invoiceFilter)
-      .populate('childPlayerId', 'fullName position profileImage currentClub')
-      .populate('academyId', 'name logo')
-      .populate('eventId', 'eventName eventDate venueName venueAddress status')
-      .sort({ createdAt: -1 })
-      .lean();
+    if (query.feeType) {
+      const feeTypeRegex = new RegExp(String(query.feeType).trim(), 'i');
+      invoiceFilter.$or = [{ feeType: feeTypeRegex }, { title: feeTypeRegex }];
+    }
 
-    return invoices.map((inv: any) => {
+    if (query.search) {
+      const searchRegex = new RegExp(String(query.search).trim(), 'i');
+      invoiceFilter.$or = [{ title: searchRegex }, { invoiceNumber: searchRegex }];
+    }
+
+    const page = Math.max(1, parseInt(query.page as string, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit as string, 10) || 10));
+    const skip = (page - 1) * limit;
+
+    const [totalRecords, invoices] = await Promise.all([
+      AcademyInvoice.countDocuments(invoiceFilter),
+      AcademyInvoice.find(invoiceFilter)
+        .populate('childPlayerId', 'fullName position profileImage currentClub')
+        .populate('academyId', 'name logo')
+        .populate('eventId', 'eventName eventDate venueName venueAddress status')
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
+
+    const mappedInvoices = invoices.map((inv: any) => {
       const isPaid = inv.status === 'PAID';
       const child = inv.childPlayerId || {};
       const academy = inv.academyId || {};
@@ -208,6 +321,16 @@ export class InvoiceService {
         createdAt: inv.createdAt,
       };
     });
+
+    return {
+      invoices: mappedInvoices,
+      meta: {
+        page,
+        limit,
+        total: totalRecords,
+        totalPages: Math.ceil(totalRecords / limit) || 1,
+      },
+    };
   }
 
   /**
@@ -235,6 +358,10 @@ export class InvoiceService {
     const child = (invoice.childPlayerId as any) || {};
     const academy = (invoice.academyId as any) || {};
 
+    const academyId = invoice.academyId?._id || invoice.academyId;
+    const academyStripeAccountId =
+      await academyStripeConnectService.getActiveConnectedStripeAccountId(academyId);
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [
@@ -244,12 +371,21 @@ export class InvoiceService {
             unit_amount: Math.round(invoice.amount * 100),
             product_data: {
               name: `${invoice.title} - ${child.fullName || 'Athlete'}`,
-              description: `Event Entry Fee for ${academy.name || 'Academy'} (${invoice.invoiceNumber})`,
+              description: `Academy Fee for ${academy.name || 'Academy'} (${invoice.invoiceNumber})`,
             },
           },
           quantity: 1,
         },
       ],
+      ...(academyStripeAccountId
+        ? {
+            payment_intent_data: {
+              transfer_data: {
+                destination: academyStripeAccountId,
+              },
+            },
+          }
+        : {}),
       metadata: {
         paymentType: 'EVENT_ENTRY_FEE',
         invoiceId: invoice._id.toString(),

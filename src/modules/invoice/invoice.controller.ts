@@ -52,8 +52,9 @@ export const getParentEventFees = catchAsync(async (req: Request, res: Response)
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Event fee invoices fetched successfully',
-    data: result,
+    message: 'Fee invoices fetched successfully',
+    meta: result.meta,
+    data: result.invoices,
   });
 });
 

@@ -40,8 +40,8 @@ export class GameReportQueryService {
 
     // Calculate Summary Stats Cards across all reports of this player
     const allReports = await MatchRecord.find(baseMatchFilter).sort({
-      matchDate: -1,
       createdAt: -1,
+      matchDate: -1,
     });
 
     const totalReports = allReports.length;
@@ -100,7 +100,9 @@ export class GameReportQueryService {
     delete queryForBuilder.filter;
 
     const reportQuery = new QueryBuilder(
-      MatchRecord.find(queryFilter).populate('coachReview.coachId', 'name email role'),
+      MatchRecord.find(queryFilter)
+        .populate('coachReview.coachId', 'name email role')
+        .sort({ createdAt: -1 }),
       queryForBuilder as Record<string, unknown>,
     )
       .search(searchableFields)

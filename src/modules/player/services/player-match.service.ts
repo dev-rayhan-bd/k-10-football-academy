@@ -107,7 +107,7 @@ export class PlayerMatchService {
     });
     const targetPlayerId = profile ? profile._id : playerId;
 
-    return MatchRecord.find({ playerId: targetPlayerId }).sort({ matchDate: -1 });
+    return MatchRecord.find({ playerId: targetPlayerId }).sort({ createdAt: -1, _id: -1 });
   }
 }
 

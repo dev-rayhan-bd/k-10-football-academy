@@ -207,6 +207,9 @@ router.post(
 );
 router.get('/', getAllAcademyProfiles);
 router.get('/my-profile', auth('ACADEMY', 'SUPER_ADMIN'), getMyAcademyProfile);
+router.get('/me', auth('ACADEMY', 'SUPER_ADMIN'), getMyAcademyProfile);
+router.patch('/me', auth('ACADEMY', 'SUPER_ADMIN'), upload.any() as any, updateMyAcademyProfile);
+router.put('/me', auth('ACADEMY', 'SUPER_ADMIN'), upload.any() as any, updateMyAcademyProfile);
 router.patch(
   '/my-profile',
   auth('ACADEMY', 'SUPER_ADMIN'),

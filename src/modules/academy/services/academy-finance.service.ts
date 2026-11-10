@@ -46,7 +46,7 @@ export class AcademyFinanceService {
       AcademyFeePayment.countDocuments(filter),
       AcademyFeePayment.find(filter)
         .populate('playerId', 'fullName position profileImage currentClub')
-        .sort({ paymentDate: -1, createdAt: -1 })
+        .sort({ createdAt: -1, paymentDate: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

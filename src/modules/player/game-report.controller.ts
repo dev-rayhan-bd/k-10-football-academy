@@ -6,6 +6,7 @@ import { gameReportService } from './services/game-report.service';
 import { academyService } from '@/modules/academy/academy.service';
 import { subscriptionService } from '@/modules/subscription/subscription.service';
 import { shopService } from '@/modules/shop/shop.service';
+import { invoiceService } from '@/modules/invoice/invoice.service';
 import { playerCvValidationRequestService } from './services/player-cv-validation-request.service';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
@@ -112,6 +113,15 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
     const transactionId = obj.id || obj.payment_intent;
     if (playerId) {
       await playerCvValidationRequestService.finalizePaidCvValidation(playerId, transactionId);
+    }
+  } else if (
+    obj.metadata?.paymentType === 'EVENT_ENTRY_FEE' ||
+    obj.metadata?.type === 'EVENT_ENTRY_FEE'
+  ) {
+    const invoiceId = obj.metadata?.invoiceId;
+    const transactionId = obj.id || obj.payment_intent;
+    if (invoiceId) {
+      await invoiceService.finalizePaidInvoice(invoiceId, transactionId);
     }
   } else {
     await gameReportService.handleStripeWebhook(event);

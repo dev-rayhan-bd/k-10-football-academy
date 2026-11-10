@@ -727,6 +727,15 @@ export class AcademyProfileService {
     if (payload.trainingPhilosophy !== undefined) {
       profile.trainingPhilosophy = payload.trainingPhilosophy;
     }
+    if (payload.monthlyTrainingFee !== undefined) {
+      const fee = Number(payload.monthlyTrainingFee);
+      if (!isNaN(fee) && fee >= 0) {
+        profile.monthlyTrainingFee = fee;
+      }
+    }
+    if (payload.monthlyFeeTitle !== undefined) {
+      profile.monthlyFeeTitle = String(payload.monthlyFeeTitle).trim() || 'Monthly Training Fee';
+    }
     if (payload.registrationId) profile.registrationId = payload.registrationId;
     if (payload.estimatedAcademySize) profile.estimatedAcademySize = payload.estimatedAcademySize;
 

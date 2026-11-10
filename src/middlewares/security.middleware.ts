@@ -50,10 +50,14 @@ const defaultAllowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://13.49.210.5',
+  'https://k10football.com',
+  'https://www.k10football.com',
+  'http://k10football.com',
+  'http://www.k10football.com',
 ];
 
 const envAllowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim().replace(/\/$/, ''))
   : [];
 
 const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
@@ -66,7 +70,9 @@ export const corsSecurity = cors({
     // Allow non-browser requests (e.g. Postman, mobile apps, server-to-server)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    const normalizedOrigin = origin.trim().replace(/\/$/, '');
+
+    if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
       return callback(null, origin);
     }
 

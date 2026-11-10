@@ -40,7 +40,8 @@ export class GameReportPaymentService {
       scoutName,
     } = payload;
 
-    const successUrl = env.STRIPE_SUCCESS_URL;
+    const clientBaseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const successUrl = `${clientBaseUrl}/dashboard/player/game-reports`;
     const cancelUrl = env.STRIPE_CANCEL_URL;
 
     // Support both coachId selection from Dropdown (User ID or CoachProfile ID) or manual coachEmail

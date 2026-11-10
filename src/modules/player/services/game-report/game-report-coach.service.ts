@@ -339,6 +339,12 @@ export class GameReportCoachService {
         'PAID' | 'UNPAID' | 'FREE';
       const isPaid = paymentStatus === 'PAID';
 
+      const evaluatorName =
+        r.evaluatorInfo?.name || r.coachReview?.coachName || r.authorName || r.scoutName || 'Coach';
+      const evaluatorEmail =
+        r.evaluatorInfo?.email || r.coachReview?.coachEmail || coachEmail || null;
+      const evaluatorRole = r.evaluatorInfo?.role || 'COACH';
+
       return {
         _id: r._id,
         player: {
@@ -357,6 +363,17 @@ export class GameReportCoachService {
         isPaid,
         transactionId: r.coachReview?.transactionId || null,
         status,
+        evaluatedBy: 'COACH',
+        evaluatorName,
+        evaluatorRole,
+        evaluatorEmail,
+        evaluator: {
+          id: r.coachReview?.coachId || coachUserId || null,
+          name: evaluatorName,
+          email: evaluatorEmail,
+          role: evaluatorRole,
+          type: 'COACH',
+        },
         createdAt: r.createdAt,
       };
     });

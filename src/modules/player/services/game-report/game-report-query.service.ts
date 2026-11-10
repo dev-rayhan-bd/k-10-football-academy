@@ -100,7 +100,7 @@ export class GameReportQueryService {
     delete queryForBuilder.filter;
 
     const reportQuery = new QueryBuilder(
-      MatchRecord.find(queryFilter),
+      MatchRecord.find(queryFilter).populate('coachReview.coachId', 'name email role'),
       queryForBuilder as Record<string, unknown>,
     )
       .search(searchableFields)
@@ -153,14 +153,52 @@ export class GameReportQueryService {
         m.stats?.passAccurate ??
         (m.stats?.wrongPass ? (m.stats?.passAccurate || 0) + (m.stats?.wrongPass || 0) : 87);
 
-      const scoutName = m.coachReview?.coachName || m.scoutName || 'Mario Lopez';
+      // Resolve who evaluated the report (COACH / SELF / PARENT)
+      const populatedCoach =
+        m.coachReview?.coachId && typeof m.coachReview.coachId === 'object'
+          ? (m.coachReview.coachId as any)
+          : null;
+      const isCoachReport =
+        m.reportCompletionType === 'COACH' ||
+        m.authorRole === 'COACH' ||
+        Boolean(m.isProfessionallyVerified) ||
+        Boolean(m.coachReview?.coachName || populatedCoach?.name || m.evaluatorInfo?.name);
+      const isParentReport =
+        !isCoachReport && (m.reportCompletionType === 'PARENT' || m.authorRole === 'PARENT');
+
+      const evaluatorRole = isCoachReport
+        ? m.evaluatorInfo?.role || 'COACH'
+        : isParentReport
+          ? 'PARENT'
+          : 'PLAYER';
+      const evaluatorName = isCoachReport
+        ? m.evaluatorInfo?.name ||
+          m.coachReview?.coachName ||
+          populatedCoach?.name ||
+          m.authorName ||
+          m.scoutName ||
+          'Coach'
+        : isParentReport
+          ? m.authorName || 'Parent'
+          : m.authorName || m.playerInfo?.playerName || profile.fullName || 'Self';
+      const evaluatorEmail =
+        m.evaluatorInfo?.email || m.coachReview?.coachEmail || populatedCoach?.email || null;
+      const evaluatorId = populatedCoach?._id || m.coachReview?.coachId || null;
+      const isExternalCoach = Boolean(isCoachReport && (!evaluatorId || m.tokenUsedAt));
+      const evaluatedBy = isCoachReport
+        ? isExternalCoach
+          ? 'EXTERNAL_COACH'
+          : 'COACH'
+        : isParentReport
+          ? 'PARENT'
+          : 'SELF';
 
       return {
         _id: m._id,
         reportId: `#${skip + index + 1}`,
         report: reportTitle,
         title: matchTitle,
-        subtitle: `Professional Performance Analysis by ${scoutName}`,
+        subtitle: `Professional Performance Analysis by ${evaluatorName}`,
         homeTeam,
         awayTeam,
         position: m.playerInfo?.position || profile.position || 'Forward',
@@ -177,6 +215,28 @@ export class GameReportQueryService {
         status: displayStatus,
         paymentStatus: m.coachReview?.paymentStatus || 'PAID',
         evaluationStatus: m.coachReview?.status || (isCompleted ? 'COMPLETED' : 'PENDING'),
+        reportCompletionType: m.reportCompletionType || (isCoachReport ? 'COACH' : evaluatedBy),
+        evaluatedBy,
+        isExternalCoach,
+        evaluatedViaAccessLink: Boolean(m.tokenUsedAt),
+        evaluatorName,
+        evaluatorRole: isExternalCoach ? m.evaluatorInfo?.role || 'EXTERNAL_COACH' : evaluatorRole,
+        evaluatorEmail,
+        authorName: m.authorName || evaluatorName,
+        authorRole:
+          m.authorRole || (isCoachReport ? 'COACH' : isParentReport ? 'PARENT' : 'PLAYER'),
+        isProfessionallyVerified: Boolean(m.isProfessionallyVerified || isCoachReport),
+        evaluator: {
+          id: evaluatorId,
+          name: evaluatorName,
+          email: evaluatorEmail,
+          role: isExternalCoach ? m.evaluatorInfo?.role || 'EXTERNAL_COACH' : evaluatorRole,
+          type: evaluatedBy,
+          isExternal: isExternalCoach,
+          evaluatedViaAccessLink: Boolean(m.tokenUsedAt),
+          clubOrOrg: m.evaluatorInfo?.clubOrOrg || null,
+          isProfessionallyVerified: Boolean(m.isProfessionallyVerified || isCoachReport),
+        },
         performanceMetrics: {
           goals,
           assists,
@@ -219,7 +279,9 @@ export class GameReportQueryService {
     let profile: any = null;
 
     if (reportId && Types.ObjectId.isValid(reportId)) {
-      match = await MatchRecord.findById(reportId).populate('playerId');
+      match = await MatchRecord.findById(reportId)
+        .populate('playerId')
+        .populate('coachReview.coachId', 'name email role');
       if (match && match.playerId) {
         profile = match.playerId;
       }
@@ -237,7 +299,7 @@ export class GameReportQueryService {
       match = await MatchRecord.findOne({
         _id: reportId,
         playerId: profile._id,
-      });
+      }).populate('coachReview.coachId', 'name email role');
     }
 
     if (!match) {
@@ -251,7 +313,45 @@ export class GameReportQueryService {
         ? match.awayTeam
         : match.gameType || 'Opponent';
     const matchTitle = `${homeTeam.toUpperCase()} VS ${awayTeam.toUpperCase()}`;
-    const scoutName = match.coachReview?.coachName || match.scoutName || 'Mario Lopez';
+
+    const populatedCoach =
+      match.coachReview?.coachId && typeof match.coachReview.coachId === 'object'
+        ? (match.coachReview.coachId as any)
+        : null;
+    const isCoachReport =
+      match.reportCompletionType === 'COACH' ||
+      match.authorRole === 'COACH' ||
+      Boolean(match.isProfessionallyVerified) ||
+      Boolean(match.coachReview?.coachName || populatedCoach?.name || match.evaluatorInfo?.name);
+    const isParentReport =
+      !isCoachReport && (match.reportCompletionType === 'PARENT' || match.authorRole === 'PARENT');
+
+    const evaluatorRole = isCoachReport
+      ? match.evaluatorInfo?.role || 'COACH'
+      : isParentReport
+        ? 'PARENT'
+        : 'PLAYER';
+    const evaluatorName = isCoachReport
+      ? match.evaluatorInfo?.name ||
+        match.coachReview?.coachName ||
+        populatedCoach?.name ||
+        match.authorName ||
+        match.scoutName ||
+        'Coach'
+      : isParentReport
+        ? match.authorName || 'Parent'
+        : match.authorName || match.playerInfo?.playerName || profile.fullName || 'Self';
+    const evaluatorEmail =
+      match.evaluatorInfo?.email || match.coachReview?.coachEmail || populatedCoach?.email || null;
+    const evaluatorId = populatedCoach?._id || match.coachReview?.coachId || null;
+    const isExternalCoach = Boolean(isCoachReport && (!evaluatorId || match.tokenUsedAt));
+    const evaluatedBy = isCoachReport
+      ? isExternalCoach
+        ? 'EXTERNAL_COACH'
+        : 'COACH'
+      : isParentReport
+        ? 'PARENT'
+        : 'SELF';
 
     const isCompleted =
       match.coachReview?.status === 'COMPLETED' || match.reportCompletionType === 'SELF';
@@ -285,7 +385,7 @@ export class GameReportQueryService {
     return {
       _id: match._id,
       title: matchTitle,
-      subtitle: `Professional Performance Analysis by ${scoutName}`,
+      subtitle: `Professional Performance Analysis by ${evaluatorName}`,
       scoutRating: rating,
       rating,
       position: (match.playerInfo?.position || profile.position || 'Forward').toUpperCase(),
@@ -294,6 +394,30 @@ export class GameReportQueryService {
       score: `${match.homeScore ?? 0}-${match.awayScore ?? 0}`,
       homeScore: match.homeScore ?? 0,
       awayScore: match.awayScore ?? 0,
+      reportCompletionType: match.reportCompletionType || (isCoachReport ? 'COACH' : evaluatedBy),
+      evaluatedBy,
+      isExternalCoach,
+      evaluatedViaAccessLink: Boolean(match.tokenUsedAt),
+      evaluatorName,
+      evaluatorRole: isExternalCoach
+        ? match.evaluatorInfo?.role || 'EXTERNAL_COACH'
+        : evaluatorRole,
+      evaluatorEmail,
+      authorName: match.authorName || evaluatorName,
+      authorRole:
+        match.authorRole || (isCoachReport ? 'COACH' : isParentReport ? 'PARENT' : 'PLAYER'),
+      isProfessionallyVerified: Boolean(match.isProfessionallyVerified || isCoachReport),
+      evaluator: {
+        id: evaluatorId,
+        name: evaluatorName,
+        email: evaluatorEmail,
+        role: isExternalCoach ? match.evaluatorInfo?.role || 'EXTERNAL_COACH' : evaluatorRole,
+        type: evaluatedBy,
+        isExternal: isExternalCoach,
+        evaluatedViaAccessLink: Boolean(match.tokenUsedAt),
+        clubOrOrg: match.evaluatorInfo?.clubOrOrg || null,
+        isProfessionallyVerified: Boolean(match.isProfessionallyVerified || isCoachReport),
+      },
       performanceMetrics: {
         goals,
         assists,

@@ -25,7 +25,35 @@ if (cloudName && apiKey && apiSecret) {
 }
 
 /**
- * Uploads a file to AWS S3 if credentials are active, otherwise defaults to Cloudinary.
+ * Creates an S3Client instance.
+ * - If AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set in .env, uses explicit credentials.
+ * - If omitted (recommended on EC2 with IAM Role like k10-football-ec2-app), SDK automatically resolves the EC2 IAM Role.
+ */
+const createS3Client = (region: string): S3Client => {
+  const awsAccessKeyId = (env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '').trim();
+  const awsSecretAccessKey = (
+    env.AWS_SECRET_ACCESS_KEY ||
+    process.env.AWS_SECRET_ACCESS_KEY ||
+    ''
+  ).trim();
+
+  if (awsAccessKeyId && awsSecretAccessKey) {
+    return new S3Client({
+      region,
+      credentials: {
+        accessKeyId: awsAccessKeyId,
+        secretAccessKey: awsSecretAccessKey,
+      },
+    });
+  }
+
+  // SDK automatically discovers EC2 IAM Role credentials
+  return new S3Client({ region });
+};
+
+/**
+ * Uploads a file to AWS S3 (via EC2 IAM Role or explicit keys) if AWS_BUCKET_NAME is configured,
+ * otherwise defaults/falls back to Cloudinary.
  *
  * @param file Express.Multer.File object (memoryStorage buffer)
  * @param folder Target directory/folder path
@@ -39,38 +67,23 @@ export const uploadToStorage = async (
     throw new AppError(StatusCodes.BAD_REQUEST, 'No file buffer provided for upload');
   }
 
-  const awsAccessKeyId = env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-  const awsSecretAccessKey = env.AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
-  const awsBucketName = env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME;
-  const awsRegion = env.AWS_REGION || process.env.AWS_REGION || 'us-east-1';
+  const awsBucketName = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
+  const awsRegion = (env.AWS_REGION || process.env.AWS_REGION || 'eu-north-1').trim();
 
-  const isS3Enabled = Boolean(
-    awsAccessKeyId &&
-    awsAccessKeyId.trim() !== '' &&
-    awsSecretAccessKey &&
-    awsSecretAccessKey.trim() !== '' &&
-    awsBucketName &&
-    awsBucketName.trim() !== '',
-  );
+  const isS3Enabled = Boolean(awsBucketName);
 
   if (isS3Enabled) {
     try {
       // ----------------------------------------------------
-      // 1. Try Uploading to AWS S3 Bucket
+      // 1. Try Uploading to AWS S3 Bucket (IAM Role or Keys)
       // ----------------------------------------------------
-      const s3 = new S3Client({
-        region: awsRegion,
-        credentials: {
-          accessKeyId: awsAccessKeyId!,
-          secretAccessKey: awsSecretAccessKey!,
-        },
-      });
+      const s3 = createS3Client(awsRegion);
 
       const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
       const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
 
       const command = new PutObjectCommand({
-        Bucket: awsBucketName!,
+        Bucket: awsBucketName,
         Key: fileName,
         Body: file.buffer,
         ContentType: file.mimetype,
@@ -82,7 +95,7 @@ export const uploadToStorage = async (
     } catch (s3Error) {
       // eslint-disable-next-line no-console
       console.warn(
-        '⚠️ AWS S3 upload failed or credential error. Falling back to Cloudinary...',
+        '⚠️ AWS S3 upload failed or not on EC2 IAM instance. Falling back to Cloudinary...',
         s3Error,
       );
       return uploadToCloudinary(file, folder);
@@ -119,8 +132,8 @@ const uploadToCloudinary = (file: Express.Multer.File, folder: string): Promise<
 };
 
 /**
- * Uploads an in-memory Buffer: First tries Cloudinary, then if S3 credentials are available
- * automatically switches to AWS S3, with reliable fallback to local disk storage.
+ * Uploads an in-memory Buffer: First tries AWS S3 (via EC2 IAM Role or keys) if AWS_BUCKET_NAME is configured,
+ * then tries Cloudinary, with reliable fallback to local disk storage.
  */
 export const uploadBufferToStorage = async (
   buffer: Buffer,
@@ -130,7 +143,33 @@ export const uploadBufferToStorage = async (
   const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
   const safeFilename = `${Date.now()}_${cleanName}.pdf`;
 
-  // 1. First: Try Cloudinary
+  const awsBucketName = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
+  const awsRegion = (env.AWS_REGION || process.env.AWS_REGION || 'eu-north-1').trim();
+
+  // 1. First: If AWS_BUCKET_NAME is configured, try AWS S3 (via EC2 IAM Role or explicit keys)
+  if (awsBucketName) {
+    try {
+      const s3 = createS3Client(awsRegion);
+
+      const s3Key = `${folder}/${safeFilename}`;
+      const command = new PutObjectCommand({
+        Bucket: awsBucketName,
+        Key: s3Key,
+        Body: buffer,
+        ContentType: 'application/pdf',
+      });
+
+      await s3.send(command);
+      return `https://${awsBucketName}.s3.${awsRegion}.amazonaws.com/${s3Key}`;
+    } catch (s3Error: any) {
+      logger.warn(
+        { err: s3Error?.message },
+        '⚠️ AWS S3 PDF upload failed. Checking Cloudinary/local fallback...',
+      );
+    }
+  }
+
+  // 2. Next: Try Cloudinary if configured
   if (cloudName && apiKey && apiSecret) {
     try {
       const cloudinaryUrl = await new Promise<string>((resolve, reject) => {
@@ -154,50 +193,7 @@ export const uploadBufferToStorage = async (
     } catch (err: any) {
       logger.warn(
         { err: err?.message },
-        '⚠️ Cloudinary PDF upload failed. Checking S3 credentials...',
-      );
-    }
-  }
-
-  // 2. Next: If S3 credentials are configured, auto-switch to AWS S3
-  const awsAccessKeyId = env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-  const awsSecretAccessKey = env.AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
-  const awsBucketName = env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME;
-  const awsRegion = env.AWS_REGION || process.env.AWS_REGION || 'us-east-1';
-
-  const isS3Enabled = Boolean(
-    awsAccessKeyId &&
-    awsAccessKeyId.trim() !== '' &&
-    awsSecretAccessKey &&
-    awsSecretAccessKey.trim() !== '' &&
-    awsBucketName &&
-    awsBucketName.trim() !== '',
-  );
-
-  if (isS3Enabled) {
-    try {
-      const s3 = new S3Client({
-        region: awsRegion,
-        credentials: {
-          accessKeyId: awsAccessKeyId!,
-          secretAccessKey: awsSecretAccessKey!,
-        },
-      });
-
-      const s3Key = `${folder}/${safeFilename}`;
-      const command = new PutObjectCommand({
-        Bucket: awsBucketName!,
-        Key: s3Key,
-        Body: buffer,
-        ContentType: 'application/pdf',
-      });
-
-      await s3.send(command);
-      return `https://${awsBucketName}.s3.${awsRegion}.amazonaws.com/${s3Key}`;
-    } catch (s3Error: any) {
-      logger.warn(
-        { err: s3Error?.message },
-        '⚠️ AWS S3 PDF upload failed. Falling back to local storage...',
+        '⚠️ Cloudinary PDF upload failed. Falling back to local storage...',
       );
     }
   }
@@ -229,19 +225,11 @@ export const deleteFromStorage = async (fileUrl: string): Promise<boolean> => {
 
   try {
     if (fileUrl.includes('amazonaws.com')) {
-      const awsAccessKeyId = env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-      const awsSecretAccessKey = env.AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
-      const awsBucketName = env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME;
-      const awsRegion = env.AWS_REGION || process.env.AWS_REGION || 'us-east-1';
+      const awsBucketName = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
+      const awsRegion = (env.AWS_REGION || process.env.AWS_REGION || 'eu-north-1').trim();
 
-      if (awsAccessKeyId && awsSecretAccessKey && awsBucketName) {
-        const s3 = new S3Client({
-          region: awsRegion,
-          credentials: {
-            accessKeyId: awsAccessKeyId,
-            secretAccessKey: awsSecretAccessKey,
-          },
-        });
+      if (awsBucketName) {
+        const s3 = createS3Client(awsRegion);
 
         const urlObj = new URL(fileUrl);
         const key = urlObj.pathname.substring(1);

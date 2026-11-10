@@ -11,6 +11,7 @@ import { coachAnalyticsService } from './services/coach-analytics.service';
 import { coachSquadService } from './services/coach-squad.service';
 import { coachEvaluationsService } from './services/coach-evaluations.service';
 import { coachFinancesService } from './services/coach-finances.service';
+import { coachStripeConnectService } from './services/coach-stripe-connect.service';
 
 /**
  * Enterprise Facade: CoachService
@@ -204,6 +205,30 @@ export class CoachService {
 
   async getCoachFinances(coachUserId: string, query: Record<string, unknown> = {}) {
     return await coachFinancesService.getCoachFinances(coachUserId, query);
+  }
+
+  // --- CoachStripeConnectService Delegates ---
+
+  async createConnectOnboardingLink(
+    user: any,
+    coachIdentifier?: string,
+    hostOrigin?: string,
+    bodyOptions?: { returnUrl?: string; refreshUrl?: string; country?: string },
+  ) {
+    return await coachStripeConnectService.createConnectOnboardingLink(
+      user,
+      coachIdentifier,
+      hostOrigin,
+      bodyOptions,
+    );
+  }
+
+  async getConnectStatus(user: any, coachIdentifier?: string) {
+    return await coachStripeConnectService.getConnectStatus(user, coachIdentifier);
+  }
+
+  async createDashboardLoginLink(user: any, coachIdentifier?: string) {
+    return await coachStripeConnectService.createDashboardLoginLink(user, coachIdentifier);
   }
 }
 

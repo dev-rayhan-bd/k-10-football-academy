@@ -613,3 +613,49 @@ export const getCoachFinances = catchAsync(async (req: Request, res: Response) =
     data: result,
   });
 });
+
+export const createCoachStripeConnectLink = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const coachId = (req.query.coachId as string) || (req.body.coachId as string) || req.params.id;
+  const hostOrigin =
+    req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : undefined);
+
+  const result = await coachService.createConnectOnboardingLink(user, coachId, hostOrigin, {
+    returnUrl: req.body?.returnUrl,
+    refreshUrl: req.body?.refreshUrl,
+    country: req.body?.country,
+  });
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Coach Stripe Connect onboarding link generated successfully',
+    data: result,
+  });
+});
+
+export const getCoachStripeConnectStatus = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const coachId = (req.query.coachId as string) || req.params.id;
+  const result = await coachService.getConnectStatus(user, coachId);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Coach Stripe Connect status retrieved successfully',
+    data: result,
+  });
+});
+
+export const createCoachStripeDashboardLink = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const coachId = (req.query.coachId as string) || (req.body.coachId as string) || req.params.id;
+  const result = await coachService.createDashboardLoginLink(user, coachId);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Coach Stripe Express dashboard login link generated successfully',
+    data: result,
+  });
+});

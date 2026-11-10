@@ -12,7 +12,6 @@ import { notificationService } from '@/modules/notification/notification.service
 import { ParentChild, ParentMatchReport } from '@/modules/parent/parent.model';
 import { parentService } from '@/modules/parent/parent.service';
 import { AcademyFinanceTransaction, AcademyProfile } from '@/modules/academy/academy.model';
-import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { redisClient } from '@/config/redis';
 import { resolveOrCreatePlayerProfile } from './game-report.utils';
@@ -353,7 +352,7 @@ export class GameReportPaymentService {
             const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
             const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
-            const grTx = await AcademyFinanceTransaction.findOneAndUpdate(
+            await AcademyFinanceTransaction.findOneAndUpdate(
               { reportId: updatedRecord._id },
               {
                 academyId: academy._id,
@@ -363,23 +362,22 @@ export class GameReportPaymentService {
                 transactionType: 'Game Report',
                 cost,
                 commissionAcademy,
+                payoutStatus: 'PENDING_TRANSFER',
+                payoutStatusAcademy: 'PENDING',
                 transactionDate: new Date(),
                 status: 'COMPLETED',
-                notes: `Stripe payment via K10 (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+                notes: `Stripe payment received by K10 Platform (${transactionId || 'session'}). K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy} (Awaiting Admin Payout)`,
               },
               { upsert: true, new: true, session },
             );
 
-            void academyStripeConnectService.transferCommissionToAcademy(
-              academy._id,
-              commissionAcademy,
-              `K10 Game Report Commission for Player ${playerProfile.fullName || 'Player'}`,
-              grTx?._id?.toString(),
-            );
+            await session.commitTransaction();
+          } else {
+            await session.commitTransaction();
           }
+        } else {
+          await session.commitTransaction();
         }
-
-        await session.commitTransaction();
       } catch (txnError: any) {
         if (session.inTransaction()) {
           await session.abortTransaction();
@@ -444,9 +442,11 @@ export class GameReportPaymentService {
                 transactionType: 'Game Report',
                 cost,
                 commissionAcademy,
+                payoutStatus: 'PENDING_TRANSFER',
+                payoutStatusAcademy: 'PENDING',
                 transactionDate: new Date(),
                 status: 'COMPLETED',
-                notes: `Stripe payment via K10 (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+                notes: `Stripe payment received by K10 Platform (${transactionId || 'session'}). K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy} (Awaiting Admin Payout)`,
               },
               { upsert: true, new: true },
             );

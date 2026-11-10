@@ -6,6 +6,8 @@ import { User } from '@/modules/user/user.model';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
+import { AcademyProfile } from '@/modules/academy/academy.model';
+import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
 import { shopCartService } from './shop-cart.service';
 
 export class ShopOrderService {
@@ -31,11 +33,21 @@ export class ShopOrderService {
 
     const validatedItems: any[] = [];
     let calculatedTotal = 0;
+    const academyIdsSet = new Set<string>();
 
     for (const item of orderItems) {
       const product = await ShopProduct.findById(item.productId);
       if (!product) {
         throw new AppError(StatusCodes.NOT_FOUND, `Product not found with ID: ${item.productId}`);
+      }
+
+      if (product.academyId) {
+        academyIdsSet.add(product.academyId.toString());
+      } else if (product.userId) {
+        const acadByUser = await AcademyProfile.findOne({ userId: product.userId }).select('_id');
+        if (acadByUser) {
+          academyIdsSet.add(acadByUser._id.toString());
+        }
       }
 
       const requestedQty = Number(item.quantity) || 1;
@@ -72,9 +84,27 @@ export class ShopOrderService {
     const count = await ShopOrder.countDocuments();
     const orderNumber = `ORD-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
 
+    // Resolve Academy's Connected Stripe Account for direct payment deposit
+    let academyStripeAccountId: string | null = null;
+    const singleAcademyId =
+      academyIdsSet.size === 1
+        ? Array.from(academyIdsSet)[0]
+        : payload.academyId && Types.ObjectId.isValid(payload.academyId)
+          ? String(payload.academyId)
+          : null;
+
+    if (singleAcademyId) {
+      academyStripeAccountId =
+        await academyStripeConnectService.getActiveConnectedStripeAccountId(singleAcademyId);
+    }
+
     // Step 2: Create Stripe Checkout Session
     const stripe = getStripeClient();
-    const clientBaseUrl = env.CLIENT_URL || process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientBaseUrl = (
+      env.CLIENT_URL ||
+      process.env.CLIENT_URL ||
+      'http://localhost:3000'
+    ).replace(/\/$/, '');
     const successUrl = `${clientBaseUrl}/shop/order-success?session_id={CHECKOUT_SESSION_ID}&orderNumber=${orderNumber}`;
     const cancelUrl = `${clientBaseUrl}/shop/cart`;
 
@@ -96,11 +126,22 @@ export class ShopOrderService {
       customer_email: user.email,
       success_url: successUrl,
       cancel_url: cancelUrl,
+      ...(academyStripeAccountId
+        ? {
+            payment_intent_data: {
+              transfer_data: {
+                destination: academyStripeAccountId,
+              },
+            },
+          }
+        : {}),
       metadata: {
         paymentType: 'SHOP_ORDER',
         type: 'SHOP_ORDER',
         orderNumber,
         userId: user._id.toString(),
+        academyId: singleAcademyId || '',
+        directDestinationCharge: academyStripeAccountId ? 'true' : 'false',
       },
     });
 
@@ -272,6 +313,40 @@ export class ShopOrderService {
       }
     } finally {
       await mongoSession.endSession();
+    }
+
+    // If payment was not already routed via directDestinationCharge (e.g., multi-academy order), transfer each Academy's product share directly
+    if (updatedOrder && sessionObject?.metadata?.directDestinationCharge !== 'true') {
+      try {
+        const academyShareMap = new Map<string, number>();
+        for (const item of updatedOrder.items) {
+          const prod = await ShopProduct.findById(item.productId).lean();
+          if (prod) {
+            let acadId = prod.academyId?.toString();
+            if (!acadId && prod.userId) {
+              const acadDoc = await AcademyProfile.findOne({ userId: prod.userId })
+                .select('_id')
+                .lean();
+              if (acadDoc) acadId = acadDoc._id.toString();
+            }
+            if (acadId) {
+              const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
+              academyShareMap.set(acadId, (academyShareMap.get(acadId) || 0) + lineTotal);
+            }
+          }
+        }
+        for (const [acadId, amount] of academyShareMap.entries()) {
+          if (amount > 0) {
+            void academyStripeConnectService.transferCommissionToAcademy(
+              acadId,
+              parseFloat(amount.toFixed(2)),
+              `Direct Academy Shop Order Revenue (${updatedOrder.orderNumber})`,
+            );
+          }
+        }
+      } catch (err: any) {
+        logger.error({ err }, 'Error routing ShopOrder share to Academy Stripe account');
+      }
     }
 
     return updatedOrder || ShopOrder.findById(existingOrder._id);

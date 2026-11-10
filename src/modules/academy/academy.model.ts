@@ -310,6 +310,15 @@ const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDoc
     commissionAcademy: { type: Number, required: true },
     commissionCoach: { type: Number, default: 0 },
     commissionPlatform: { type: Number, default: 0 },
+    payoutStatus: {
+      type: String,
+      enum: ['NOT_APPLICABLE', 'PENDING_TRANSFER', 'TRANSFERRED', 'FAILED'],
+      default: 'PENDING_TRANSFER',
+      index: true,
+    },
+    stripeTransferId: { type: String, trim: true },
+    transferredAmount: { type: Number },
+    transferredAt: { type: Date },
     payoutStatusAcademy: {
       type: String,
       enum: ['PENDING', 'PAID', 'PROCESSING'],

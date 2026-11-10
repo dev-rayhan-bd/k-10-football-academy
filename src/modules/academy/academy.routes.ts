@@ -773,26 +773,34 @@ router.patch(
 // ==========================================
 // STRIPE CONNECT & AUTOMATED PAYOUT ONBOARDING
 // ==========================================
-router.post('/me/stripe/connect', auth('ACADEMY', 'SUPER_ADMIN'), createAcademyStripeConnectLink);
 router.post(
-  '/:academyId/stripe/connect',
-  auth('ACADEMY', 'SUPER_ADMIN'),
+  '/me/stripe/connect',
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
   createAcademyStripeConnectLink,
 );
-router.get('/me/stripe/status', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyStripeConnectStatus);
+router.post(
+  '/:academyId/stripe/connect',
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
+  createAcademyStripeConnectLink,
+);
+router.get(
+  '/me/stripe/status',
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
+  getAcademyStripeConnectStatus,
+);
 router.get(
   '/:academyId/stripe/status',
-  auth('ACADEMY', 'SUPER_ADMIN'),
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
   getAcademyStripeConnectStatus,
 );
 router.post(
   '/me/stripe/dashboard-link',
-  auth('ACADEMY', 'SUPER_ADMIN'),
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
   getAcademyStripeDashboardLink,
 );
 router.post(
   '/:academyId/stripe/dashboard-link',
-  auth('ACADEMY', 'SUPER_ADMIN'),
+  auth('ACADEMY', 'CLUB', 'SUPER_ADMIN'),
   getAcademyStripeDashboardLink,
 );
 

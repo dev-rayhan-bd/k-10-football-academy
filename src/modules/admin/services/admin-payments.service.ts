@@ -11,6 +11,8 @@ import {
   AcademyFinanceTransaction,
   ExtraEvent,
 } from '@/modules/academy/academy.model';
+import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
+import { coachStripeConnectService } from '@/modules/coach/services/coach-stripe-connect.service';
 import { AgentProfile } from '@/modules/agent/agent.model';
 import { ClubProfile } from '@/modules/club/club.model';
 import { ParentMatchReport } from '@/modules/parent/parent.model';
@@ -1317,9 +1319,11 @@ export class AdminPaymentsService {
     // 2. Fetch all Coaches and Academies
     const [allCoaches, allAcademies, allCoachUsers] = await Promise.all([
       CoachProfile.find()
-        .select('_id userId fullName currentClub licenseStatus profileImage phone email')
+        .select(
+          '_id userId fullName currentClub licenseStatus profileImage phone email stripeConnect',
+        )
         .lean(),
-      AcademyProfile.find().select('_id userId name contactEmail logo phone').lean(),
+      AcademyProfile.find().select('_id userId name contactEmail logo phone stripeConnect').lean(),
       UserModel.find({ role: 'COACH' }).select('_id name email phone avatar').lean(),
     ]);
 
@@ -1366,6 +1370,9 @@ export class AdminPaymentsService {
             phone: coachProfile?.phone || coachUser?.phone || '',
             club: coachProfile?.currentClub || 'Official Academy',
             license: coachProfile?.licenseStatus || 'Certified Coach',
+            stripeConnected: Boolean(coachProfile?.stripeConnect?.stripeAccountId),
+            stripeAccountId: coachProfile?.stripeConnect?.stripeAccountId || null,
+            stripePayoutsEnabled: Boolean(coachProfile?.stripeConnect?.payoutsEnabled),
             totalEarned: 0,
             pendingAmount: 0,
             completedPayoutAmount: 0,
@@ -1423,6 +1430,9 @@ export class AdminPaymentsService {
             name: acadProfile?.name || 'Academy',
             email: acadProfile?.contactEmail || '',
             phone: acadProfile?.phone || '',
+            stripeConnected: Boolean(acadProfile?.stripeConnect?.stripeAccountId),
+            stripeAccountId: acadProfile?.stripeConnect?.stripeAccountId || null,
+            stripePayoutsEnabled: Boolean(acadProfile?.stripeConnect?.payoutsEnabled),
             totalEarned: 0,
             pendingAmount: 0,
             completedPayoutAmount: 0,
@@ -1507,13 +1517,7 @@ export class AdminPaymentsService {
    * Disburses pending commissions to a Coach or Academy
    */
   async recordPayout(payload: Record<string, any>, adminUserId?: string) {
-    const {
-      recipientType,
-      recipientId,
-      paymentMethod = 'BANK_TRANSFER',
-      payoutReference,
-      notes,
-    } = payload;
+    const { recipientType, recipientId, payoutReference, notes } = payload;
     if (!recipientType || !recipientId) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'recipientType and recipientId are required');
     }
@@ -1608,12 +1612,31 @@ export class AdminPaymentsService {
         0,
       );
 
+      // Verify Coach Stripe Connect readiness (Option A: Prevent payout inconsistency)
+      const transferResult = await coachStripeConnectService.transferCommissionToCoach(
+        coach._id,
+        totalPaidAmount,
+        notes ||
+          `K10 Platform CV Validation Commission Payout to ${coach.fullName} (${pendingTxns.length} items)`,
+      );
+
+      if (!transferResult.success) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Coach ${coach.fullName} has not completed Stripe Connect onboarding yet (payoutsEnabled: false). Please ask the coach to connect their Stripe account first before disbursing payout.`,
+        );
+      }
+
+      const stripeTransferId = transferResult.transferId || null;
+      const finalReference = stripeTransferId || resolvedRef;
+      const finalPaymentMethod = 'STRIPE';
+
       await AcademyFinanceTransaction.updateMany(
         { _id: { $in: pendingTxns.map((t) => t._id) } },
         {
           $set: {
             payoutStatusCoach: 'PAID',
-            payoutReferenceCoach: resolvedRef,
+            payoutReferenceCoach: finalReference,
             paidAtCoach: now,
           },
         },
@@ -1621,7 +1644,7 @@ export class AdminPaymentsService {
 
       // Log to PlatformPayment audit ledger
       await PlatformPayment.create({
-        paymentCode: resolvedRef,
+        paymentCode: finalReference,
         type: 'Coach Payout',
         category: 'OTHER',
         sourceModel: 'AcademyFinanceTransaction',
@@ -1638,9 +1661,10 @@ export class AdminPaymentsService {
         currency: '$',
         paymentDate: now,
         status: 'COMPLETED',
-        paymentMethod,
+        paymentMethod: finalPaymentMethod,
         notes:
-          notes || `Admin completed payout of $${totalPaidAmount} to Coach ${coach.fullName || ''}`,
+          notes ||
+          `Admin completed payout of $${totalPaidAmount} to Coach ${coach.fullName || ''}${stripeTransferId ? ` via Stripe Connect (${stripeTransferId})` : ''}`,
         createdByAdminId:
           adminUserId && Types.ObjectId.isValid(adminUserId)
             ? new Types.ObjectId(adminUserId)
@@ -1654,8 +1678,9 @@ export class AdminPaymentsService {
         recipientName: coach.fullName,
         amountPaid: parseFloat(totalPaidAmount.toFixed(2)),
         currency: '$',
-        payoutReference: resolvedRef,
-        paymentMethod,
+        payoutReference: finalReference,
+        stripeTransferId,
+        paymentMethod: finalPaymentMethod,
         transactionsCount: pendingTxns.length,
         paidAt: now,
         notes: notes || 'Payout completed successfully',
@@ -1693,20 +1718,41 @@ export class AdminPaymentsService {
         0,
       );
 
+      // Verify Academy Stripe Connect readiness (Option A: Prevent payout inconsistency)
+      const transferResult = await academyStripeConnectService.transferCommissionToAcademy(
+        academy._id,
+        totalPaidAmount,
+        notes || `K10 Platform Commission Payout to ${academy.name} (${pendingTxns.length} items)`,
+      );
+
+      if (!transferResult.success) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Academy ${academy.name} has not completed Stripe Connect onboarding yet (payoutsEnabled: false). Please ask the academy to connect their Stripe account first before disbursing payout.`,
+        );
+      }
+
+      const stripeTransferId = transferResult.transferId || null;
+      const finalReference = stripeTransferId || resolvedRef;
+      const finalPaymentMethod = 'STRIPE';
+
       await AcademyFinanceTransaction.updateMany(
         { _id: { $in: pendingTxns.map((t) => t._id) } },
         {
           $set: {
             payoutStatusAcademy: 'PAID',
-            payoutReferenceAcademy: resolvedRef,
+            payoutReferenceAcademy: finalReference,
             paidAtAcademy: now,
+            payoutStatus: 'TRANSFERRED',
+            ...(stripeTransferId ? { stripeTransferId } : {}),
+            transferredAt: now,
           },
         },
       );
 
       // Log to PlatformPayment audit ledger
       await PlatformPayment.create({
-        paymentCode: resolvedRef,
+        paymentCode: finalReference,
         type: 'Academy Payout',
         category: 'OTHER',
         sourceModel: 'AcademyFinanceTransaction',
@@ -1723,8 +1769,10 @@ export class AdminPaymentsService {
         currency: '$',
         paymentDate: now,
         status: 'COMPLETED',
-        paymentMethod,
-        notes: notes || `Admin completed payout of $${totalPaidAmount} to Academy ${academy.name}`,
+        paymentMethod: finalPaymentMethod,
+        notes:
+          notes ||
+          `Admin completed payout of $${totalPaidAmount} to Academy ${academy.name}${stripeTransferId ? ` via Stripe Connect (${stripeTransferId})` : ''}`,
         createdByAdminId:
           adminUserId && Types.ObjectId.isValid(adminUserId)
             ? new Types.ObjectId(adminUserId)
@@ -1738,8 +1786,9 @@ export class AdminPaymentsService {
         recipientName: academy.name,
         amountPaid: parseFloat(totalPaidAmount.toFixed(2)),
         currency: '$',
-        payoutReference: resolvedRef,
-        paymentMethod,
+        payoutReference: finalReference,
+        stripeTransferId,
+        paymentMethod: finalPaymentMethod,
         transactionsCount: pendingTxns.length,
         paidAt: now,
         notes: notes || 'Payout completed successfully',

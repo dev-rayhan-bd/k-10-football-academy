@@ -4,6 +4,9 @@ import { AppError } from '@/utils/AppError';
 import { Team, ExtraEvent } from '../academy.model';
 import { academyResolverService } from './academy-resolver.service';
 import { TARGET_ATTENDEES_ENUM } from '../academy.interface';
+import { getStripeClient } from '@/config/stripe';
+import { academyStripeConnectService } from './academy-stripe-connect.service';
+import { normalizeStripeCurrency } from './academy-tournament-registration.service';
 
 export class AcademyEventsService {
   async getExtraEventsMeta(user: any, academyIdentifier?: string) {
@@ -396,12 +399,11 @@ export class AcademyEventsService {
     participantData: any,
     academyIdentifier?: string,
   ) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-
-    const event = await ExtraEvent.findOne({
-      _id: id,
-      academyId: academy._id,
-    });
+    let event = await ExtraEvent.findById(id);
+    if (!event && academyIdentifier) {
+      const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
+      event = await ExtraEvent.findOne({ _id: id, academyId: academy._id });
+    }
 
     if (!event) {
       throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
@@ -417,6 +419,63 @@ export class AcademyEventsService {
       throw new AppError(StatusCodes.BAD_REQUEST, 'This event has reached maximum capacity');
     }
 
+    const fee = Number(event.registrationFee) || 0;
+    let checkoutUrl: string | null = null;
+    let sessionId: string | null = null;
+    let paymentStatus: 'PAID' | 'PENDING' | 'FREE' =
+      fee > 0 ? participantData.paymentStatus || 'PAID' : 'FREE';
+
+    if (
+      fee > 0 &&
+      (participantData.paymentMethod === 'STRIPE' || participantData.useStripe === true)
+    ) {
+      const stripe = getStripeClient();
+      const currency = normalizeStripeCurrency(event.currency);
+      const academyStripeAccountId =
+        await academyStripeConnectService.getActiveConnectedStripeAccountId(event.academyId);
+      const baseUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency,
+              product_data: {
+                name: `Event Registration: ${event.eventName}`,
+                description: `Participant: ${participantData.name}`,
+              },
+              unit_amount: Math.round(fee * 100),
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        customer_email: participantData.email || undefined,
+        ...(academyStripeAccountId
+          ? {
+              payment_intent_data: {
+                transfer_data: {
+                  destination: academyStripeAccountId,
+                },
+              },
+            }
+          : {}),
+        metadata: {
+          type: 'EXTRA_EVENT_REGISTRATION',
+          paymentType: 'EXTRA_EVENT_REGISTRATION',
+          eventId: event._id.toString(),
+          academyId: event.academyId?.toString() || '',
+          participantEmail: participantData.email || '',
+        },
+        success_url: `${baseUrl}/dashboard/academy/management/extra-events/${event._id}?session_id={CHECKOUT_SESSION_ID}&payment=success`,
+        cancel_url: `${baseUrl}/dashboard/academy/management/extra-events/${event._id}?payment=cancelled`,
+      });
+
+      checkoutUrl = session.url;
+      sessionId = session.id;
+      paymentStatus = 'PENDING';
+    }
+
     event.participants = event.participants || [];
     event.participants.push({
       userId: user?.userId ? new Types.ObjectId(user.userId) : undefined,
@@ -425,11 +484,8 @@ export class AcademyEventsService {
       phone: participantData.phone,
       teamName: participantData.teamName,
       registeredAt: new Date(),
-      paidAmount: participantData.paidAmount || event.registrationFee || 0,
-      paymentStatus:
-        event.registrationFee && event.registrationFee > 0
-          ? participantData.paymentStatus || 'PAID'
-          : 'FREE',
+      paidAmount: paymentStatus === 'PAID' ? participantData.paidAmount || fee : 0,
+      paymentStatus,
     });
 
     event.currentAttendees = (event.currentAttendees || 0) + 1;
@@ -441,10 +497,14 @@ export class AcademyEventsService {
     await event.save();
 
     return {
-      message: 'Registration completed successfully',
+      message: checkoutUrl
+        ? 'Event registration initiated. Please complete Stripe payment.'
+        : 'Registration completed successfully',
       currentAttendees: event.currentAttendees,
       maxCapacity: event.maxCapacity,
       status: event.status,
+      checkoutUrl,
+      sessionId,
     };
   }
 }

@@ -3,7 +3,6 @@ import { UserModel } from '@/modules/user/user.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { CoachProfile } from '../coach.model';
 import { AcademyFinanceTransaction } from '@/modules/academy/academy.model';
-import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
 import { ParentChild } from '@/modules/parent/parent.model';
 import {
   PlayerProfile,
@@ -238,7 +237,7 @@ export class CoachCvValidationService {
     // Total: $24.00 -> Authorised Coach: $12.00 (50%), Academy Admin: $6.00 (25%), K10 Platform: $6.00 (25%)
     const targetAcademyId = coach.academyId || player.academyId;
     if (targetAcademyId) {
-      const cvTx = await AcademyFinanceTransaction.findOneAndUpdate(
+      await AcademyFinanceTransaction.findOneAndUpdate(
         { playerId: player._id, transactionType: 'CV Validation' },
         {
           academyId: targetAcademyId,
@@ -249,20 +248,14 @@ export class CoachCvValidationService {
           commissionAcademy: 6.0, // 25% share
           commissionCoach: 12.0, // 50% share
           commissionPlatform: 6.0, // 25% share
+          payoutStatus: 'PENDING_TRANSFER',
+          payoutStatusAcademy: 'PENDING',
           payoutStatusCoach: 'PENDING',
           transactionDate: new Date(),
           status: 'COMPLETED',
-          notes: `Official CV Validation Fee ($24.00). Authorised Coach Share (50%): $12.00, Academy Admin Share (25%): $6.00, K10 Platform (25%): $6.00. Verified by Coach ${coach.fullName} (${coachClub}). Certificate: ${certId}`,
+          notes: `Official CV Validation Fee ($24.00) received by K10 Platform. Authorised Coach Share (50%): $12.00, Academy Admin Share (25%): $6.00, K10 Platform (25%): $6.00 (Awaiting Admin Payout). Verified by Coach ${coach.fullName} (${coachClub}). Certificate: ${certId}`,
         },
         { upsert: true, new: true },
-      );
-
-      // Automated Stripe payout to Academy if connected ($6.00 Academy Share)
-      void academyStripeConnectService.transferCommissionToAcademy(
-        targetAcademyId,
-        6.0,
-        `K10 Official CV Validation Academy 25% Share ($6.00) for Player ${player.fullName || 'Player'}`,
-        cvTx?._id?.toString(),
       );
     }
 

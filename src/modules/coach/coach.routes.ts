@@ -51,6 +51,9 @@ import {
   bulkUpdateCoachAttendance,
   getCoachTrainingSessions,
   getCoachFinances,
+  createCoachStripeConnectLink,
+  getCoachStripeConnectStatus,
+  createCoachStripeDashboardLink,
 } from './coach.controller';
 import { getCoachAllGameReports } from '@/modules/player/game-report.controller';
 
@@ -158,6 +161,13 @@ router.post(
 // ==========================================
 router.get('/me/finances', auth('COACH', 'SUPER_ADMIN'), getCoachFinances);
 router.get('/my-finances', auth('COACH', 'SUPER_ADMIN'), getCoachFinances);
+router.post('/me/stripe/connect', auth('COACH', 'SUPER_ADMIN'), createCoachStripeConnectLink);
+router.get('/me/stripe/status', auth('COACH', 'SUPER_ADMIN'), getCoachStripeConnectStatus);
+router.post(
+  '/me/stripe/dashboard-link',
+  auth('COACH', 'SUPER_ADMIN'),
+  createCoachStripeDashboardLink,
+);
 router.get('/me/cv', auth(), getMyCoachCV);
 router.get('/my-cv', auth(), getMyCoachCV);
 router.get('/me/analytics', auth(), getMyCoachAnalytics);

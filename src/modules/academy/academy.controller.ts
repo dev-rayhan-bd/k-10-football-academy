@@ -2121,6 +2121,7 @@ export const createAcademyStripeConnectLink = catchAsync(async (req: Request, re
     user,
     academyIdentifier,
     hostOrigin,
+    req.body,
   );
   sendResponse(res, {
     statusCode: StatusCodes.OK,

@@ -4,6 +4,7 @@ import { AppError } from '@/utils/AppError';
 import { ExtraEvent } from '../academy.model';
 import { getStripeClient } from '@/config/stripe';
 import { logger } from '@/utils/logger';
+import { academyStripeConnectService } from './academy-stripe-connect.service';
 
 export const TOURNAMENT_PRESET_BADGES = [
   {
@@ -103,7 +104,14 @@ export class AcademyTournamentRegistrationService {
       paymentStatus = 'PENDING';
       const stripe = getStripeClient();
 
-      const baseUrl = originUrl || process.env.CLIENT_URL || 'http://localhost:3000';
+      // Route payment directly to the Academy's Stripe Connect account if active
+      const academyStripeAccountId =
+        await academyStripeConnectService.getActiveConnectedStripeAccountId(event.academyId);
+
+      const baseUrl = (originUrl || process.env.CLIENT_URL || 'http://localhost:3000').replace(
+        /\/$/,
+        '',
+      );
       try {
         stripeSession = await stripe.checkout.sessions.create({
           line_items: [
@@ -121,10 +129,20 @@ export class AcademyTournamentRegistrationService {
           ],
           mode: 'payment',
           customer_email: payload.contactEmail,
+          ...(academyStripeAccountId
+            ? {
+                payment_intent_data: {
+                  transfer_data: {
+                    destination: academyStripeAccountId,
+                  },
+                },
+              }
+            : {}),
           metadata: {
             type: 'TOURNAMENT_CLUB_REGISTRATION',
             paymentType: 'TOURNAMENT_CLUB_REGISTRATION',
             eventId: event._id.toString(),
+            academyId: event.academyId?.toString() || '',
             clubId: clubId.toString(),
             clubName: payload.clubName,
           },

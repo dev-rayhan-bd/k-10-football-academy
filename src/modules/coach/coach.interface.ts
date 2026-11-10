@@ -211,6 +211,17 @@ export interface ICoachProfile {
   tournamentStats?: ICoachTournamentStats;
   trophiesTable?: ICoachTrophyDetail[];
 
+  stripeConnect?: {
+    stripeAccountId?: string;
+    accountStatus?: 'NOT_CONNECTED' | 'PENDING' | 'ACTIVE' | 'RESTRICTED';
+    detailsSubmitted?: boolean;
+    payoutsEnabled?: boolean;
+    chargesEnabled?: boolean;
+    country?: string;
+    currency?: string;
+    connectedAt?: Date;
+  };
+
   createdAt?: Date;
   updatedAt?: Date;
 }

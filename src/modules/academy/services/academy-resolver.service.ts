@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { AcademyProfile } from '../academy.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
+import { User } from '@/modules/user/user.model';
 
 export class AcademyResolverService {
   async resolveAcademyProfile(identifier: string) {
@@ -22,7 +23,7 @@ export class AcademyResolverService {
   }
 
   async resolveUserAcademy(user: any, academyIdentifier?: string) {
-    if (academyIdentifier) {
+    if (academyIdentifier && academyIdentifier !== 'me') {
       return this.resolveAcademyProfile(academyIdentifier);
     }
     const userId = user?.userId || user?.id || user?._id;
@@ -35,6 +36,21 @@ export class AcademyResolverService {
       if (coach?.academyId) {
         academy = await AcademyProfile.findById(coach.academyId);
       }
+    }
+    if (!academy && (user?.role === 'ACADEMY' || user?.role === 'CLUB')) {
+      const userDoc = await User.findById(userId);
+      if (userDoc) {
+        academy = await AcademyProfile.create({
+          userId: userDoc._id,
+          name: userDoc.name || 'Official Football Academy',
+          contactEmail: userDoc.email,
+          description: 'Professional Football Academy',
+          country: 'US',
+        });
+      }
+    }
+    if (!academy && user?.role === 'SUPER_ADMIN') {
+      academy = await AcademyProfile.findOne().sort({ createdAt: -1 });
     }
     if (!academy) {
       throw new AppError(StatusCodes.NOT_FOUND, 'Academy profile not found for this user account');

@@ -195,6 +195,20 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
       default: undefined,
     },
     trophiesTable: { type: [Schema.Types.Mixed], default: [] },
+    stripeConnect: {
+      stripeAccountId: { type: String, index: true },
+      accountStatus: {
+        type: String,
+        enum: ['NOT_CONNECTED', 'PENDING', 'ACTIVE', 'RESTRICTED'],
+        default: 'NOT_CONNECTED',
+      },
+      detailsSubmitted: { type: Boolean, default: false },
+      payoutsEnabled: { type: Boolean, default: false },
+      chargesEnabled: { type: Boolean, default: false },
+      country: { type: String },
+      currency: { type: String },
+      connectedAt: { type: Date },
+    },
   },
   { timestamps: true },
 );

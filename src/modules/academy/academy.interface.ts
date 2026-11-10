@@ -245,6 +245,10 @@ export interface IAcademyFinanceTransaction {
   commissionAcademy: number;
   commissionCoach?: number;
   commissionPlatform?: number;
+  payoutStatus?: 'NOT_APPLICABLE' | 'PENDING_TRANSFER' | 'TRANSFERRED' | 'FAILED';
+  stripeTransferId?: string;
+  transferredAmount?: number;
+  transferredAt?: Date;
   payoutStatusAcademy?: 'PENDING' | 'PAID' | 'PROCESSING';
   payoutStatusCoach?: 'PENDING' | 'PAID' | 'PROCESSING';
   payoutReferenceAcademy?: string;

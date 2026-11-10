@@ -202,6 +202,14 @@ export class CoachFinancesService {
         club: coach.currentClub || '',
         license: coach.licenseStatus || '',
       },
+      stripeConnect: {
+        isConnected: Boolean(coach.stripeConnect?.stripeAccountId),
+        stripeAccountId: coach.stripeConnect?.stripeAccountId || null,
+        accountStatus: coach.stripeConnect?.accountStatus || 'NOT_CONNECTED',
+        detailsSubmitted: coach.stripeConnect?.detailsSubmitted || false,
+        payoutsEnabled: coach.stripeConnect?.payoutsEnabled || false,
+        chargesEnabled: coach.stripeConnect?.chargesEnabled || false,
+      },
       summary: {
         totalEarnings: parseFloat(totalEarnings.toFixed(2)),
         totalEarningsFormatted: `$ ${totalEarnings.toFixed(2)}`,

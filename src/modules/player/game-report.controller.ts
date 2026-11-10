@@ -6,6 +6,7 @@ import { gameReportService } from './services/game-report.service';
 import { academyService } from '@/modules/academy/academy.service';
 import { subscriptionService } from '@/modules/subscription/subscription.service';
 import { shopService } from '@/modules/shop/shop.service';
+import { playerCvValidationRequestService } from './services/player-cv-validation-request.service';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 import { MatchRecord } from '@/modules/player/player.model';
@@ -103,6 +104,15 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
     obj.metadata?.type === 'TOURNAMENT_CLUB_REGISTRATION'
   ) {
     await academyService.handleTournamentRegistrationStripeWebhook(obj);
+  } else if (
+    obj.metadata?.paymentType === 'CV_VALIDATION' ||
+    obj.metadata?.type === 'CV_VALIDATION'
+  ) {
+    const playerId = obj.metadata?.playerId;
+    const transactionId = obj.id || obj.payment_intent;
+    if (playerId) {
+      await playerCvValidationRequestService.finalizePaidCvValidation(playerId, transactionId);
+    }
   } else {
     await gameReportService.handleStripeWebhook(event);
   }

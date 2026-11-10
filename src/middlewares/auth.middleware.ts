@@ -34,13 +34,18 @@ export const auth = (...requiredRoles: UserRole[]) => {
 
     const token = authHeader.split(' ')[1];
 
-    // Check Redis Blacklist (Instant Logout verification)
-    const isBlacklisted = await redisClient.get(`BL_${token}`);
-    if (isBlacklisted) {
-      throw new AppError(
-        StatusCodes.UNAUTHORIZED,
-        'Token has been revoked/logged out. Please log in again.',
-      );
+    // Check Redis Blacklist (Instant Logout verification with production safe fallback)
+    try {
+      const isBlacklisted = await redisClient.get(`BL_${token}`);
+      if (isBlacklisted) {
+        throw new AppError(
+          StatusCodes.UNAUTHORIZED,
+          'Token has been revoked/logged out. Please log in again.',
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof AppError) throw err;
+      // In production, if Redis is momentarily reconnecting, don't crash all authenticated users
     }
 
     try {

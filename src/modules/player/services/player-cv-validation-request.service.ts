@@ -9,6 +9,7 @@ import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
+import { redisClient } from '@/config/redis';
 import { logger } from '@/utils/logger';
 
 const notificationService = new NotificationService();
@@ -126,96 +127,115 @@ export class PlayerCvValidationRequestService {
    * Finalize Paid CV Validation: 50% split ($12.00 Academy, $12.00 Platform) & Notify
    */
   async finalizePaidCvValidation(playerId: string, transactionId?: string) {
-    const playerProfile = await PlayerProfile.findById(playerId);
-    if (!playerProfile) {
-      return { success: false, message: 'Player profile not found' };
+    const lockKey = `LOCK:CV_PAYMENT:${playerId}`;
+    let lockAcquired = false;
+    try {
+      const lockRes = await redisClient.set(lockKey, 'LOCKED', 'EX', 15, 'NX');
+      if (lockRes === 'OK') lockAcquired = true;
+    } catch {
+      // Safe fallback if redis is reconnecting
     }
 
-    if (playerProfile.coachVerification?.validationPaymentStatus === 'PAID') {
+    try {
+      const playerProfile = await PlayerProfile.findById(playerId);
+      if (!playerProfile) {
+        return { success: false, message: 'Player profile not found' };
+      }
+
+      if (playerProfile.coachVerification?.validationPaymentStatus === 'PAID') {
+        return {
+          success: true,
+          message: 'CV Validation already verified and paid.',
+          player: playerProfile,
+        };
+      }
+
+      playerProfile.coachVerification = {
+        ...(playerProfile.coachVerification || {}),
+        isVerified: playerProfile.coachVerification?.isVerified || false,
+        validationPaymentStatus: 'PAID',
+        validationFee: 24.0,
+        transactionId: transactionId || playerProfile.coachVerification?.transactionId,
+      };
+
+      await playerProfile.save({ validateModifiedOnly: true });
+
+      // 3-way Commission Split: Total $24.00 -> Authorised Coach: $12.00 (50%), Academy Admin: $6.00 (25%), K10 Platform: $6.00 (25%)
+      let academy = null;
+      if (playerProfile.academyId) {
+        academy = await AcademyProfile.findById(playerProfile.academyId);
+      }
+      if (!academy && (playerProfile.academy || playerProfile.currentClub)) {
+        const acadName = playerProfile.academy || playerProfile.currentClub;
+        academy = await AcademyProfile.findOne({
+          name: { $regex: new RegExp(`^${acadName}$`, 'i') },
+        });
+      }
+
+      if (academy) {
+        await AcademyFinanceTransaction.findOneAndUpdate(
+          { playerId: playerProfile._id, transactionType: 'CV Validation' },
+          {
+            academyId: academy._id,
+            playerId: playerProfile._id,
+            coachId: playerProfile.verifyingCoachId,
+            transactionType: 'CV Validation',
+            cost: 24.0,
+            commissionAcademy: 6.0, // 25% share
+            commissionCoach: 12.0, // 50% share
+            commissionPlatform: 6.0, // 25% share
+            payoutStatusCoach: 'PENDING',
+            transactionDate: new Date(),
+            status: 'COMPLETED',
+            notes: `Official CV Validation Fee ($24.00). Authorised Coach Share (50%): $12.00, Academy Admin Share (25%): $6.00, K10 Platform Share (25%): $6.00.`,
+          },
+          { upsert: true, new: true },
+        );
+      }
+
+      // Invalidate Cache
+      await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
+
+      // Notify Coach if assigned
+      if (playerProfile.verifyingCoachId) {
+        await notificationService.createNotification({
+          recipientId: playerProfile.verifyingCoachId,
+          recipientRole: 'COACH',
+          title: 'New CV Validation Request Paid ($24.00)',
+          message: `${playerProfile.fullName || 'Player'} has requested official CV validation ($24.00 paid). Please review and validate their skills.`,
+          type: 'CV_VALIDATION_REQUEST',
+          data: { playerId: playerProfile._id },
+        });
+      }
+
+      // Notify Player
+      if (playerProfile.userId) {
+        await notificationService.createNotification({
+          recipientId: playerProfile.userId,
+          recipientRole: 'PLAYER',
+          title: 'CV Validation Payment Successful ($24.00)',
+          message:
+            'Your CV validation fee of $24.00 has been received. Your assigned coach will now evaluate and certify your CV.',
+          type: 'PAYMENT_SUCCESS',
+          data: { playerId: playerProfile._id, amount: 24.0 },
+        });
+      }
+
       return {
         success: true,
-        message: 'CV Validation already verified and paid.',
+        message:
+          'CV Validation payment verified successfully ($24.00). 50% commission credited to academy.',
         player: playerProfile,
       };
+    } finally {
+      if (lockAcquired) {
+        try {
+          await redisClient.del(lockKey);
+        } catch {
+          // ignore
+        }
+      }
     }
-
-    playerProfile.coachVerification = {
-      ...(playerProfile.coachVerification || {}),
-      isVerified: playerProfile.coachVerification?.isVerified || false,
-      validationPaymentStatus: 'PAID',
-      validationFee: 24.0,
-      transactionId: transactionId || playerProfile.coachVerification?.transactionId,
-    };
-
-    await playerProfile.save({ validateModifiedOnly: true });
-
-    // 3-way Commission Split: Total $24.00 -> Authorised Coach: $12.00 (50%), Academy Admin: $6.00 (25%), K10 Platform: $6.00 (25%)
-    let academy = null;
-    if (playerProfile.academyId) {
-      academy = await AcademyProfile.findById(playerProfile.academyId);
-    }
-    if (!academy && (playerProfile.academy || playerProfile.currentClub)) {
-      const acadName = playerProfile.academy || playerProfile.currentClub;
-      academy = await AcademyProfile.findOne({
-        name: { $regex: new RegExp(`^${acadName}$`, 'i') },
-      });
-    }
-
-    if (academy) {
-      await AcademyFinanceTransaction.findOneAndUpdate(
-        { playerId: playerProfile._id, transactionType: 'CV Validation' },
-        {
-          academyId: academy._id,
-          playerId: playerProfile._id,
-          coachId: playerProfile.verifyingCoachId,
-          transactionType: 'CV Validation',
-          cost: 24.0,
-          commissionAcademy: 6.0, // 25% share
-          commissionCoach: 12.0, // 50% share
-          commissionPlatform: 6.0, // 25% share
-          payoutStatusCoach: 'PENDING',
-          transactionDate: new Date(),
-          status: 'COMPLETED',
-          notes: `Official CV Validation Fee ($24.00). Authorised Coach Share (50%): $12.00, Academy Admin Share (25%): $6.00, K10 Platform Share (25%): $6.00.`,
-        },
-        { upsert: true, new: true },
-      );
-    }
-
-    // Invalidate Cache
-    await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
-
-    // Notify Coach if assigned
-    if (playerProfile.verifyingCoachId) {
-      await notificationService.createNotification({
-        recipientId: playerProfile.verifyingCoachId,
-        recipientRole: 'COACH',
-        title: 'New CV Validation Request Paid ($24.00)',
-        message: `${playerProfile.fullName || 'Player'} has requested official CV validation ($24.00 paid). Please review and validate their skills.`,
-        type: 'CV_VALIDATION_REQUEST',
-        data: { playerId: playerProfile._id },
-      });
-    }
-
-    // Notify Player
-    if (playerProfile.userId) {
-      await notificationService.createNotification({
-        recipientId: playerProfile.userId,
-        recipientRole: 'PLAYER',
-        title: 'CV Validation Payment Successful ($24.00)',
-        message:
-          'Your CV validation fee of $24.00 has been received. Your assigned coach will now evaluate and certify your CV.',
-        type: 'PAYMENT_SUCCESS',
-        data: { playerId: playerProfile._id, amount: 24.0 },
-      });
-    }
-
-    return {
-      success: true,
-      message:
-        'CV Validation payment verified successfully ($24.00). 50% commission credited to academy.',
-      player: playerProfile,
-    };
   }
 
   /**

@@ -61,6 +61,14 @@ export class CoachService {
     return await coachProfileService.requestRevalidation(identifier);
   }
 
+  async addClub(identifier: string, payload: any) {
+    return await coachProfileService.addClub(identifier, payload);
+  }
+
+  async updateClub(identifier: string, clubId: string, payload: any) {
+    return await coachProfileService.updateClub(identifier, clubId, payload);
+  }
+
   async deleteClub(identifier: string, clubId: string) {
     return await coachProfileService.deleteClub(identifier, clubId);
   }

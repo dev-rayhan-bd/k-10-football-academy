@@ -66,6 +66,8 @@ export interface ICoachClubHistory {
   clubName: string;
   role?: string;
   period: string; // e.g. '2020 - Present'
+  from?: string;
+  to?: string;
   startYear?: number;
   endYear?: number;
   isCurrent?: boolean;
@@ -142,6 +144,16 @@ export interface ICoachAnalyticsResponse {
   tournamentStats: ICoachTournamentStats | null;
   majorTrophies: Array<{ name: string; value: number }>;
   trophiesTable: ICoachTrophyDetail[];
+  pendingGameReports?: any[];
+  clubsInterested?: any[];
+  quickStats?: {
+    matchesCoached: number;
+    totalWins: number;
+    losses: number;
+    draws: number;
+    cleanSheets: number;
+    winRate?: number;
+  };
 }
 
 export interface ICoachProfile {

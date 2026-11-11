@@ -26,6 +26,8 @@ import {
   updateMyCoachProfile,
   updateCoachProfile,
   requestRevalidation,
+  addMyClub,
+  updateMyClub,
   deleteMyClub,
   getMyDocuments,
   uploadMyDocument,
@@ -245,7 +247,10 @@ router.patch(
 
 router.post('/me/revalidation', auth('COACH', 'SUPER_ADMIN'), requestRevalidation);
 
-// Club item delete
+// Club item CRUD (matches Player /players/me/clubs)
+router.post('/me/clubs', auth('COACH', 'SUPER_ADMIN'), upload.any() as any, addMyClub);
+router.patch('/me/clubs/:clubId', auth('COACH', 'SUPER_ADMIN'), upload.any() as any, updateMyClub);
+router.put('/me/clubs/:clubId', auth('COACH', 'SUPER_ADMIN'), upload.any() as any, updateMyClub);
 router.delete('/me/clubs/:clubId', auth('COACH', 'SUPER_ADMIN'), deleteMyClub);
 
 // ==========================================

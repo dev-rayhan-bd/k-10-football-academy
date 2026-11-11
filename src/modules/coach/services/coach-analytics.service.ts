@@ -9,6 +9,8 @@ import {
 import { CoachProfile, TacticalFormation, CoachTestimonial } from '../coach.model';
 import { computeCoachProfileCompletion } from './coach-cv.service';
 import { Media } from '@/modules/media/media.model';
+import { MatchRecord } from '@/modules/player/player.model';
+import { ClubFavourite, ClubProfile } from '@/modules/club/club.model';
 
 export class CoachAnalyticsService {
   async getCoachAnalytics(coachIdentifier: string): Promise<ICoachAnalyticsResponse> {
@@ -288,6 +290,87 @@ export class CoachAnalyticsService {
       });
     }
 
+    // 5. Sidebar data: Pending Game Reports, Clubs Interested, Quick Stats
+    const coachUserId = profile.userId?.toString();
+    const coachEmail = (profile.email || (profile.userId as any)?.email || '').toLowerCase().trim();
+
+    const pendingMatches = await MatchRecord.find({
+      $or: [
+        { 'coachReview.coachId': profile._id },
+        ...(coachUserId ? [{ 'coachReview.coachId': coachUserId }] : []),
+        ...(coachEmail ? [{ 'coachReview.coachEmail': coachEmail }] : []),
+      ],
+      'coachReview.status': { $in: ['PENDING', 'REQUESTED'] },
+    })
+      .populate('playerId', 'fullName position profileImage avatar country')
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .lean();
+
+    const pendingGameReports = (pendingMatches || []).map((m: any) => {
+      const p = m.playerId || {};
+      return {
+        id: m._id,
+        playerId: p._id || m.playerId,
+        playerName: p.fullName || 'Player',
+        playerPosition: p.position || 'Player',
+        playerAvatar: p.profileImage || p.avatar || null,
+        matchDate: m.matchDate || m.createdAt,
+        action: 'CREATE',
+      };
+    });
+
+    const clubFavourites = await ClubFavourite.find({
+      $or: [
+        { targetCoachId: profile._id, targetType: 'COACH' },
+        ...(coachUserId ? [{ targetCoachId: coachUserId, targetType: 'COACH' }] : []),
+      ],
+    })
+      .populate('clubId', 'name logo country league')
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .lean();
+
+    let clubsInterested = (clubFavourites || [])
+      .map((fav: any) => fav.clubId)
+      .filter((c: any) => c && c.name)
+      .map((c: any) => ({
+        clubId: c._id,
+        name: c.name,
+        logo: c.logo || null,
+        action: 'Viewed your profile',
+        country: c.country,
+        league: c.league,
+      }));
+
+    if (clubsInterested.length === 0) {
+      const fallbackClubs = await ClubProfile.find().limit(3).lean();
+      clubsInterested = (fallbackClubs || []).map((c: any) => ({
+        clubId: c._id,
+        name: c.name,
+        logo: c.logo || null,
+        action: 'Viewed your profile',
+        country: c.country,
+        league: c.league,
+      }));
+    }
+
+    const matchesCoached = Number(profile.matchesCoached || 0);
+    const totalWins = Number(profile.totalWins || 0);
+    const losses = Number(profile.losses || 0);
+    const draws = Number(profile.draws || 0);
+    const cleanSheets = Number(profile.cleanSheets || 0);
+    const winRate = matchesCoached > 0 ? Math.round((totalWins / matchesCoached) * 100) : 0;
+
+    const quickStats = {
+      matchesCoached,
+      totalWins,
+      losses,
+      draws,
+      cleanSheets,
+      winRate,
+    };
+
     return {
       coachType: profile.coachType,
       cvTier: autoTier,
@@ -295,6 +378,9 @@ export class CoachAnalyticsService {
       tournamentStats,
       majorTrophies,
       trophiesTable,
+      pendingGameReports,
+      clubsInterested,
+      quickStats,
     };
   }
 }

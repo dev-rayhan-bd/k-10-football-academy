@@ -196,8 +196,50 @@ export class CoachProfileService {
       .paginate()
       .fields();
 
-    const data = await coachQuery.modelQuery;
+    const rawData = await coachQuery.modelQuery;
     const meta = await coachQuery.countTotal();
+
+    const data = rawData.map((doc: any) => {
+      const p = doc.toObject ? doc.toObject() : doc;
+      const matchesCoached = Number(p.matchesCoached || 0);
+      const totalWins = Number(p.totalWins || 0);
+      const losses = Number(p.losses || 0);
+      const draws = Number(p.draws || 0);
+      const cleanSheets = Number(p.cleanSheets || 0);
+      const winRate = matchesCoached > 0 ? Math.round((totalWins / matchesCoached) * 100) : 0;
+
+      // Extract coach-specific card metrics (no PAC/SHO/PAS/DRI/DEF/PHY player stats)
+      const tactics = Number(p.coachProfileAnalysis?.tactics || 85);
+      const leadership = Number(p.coachProfileAnalysis?.leadership || 85);
+      const communication = Number(p.coachProfileAnalysis?.communication || 85);
+      const adaptability = Number(p.coachProfileAnalysis?.adaptability || 85);
+      const discipline = Number(p.coachProfileAnalysis?.discipline || 85);
+      const development = Number(p.coachProfileAnalysis?.development || 85);
+
+      const coachCardStats = {
+        rating: p.overallRatingScore || 74,
+        position: 'MAN',
+        matchesCoached,
+        totalWins,
+        losses,
+        draws,
+        cleanSheets,
+        winRate,
+        tactics,
+        leadership,
+        communication,
+        adaptability,
+        discipline,
+        development,
+      };
+
+      return {
+        ...p,
+        rating: p.overallRatingScore || 74,
+        coachCardStats,
+        stats: coachCardStats,
+      };
+    });
 
     return { meta, data };
   }
@@ -484,6 +526,176 @@ export class CoachProfileService {
       coachId: profile._id,
       revalidationRequested: true,
       message: 'Re-validation request submitted successfully',
+    };
+  }
+
+  async addClub(identifier: string, payload: any) {
+    let profile = null;
+    if (Types.ObjectId.isValid(identifier)) {
+      const objId = new Types.ObjectId(identifier);
+      profile = await CoachProfile.findOne({
+        $or: [{ _id: objId }, { userId: objId }],
+      });
+    }
+    if (!profile) {
+      throw new AppError(404, 'Coach profile not found');
+    }
+
+    if (!profile.clubHistory) profile.clubHistory = [];
+    if (profile.clubHistory.length >= 6) {
+      throw new AppError(400, 'Maximum 6 clubs allowed in career timeline');
+    }
+
+    const clubName = payload.clubName || payload.name || payload.club;
+    if (!clubName) {
+      throw new AppError(400, 'Club name is required');
+    }
+
+    const fromStr = payload.from !== undefined ? String(payload.from) : '';
+    const toStr = payload.to !== undefined ? String(payload.to) : '';
+    let isCurrent = payload.isCurrent;
+    if (typeof isCurrent === 'string') {
+      isCurrent = isCurrent.toLowerCase() === 'true';
+    }
+    if (toStr.toLowerCase() === 'present') {
+      isCurrent = true;
+    }
+
+    let period = payload.period || payload.years || payload.duration;
+    if (!period && (fromStr || toStr)) {
+      period = `${fromStr || ''} - ${toStr || 'Present'}`;
+    }
+
+    const newClubItem = {
+      _id: new Types.ObjectId(),
+      clubName,
+      role: payload.role || payload.position || 'Coach',
+      from: fromStr || undefined,
+      to: toStr || undefined,
+      period: period || '2020 - Present',
+      startYear: payload.startYear,
+      endYear: payload.endYear,
+      isCurrent: Boolean(isCurrent),
+      logoUrl: payload.logoUrl || payload.clubLogo || '',
+    };
+
+    if (newClubItem.isCurrent) {
+      profile.clubHistory.forEach((c: any) => {
+        c.isCurrent = false;
+        if (c.to && String(c.to).toLowerCase() === 'present') {
+          c.to = newClubItem.from || String(new Date().getFullYear());
+          c.period = `${c.from || ''} - ${c.to}`;
+        }
+      });
+      profile.currentClub = newClubItem.clubName;
+      if (newClubItem.logoUrl) {
+        profile.clubLogo = newClubItem.logoUrl;
+      }
+    }
+
+    profile.clubHistory.push(newClubItem as any);
+    profile.markModified('clubHistory');
+    await profile.save();
+    await coachCacheService.invalidateCoachCache(profile._id, profile.userId);
+
+    return {
+      coachId: profile._id,
+      clubHistory: profile.clubHistory,
+    };
+  }
+
+  async updateClub(identifier: string, clubId: string, payload: any) {
+    let profile = null;
+    if (Types.ObjectId.isValid(identifier)) {
+      const objId = new Types.ObjectId(identifier);
+      profile = await CoachProfile.findOne({
+        $or: [{ _id: objId }, { userId: objId }],
+      });
+    }
+    if (!profile) {
+      throw new AppError(404, 'Coach profile not found');
+    }
+
+    const clubs = profile.clubHistory || [];
+    const index = clubs.findIndex(
+      (c: any) =>
+        c._id?.toString() === clubId ||
+        c.id === clubId ||
+        c.clubName?.toLowerCase() === decodeURIComponent(clubId).toLowerCase(),
+    );
+
+    if (index === -1) {
+      throw new AppError(404, 'Club not found in coach history');
+    }
+
+    const existing = clubs[index];
+    const clubName = payload.clubName !== undefined ? payload.clubName : existing.clubName;
+    const role = payload.role !== undefined ? payload.role : existing.role;
+    const fromStr =
+      payload.from !== undefined
+        ? String(payload.from)
+        : existing.from !== undefined
+          ? String(existing.from)
+          : '';
+    const toStr =
+      payload.to !== undefined
+        ? String(payload.to)
+        : existing.to !== undefined
+          ? String(existing.to)
+          : '';
+
+    let isCurrent = payload.isCurrent !== undefined ? payload.isCurrent : existing.isCurrent;
+    if (typeof isCurrent === 'string') {
+      isCurrent = isCurrent.toLowerCase() === 'true';
+    }
+    if (toStr.toLowerCase() === 'present') {
+      isCurrent = true;
+    }
+
+    let period = payload.period !== undefined ? payload.period : existing.period;
+    if (payload.from !== undefined || payload.to !== undefined || payload.isCurrent !== undefined) {
+      period = `${fromStr || ''} - ${toStr || (isCurrent ? 'Present' : '')}`;
+    }
+
+    let logoUrl = existing.logoUrl;
+    if (payload.logoUrl) {
+      if (existing.logoUrl && existing.logoUrl !== payload.logoUrl) {
+        deleteFromStorage(existing.logoUrl).catch(() => {});
+      }
+      logoUrl = payload.logoUrl;
+    }
+
+    existing.clubName = clubName;
+    existing.role = role;
+    existing.from = fromStr || undefined;
+    existing.to = toStr || undefined;
+    existing.period = period;
+    existing.isCurrent = Boolean(isCurrent);
+    existing.logoUrl = logoUrl;
+
+    if (existing.isCurrent) {
+      clubs.forEach((c: any, i: number) => {
+        if (i !== index) {
+          c.isCurrent = false;
+          if (c.to && String(c.to).toLowerCase() === 'present') {
+            c.to = fromStr || String(new Date().getFullYear());
+            c.period = `${c.from || ''} - ${c.to}`;
+          }
+        }
+      });
+      profile.currentClub = existing.clubName;
+      if (existing.logoUrl) {
+        profile.clubLogo = existing.logoUrl;
+      }
+    }
+
+    profile.markModified('clubHistory');
+    await profile.save();
+    await coachCacheService.invalidateCoachCache(profile._id, profile.userId);
+
+    return {
+      coachId: profile._id,
+      clubHistory: profile.clubHistory,
     };
   }
 

@@ -4,10 +4,10 @@ import { userRepository } from '../user.repository';
 import { AppError } from '@/utils/AppError';
 import { AcademyProfile } from '@/modules/academy/academy.model';
 import { CoachProfile, TacticalFormation } from '@/modules/coach/coach.model';
-import { ClubProfile } from '@/modules/club/club.model';
+import { ClubProfile, ClubFavourite } from '@/modules/club/club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
-import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
+import { ParentProfile, ParentChild, ParentMatchReport } from '@/modules/parent/parent.model';
 import { formatMarketValue } from '@/utils/ratingCalculator';
 import { cmsService } from '@/modules/cms/cms.service';
 import { subscriptionService } from '@/modules/subscription/subscription.service';
@@ -75,17 +75,27 @@ export class UserProfileService {
         userObj.profileCompletion = userObj.profileCompletion ?? playerProfile.profileCompletion;
         userObj.isVerifiedByCoach = userObj.isVerifiedByCoach ?? playerProfile.isVerifiedByCoach;
         userObj.profileViews = playerProfile.profileViews ?? 0;
-        userObj.totalLikes = playerProfile.totalLikes ?? 0;
 
-        const matchCount = await MatchRecord.countDocuments({ playerId: playerProfile._id });
+        const [matchCount, parentMatchCount, favLikes] = await Promise.all([
+          MatchRecord.countDocuments({ playerId: playerProfile._id }),
+          ParentMatchReport.countDocuments({ childPlayerId: playerProfile._id }),
+          ClubFavourite.countDocuments({
+            targetPlayerId: playerProfile._id,
+            targetType: 'PLAYER',
+          }),
+        ]);
+
         const totalReports =
           (playerProfile as any).reports !== undefined &&
           (playerProfile as any).reports !== null &&
           (playerProfile as any).reports > 0
             ? (playerProfile as any).reports
-            : matchCount;
+            : matchCount + parentMatchCount;
+
         delete (userObj as any).reports;
         userObj.totalReports = totalReports;
+        userObj.totalLikes = Math.max(playerProfile.totalLikes ?? 0, favLikes);
+
         userObj.overviewStats = {
           profileViews: userObj.profileViews,
           totalLikes: userObj.totalLikes,

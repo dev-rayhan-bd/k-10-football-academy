@@ -9,6 +9,7 @@ import {
   FifaCardStats,
 } from '../player.model';
 import { PlayerEvaluation } from '@/modules/academy/academy.model';
+import { ClubFavourite } from '@/modules/club/club.model';
 import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
 import { UserModel } from '@/modules/user/user.model';
 import QueryBuilder from '@/builder/QueryBuilder';
@@ -203,15 +204,30 @@ export class PlayerProfileService {
     const meta = await playerQuery.countTotal();
 
     const playerIds = rawResult.map((p: any) => p._id);
-    const fifaCards = await FifaCardStats.find({ playerId: { $in: playerIds } }).lean();
+    const [fifaCards, clubFavs] = await Promise.all([
+      FifaCardStats.find({ playerId: { $in: playerIds } }).lean(),
+      ClubFavourite.aggregate([
+        { $match: { targetType: 'PLAYER', targetPlayerId: { $in: playerIds } } },
+        { $group: { _id: '$targetPlayerId', total: { $sum: 1 } } },
+      ]),
+    ]);
+
     const fifaCardMap = new Map<string, any>();
     fifaCards.forEach((c: any) => {
       fifaCardMap.set(c.playerId.toString(), c);
     });
 
+    const favMap = new Map<string, number>();
+    clubFavs.forEach((f: any) => {
+      favMap.set(f._id.toString(), f.total);
+    });
+
     const result = rawResult.map((p: any) => {
       const obj = p.toObject ? p.toObject() : p;
       const card = fifaCardMap.get(obj._id?.toString());
+      const favCount = favMap.get(obj._id?.toString()) || 0;
+      obj.totalLikes = Math.max(obj.totalLikes ?? 0, favCount);
+      obj.profileViews = obj.profileViews ?? 0;
       obj.fifaCardStats = {
         overallRating: card?.overallRating ?? obj.overallRating ?? 50,
         position: card?.position ?? obj.position ?? 'Forward',
@@ -221,6 +237,11 @@ export class PlayerProfileService {
         dri: card?.dri ?? 50,
         def: card?.def ?? 50,
         phy: card?.phy ?? 50,
+      };
+      obj.overviewStats = {
+        profileViews: obj.profileViews,
+        totalLikes: obj.totalLikes,
+        reports: obj.reports ?? 0,
       };
       return playerCvService.applySafeguarding(obj, viewer);
     });

@@ -532,7 +532,8 @@ export class PlayerCvTransformerService {
     const userPhone = userObj.phone || '';
     const userEmail = userObj.email || '';
     const profileViews = aggregatedProfile.profileViews ?? 0;
-    const totalLikes = aggregatedProfile.totalLikes ?? 0;
+    const favLikes = aggregatedProfile.favouriteLikes?.[0]?.count ?? 0;
+    const totalLikes = Math.max(aggregatedProfile.totalLikes ?? 0, favLikes);
     const calculatedReports = totalMatches + mappedProfessionalReports.length;
     const totalReportsCount =
       aggregatedProfile.reports !== undefined &&
@@ -805,6 +806,9 @@ export class PlayerCvTransformerService {
     if (aggregatedProfile.dateOfBirth && aggregatedProfile.age !== accurateAge) {
       updatesToPersist.age = accurateAge;
     }
+    if (totalLikes > (aggregatedProfile.totalLikes ?? 0)) {
+      updatesToPersist.totalLikes = totalLikes;
+    }
     if (Object.keys(updatesToPersist).length > 0) {
       PlayerProfile.updateOne({ _id: aggregatedProfile._id }, updatesToPersist)
         .exec()
@@ -815,6 +819,8 @@ export class PlayerCvTransformerService {
     const finalProfile = {
       ...profileObj,
       playerId: aggregatedProfile._id,
+      totalLikes,
+      profileViews,
       age: accurateAge,
       cvTier: autoTier,
       profileCompletion: completionPercentage,

@@ -6,6 +6,7 @@ import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { ClubFavourite } from '../club.model';
 import { clubResolverService } from './club-resolver.service';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
 
 export class ClubScoutingService {
   async getScoutingBoard(userId: string, query: any = {}) {
@@ -573,6 +574,11 @@ export class ClubScoutingService {
           (id) => id.toString() !== targetId,
         );
         await club.save();
+        await PlayerProfile.updateOne(
+          { _id: targetId, totalLikes: { $gt: 0 } },
+          { $inc: { totalLikes: -1 } },
+        );
+        await playerCacheService.invalidatePlayerCache(targetId, player.userId);
         return { isFavourite: false, message: 'Player removed from favourites' };
       } else {
         await ClubFavourite.create({
@@ -585,6 +591,8 @@ export class ClubScoutingService {
           club.likedPlayerIds = [...(club.likedPlayerIds || []), new Types.ObjectId(targetId)];
           await club.save();
         }
+        await PlayerProfile.updateOne({ _id: targetId }, { $inc: { totalLikes: 1 } });
+        await playerCacheService.invalidatePlayerCache(targetId, player.userId);
         return { isFavourite: true, message: 'Player added to favourites' };
       }
     } else {

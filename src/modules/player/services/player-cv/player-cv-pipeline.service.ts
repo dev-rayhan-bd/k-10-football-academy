@@ -86,7 +86,7 @@ export class PlayerCvPipelineService {
           let: { pId: '$_id' },
           pipeline: [
             { $match: { $expr: { $eq: ['$playerId', '$$pId'] } } },
-            { $sort: { matchDate: -1, createdAt: -1 } },
+            { $sort: { createdAt: -1, matchDate: -1, _id: -1 } },
           ],
           as: 'matchRecords',
         },
@@ -98,10 +98,28 @@ export class PlayerCvPipelineService {
           let: { pId: '$_id' },
           pipeline: [
             { $match: { $expr: { $eq: ['$childPlayerId', '$$pId'] } } },
-            { $sort: { matchDate: -1, createdAt: -1 } },
+            { $sort: { createdAt: -1, matchDate: -1, _id: -1 } },
             { $limit: 10 },
           ],
           as: 'professionalReports',
+        },
+      },
+      // 5.1 $lookup favourite likes count from clubfavourites
+      {
+        $lookup: {
+          from: 'clubfavourites',
+          let: { pId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$targetType', 'PLAYER'] }, { $eq: ['$targetPlayerId', '$$pId'] }],
+                },
+              },
+            },
+            { $count: 'count' },
+          ],
+          as: 'favouriteLikes',
         },
       },
       // 6. $lookup team info (via teamId or player membership in team)

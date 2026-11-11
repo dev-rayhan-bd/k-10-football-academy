@@ -326,7 +326,7 @@ export const updateAcademyMatchZodSchema = z.object({
 });
 
 // ==========================================
-// EXTRA EVENTS VALIDATIONS (SCREENSHOTS)
+// EXTRA EVENTS VALIDATIONS
 // ==========================================
 export const createExtraEventZodSchema = z.object({
   body: z
@@ -545,7 +545,7 @@ export const recordMatchResultZodSchema = z.object({
 });
 
 // ==========================================
-// ACADEMY SPONSORS VALIDATIONS (SCREENSHOTS)
+// ACADEMY SPONSORS VALIDATIONS
 // ==========================================
 export const createAcademySponsorZodSchema = z.object({
   body: z
@@ -617,7 +617,7 @@ export const updateAcademySponsorZodSchema = z.object({
 });
 
 // ==========================================
-// ACADEMY NEWS VALIDATIONS (SCREENSHOTS)
+// ACADEMY NEWS VALIDATIONS
 // ==========================================
 export const createAcademyNewsZodSchema = z
   .object({
@@ -713,7 +713,7 @@ export const updateAcademyNewsZodSchema = z.object({
 });
 
 // ==========================================
-// ACADEMY SUCCESS STORY VALIDATIONS (SCREENSHOTS)
+// ACADEMY SUCCESS STORY VALIDATIONS
 // ==========================================
 export const createAcademySuccessStoryZodSchema = z.object({
   body: z

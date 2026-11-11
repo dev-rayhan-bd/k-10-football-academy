@@ -745,7 +745,7 @@ export class AcademyTeamsService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Team not found');
     }
 
-    // Format coaches list (Screenshot 3 & 4)
+    // Format coaches list
     const coaches = ((team.coachIds as any[]) || []).map((coach) => ({
       _id: coach._id,
       name: coach.fullName,
@@ -755,7 +755,7 @@ export class AcademyTeamsService {
       status: 'ACTIVE',
     }));
 
-    // Fetch match stats for players to compute Rating, Matches, Goals, Assists (Screenshot 5)
+    // Fetch match stats for players to compute Rating, Matches, Goals, Assists
     const playerIds = ((team.playerIds as any[]) || []).map((p) => p._id);
     const matchRecords = await MatchRecord.find({ playerId: { $in: playerIds } }).lean();
 
@@ -773,7 +773,7 @@ export class AcademyTeamsService {
       statsMap.set(pId, current);
     }
 
-    // Format players list (Screenshot 5)
+    // Format players list
     const players = ((team.playerIds as any[]) || []).map((player) => {
       const pId = player._id.toString();
       const st = statsMap.get(pId) || { matches: 0, goals: 0, assists: 0, totalRating: 0 };

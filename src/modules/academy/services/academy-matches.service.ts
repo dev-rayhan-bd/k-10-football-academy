@@ -435,7 +435,7 @@ export class AcademyMatchesService {
       .sort({ matchDate: -1, createdAt: -1 })
       .lean();
 
-    // 3. Compute Metrics Cards (Screenshot 1)
+    // 3. Compute Metrics Cards
     const totalReports = allMatches.length;
     const totalGoals = allMatches.reduce(
       (sum, m: any) => sum + (m.goals ?? m.stats?.goalScored ?? 0),
@@ -467,7 +467,7 @@ export class AcademyMatchesService {
       totalReports,
     };
 
-    // 4. Compute Top Scorers Widget (Screenshot 1)
+    // 4. Compute Top Scorers Widget
     const playerGoalsMap = new Map<string, { player: any; goals: number }>();
     allMatches.forEach((m: any) => {
       const pId = m.playerId?.toString();
@@ -498,7 +498,7 @@ export class AcademyMatchesService {
         };
       });
 
-    // 5. Compute Top Performers Widget (Screenshot 1)
+    // 5. Compute Top Performers Widget
     const topPerformers = allMatches
       .filter((m: any) => {
         const r = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
@@ -528,7 +528,7 @@ export class AcademyMatchesService {
         rating: item.rating,
       }));
 
-    // 6. Search and Paginate Scouting Reports Cards (Screenshot 1)
+    // 6. Search and Paginate Scouting Reports Cards
     let filteredMatches = allMatches;
     if (query.searchTerm || query.search) {
       const term = String(query.searchTerm || query.search)

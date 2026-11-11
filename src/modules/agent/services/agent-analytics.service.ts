@@ -37,7 +37,7 @@ export class AgentAnalyticsService {
     const playerShareBase =
       env.SCOUTING_BOARD_SHARE_PLAYER || 'http://localhost:3000/players/share';
 
-    // 1. Agent Profile Details (Screenshot 1: 74% PROFILE, ACTIVE AGENT, JOHN DOE, Badges)
+    // 1. Agent Profile Details
     const rawDob = (agentProfile as any)?.dateOfBirth || user?.dateOfBirth;
     const computedAge = calculateAge(rawDob) ?? (agentProfile as any)?.age ?? 58;
     const profileCompletion =
@@ -75,7 +75,7 @@ export class AgentAnalyticsService {
       isApproved,
     };
 
-    // 2. Metrics Cards (Screenshot 1: PLAYERS VIEWED, LIKED CVS, SHARED PROFILES, PROFILE VIEWS)
+    // 2. Metrics Cards
     const viewedList = club.viewedPlayerProfiles || [];
     const sharedList = club.sharedPlayerProfiles || [];
 
@@ -96,7 +96,7 @@ export class AgentAnalyticsService {
       profileViews: club.profileViews || (agentProfile as any)?.profileViews || 0,
     };
 
-    // 3. Recent Activity (Screenshot 1 top right)
+    // 3. Recent Activity
     const [notifications, recentFavs] = await Promise.all([
       Notification.find({ recipientId: userId }).sort({ createdAt: -1 }).limit(10).lean(),
       ClubFavourite.find({
@@ -149,7 +149,7 @@ export class AgentAnalyticsService {
     activityList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const recentActivity = activityList.slice(0, 5);
 
-    // 4. Analytics For Players Monitored with Year Filtering (Screenshot 2)
+    // 4. Analytics For Players Monitored with Year Filtering
     const selectedYear = query.year ? Number(query.year) : new Date().getFullYear();
     const startOfYear = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0));
     const endOfYear = new Date(Date.UTC(selectedYear, 11, 31, 23, 59, 59, 999));
@@ -229,7 +229,7 @@ export class AgentAnalyticsService {
       }
     });
 
-    // 5. Monitored Players Table (Screenshot 3) - Aggregation with $lookup
+    // 5. Monitored Players Table - Aggregation with $lookup
     const matchStage: any = { isDeleted: { $ne: true } };
 
     if (query.position && query.position !== 'All Positions' && query.position !== 'ALL') {
@@ -363,7 +363,7 @@ export class AgentAnalyticsService {
       };
     });
 
-    // 6. Media Section (Screenshot 4)
+    // 6. Media Section
     const mediaItems = await Media.find({
       $or: [
         { userId: new Types.ObjectId(userId) },

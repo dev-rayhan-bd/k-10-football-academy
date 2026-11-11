@@ -243,6 +243,21 @@ export class PlayerProfileService {
         totalLikes: obj.totalLikes,
         reports: obj.reports ?? 0,
       };
+      obj.playerEvaluation = {
+        agentStatus: 'UNREPRESENTED',
+        hasAgent: false,
+        agentName: '',
+        agencyName: '',
+        clubStatus: 'WITHOUT_CLUB',
+        hasClub: false,
+        currentClub: '',
+        marketValue: 0,
+        ...(obj.playerEvaluation || {}),
+        overallRating: obj.playerEvaluation?.overallRating ?? obj.overallRating ?? 50,
+        lastEvaluationDate: obj.playerEvaluation?.lastEvaluationDate ?? null,
+        nextEvaluationDue: obj.playerEvaluation?.nextEvaluationDue ?? null,
+        evaluationCycle: '3_MONTHS',
+      };
       return playerCvService.applySafeguarding(obj, viewer);
     });
 

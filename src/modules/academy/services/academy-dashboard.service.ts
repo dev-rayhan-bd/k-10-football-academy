@@ -798,7 +798,7 @@ export class AcademyDashboardService {
       };
     });
 
-    // 8. Detailed Reports (Screenshot 6)
+    // 8. Detailed Reports
     const detailedReports = [
       {
         id: 'fees-summary-report',
@@ -1018,7 +1018,7 @@ export class AcademyDashboardService {
 
     const academyPlayerIds = academyPlayers.map((p) => p._id);
 
-    // 1. Metric Cards (6 cards in Screenshot 1)
+    // 1. Metric Cards (6 cards)
     const teamsCount = await Team.countDocuments({ academyId: academy._id });
     const playersCount = academyPlayers.length;
 
@@ -1067,7 +1067,7 @@ export class AcademyDashboardService {
       pendingCvs: { label: 'PENDING CVS', count: pendingCvsCount },
     };
 
-    // 2. ANALYTICS - GAME REPORTS ENGAGEMENT (Bi-Monthly Bar Chart in Screenshot 2)
+    // 2. ANALYTICS - GAME REPORTS ENGAGEMENT (Bi-Monthly Bar Chart)
     const reportsMonthMap = new Map<number, number>();
     for (let m = 1; m <= 12; m++) reportsMonthMap.set(m, 0);
 
@@ -1149,7 +1149,7 @@ export class AcademyDashboardService {
       };
     });
 
-    // 3. ANALYTICS - AGE CATEGORY (Red Bar Chart in Screenshot 2 & 3)
+    // 3. ANALYTICS - AGE CATEGORY (Red Bar Chart)
     const ageBrackets = [
       { bracket: '7-8', min: 7, max: 8, count: 0 },
       { bracket: '9-10', min: 9, max: 10, count: 0 },
@@ -1180,7 +1180,7 @@ export class AcademyDashboardService {
       count: b.count,
     }));
 
-    // 4. ANALYTICS - PLAYER EVALUATION STATUS (Donut/Pie Chart in Screenshot 3)
+    // 4. ANALYTICS - PLAYER EVALUATION STATUS (Donut/Pie Chart)
     const evaluationsStatusAgg = await PlayerEvaluation.aggregate([
       {
         $match: {
@@ -1253,7 +1253,7 @@ export class AcademyDashboardService {
       ],
     };
 
-    // 5. SIDEBAR - PENDING GAME REPORTS (Screenshot 1 top right)
+    // 5. SIDEBAR - PENDING GAME REPORTS
     const pendingGameReportsRaw = await GameReport.find({
       academyId: academy._id,
       status: { $in: ['PENDING', 'UNPAID'] },
@@ -1309,7 +1309,7 @@ export class AcademyDashboardService {
       ];
     }
 
-    // 6. SIDEBAR - PENDING CV VALIDATIONS (Screenshot 1 bottom right)
+    // 6. SIDEBAR - PENDING CV VALIDATIONS
     const pendingCvValidationsRaw = await PlayerCvValidation.find({
       playerId: { $in: academyPlayerIds },
       status: { $in: ['REQUESTED', 'ASSIGNED', 'PENDING'] },
@@ -1384,7 +1384,7 @@ export class AcademyDashboardService {
           };
         });
       } else {
-        // Fallback UI mock to match exact screenshot design if database is completely empty
+        // Fallback UI mock to match exact design if database is completely empty
         pendingCvValidations = [
           {
             id: 'mock-cv-1',
@@ -1410,7 +1410,7 @@ export class AcademyDashboardService {
       }
     }
 
-    // 7. SIDEBAR - PLAYER EVALUATIONS (Screenshot 2 right side)
+    // 7. SIDEBAR - PLAYER EVALUATIONS
     const playerEvaluationsRaw = await PlayerEvaluation.find({
       $or: [{ academyId: academy._id }, { playerId: { $in: academyPlayerIds } }],
     })
@@ -1478,7 +1478,7 @@ export class AcademyDashboardService {
       ];
     }
 
-    // 8. SIDEBAR - CLUBS INTERESTED (Screenshot 2 & 3 right side)
+    // 8. SIDEBAR - CLUBS INTERESTED
     const clubFavourites = await ClubFavourite.find({
       targetPlayerId: { $in: academyPlayerIds },
     })
@@ -1510,7 +1510,7 @@ export class AcademyDashboardService {
       }));
     }
 
-    // 9. SIDEBAR - QUICK STATS (Screenshot 3 right side)
+    // 9. SIDEBAR - QUICK STATS
     const quickStats = {
       profileViews: {
         raw: 127,

@@ -41,7 +41,7 @@ import { requireClubOrAgentAccess } from '@/middlewares/clubAgentGate.middleware
 const router = Router();
 
 // ==========================================
-// 0. CLUB DASHBOARD (SCREENSHOTS 1 TO 5 - REAL-TIME DB)
+// 0. CLUB DASHBOARD
 // ==========================================
 router.get('/dashboard', auth('CLUB', 'SUPER_ADMIN'), requireClubOrAgentAccess(), getClubDashboard);
 router.get(
@@ -65,7 +65,7 @@ router.patch(
 );
 
 // ==========================================
-// 2. SCOUTING BOARD (SCREENSHOTS 1 & 2)
+// 2. SCOUTING BOARD
 // ==========================================
 router.get(
   '/scouting-board',
@@ -99,7 +99,7 @@ router.post(
 );
 
 // ==========================================
-// 3. CVS LIBRARY (SCREENSHOT 3)
+// 3. CVS LIBRARY
 // ==========================================
 router.get(
   '/cvs-library',
@@ -121,7 +121,7 @@ router.post(
 );
 
 // ==========================================
-// 4. SUCCESS STORIES (SCREENSHOTS 4 & 5)
+// 4. SUCCESS STORIES
 // ==========================================
 router.get(
   '/success-stories',
@@ -158,7 +158,7 @@ router.delete(
 router.patch('/success-stories/:id/status', auth('SUPER_ADMIN', 'ADMIN'), reviewClubSuccessStory);
 
 // ==========================================
-// 5. CLUB ANALYTICS (SCREENSHOTS 2 & 3)
+// 5. CLUB ANALYTICS
 // ==========================================
 router.get('/analytics', auth('CLUB', 'SUPER_ADMIN'), requireClubOrAgentAccess(), getClubAnalytics);
 router.post(

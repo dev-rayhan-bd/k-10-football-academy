@@ -197,8 +197,8 @@ export class CoachService {
     return await coachEvaluationsService.getPlayerEvaluationProgressPdfData(userId, targetId);
   }
 
-  async submitPlayerEvaluation(userId: string, targetId: string, payload: any) {
-    return await coachEvaluationsService.submitPlayerEvaluation(userId, targetId, payload);
+  async submitPlayerEvaluation(userOrUserId: any, targetId: string, payload: any) {
+    return await coachEvaluationsService.submitPlayerEvaluation(userOrUserId, targetId, payload);
   }
 
   // --- CoachFinancesService Delegates ---

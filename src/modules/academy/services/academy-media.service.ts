@@ -72,7 +72,7 @@ export class AcademyMediaService {
   async getSponsors(user: any, query: any = {}, academyIdentifier?: string) {
     const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
 
-    // 1. Calculate dynamic stats directly from DB (The 4 Top Cards from UI Screenshot 1)
+    // 1. Calculate dynamic stats directly from DB (The 4 Top Cards )
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -167,7 +167,7 @@ export class AcademyMediaService {
       const val = Number(sp.contractValue) || 0;
       const currency = sp.currency || '$';
 
-      // Badge type color matching UI screenshot 1
+      // Badge type color
       let typeBadgeVariant = 'green';
       const upperType = String(sp.sponsorshipType).toUpperCase();
       if (upperType === 'APPAREL') typeBadgeVariant = 'navy';

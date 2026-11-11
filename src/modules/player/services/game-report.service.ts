@@ -104,7 +104,7 @@ export class GameReportService {
   }
 
   /**
-   * Get Specific Game Report Details for Side Drawer (Screenshot 2)
+   * Get Specific Game Report Details for Side Drawer
    */
   async getGameReportDetails(userIdOrPlayerId: string, reportId: string) {
     return gameReportQueryService.getGameReportDetails(userIdOrPlayerId, reportId);

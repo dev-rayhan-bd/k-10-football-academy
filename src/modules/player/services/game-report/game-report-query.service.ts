@@ -274,7 +274,7 @@ export class GameReportQueryService {
   }
 
   /**
-   * Get Specific Game Report Details for Side Drawer (Screenshot 2)
+   * Get Specific Game Report Details for Side Drawer
    */
   async getGameReportDetails(userIdOrPlayerId: string, reportId: string) {
     let match: any = null;

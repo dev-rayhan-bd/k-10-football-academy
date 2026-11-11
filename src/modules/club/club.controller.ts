@@ -144,7 +144,7 @@ export const getFavourites = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// SCOUTING BOARD (SCREENSHOTS 1 & 2)
+// SCOUTING BOARD
 // ==========================================
 export const getScoutingBoard = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
@@ -202,7 +202,7 @@ export const shareScoutingProfile = catchAsync(async (req: Request, res: Respons
 });
 
 // ==========================================
-// CVS LIBRARY (SCREENSHOT 3)
+// CVS LIBRARY
 // ==========================================
 export const getClubCvsLibrary = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
@@ -238,7 +238,7 @@ export const sharePlayerCv = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// SUCCESS STORIES (SCREENSHOTS 4 & 5)
+// SUCCESS STORIES
 // ==========================================
 export const getClubSuccessStories = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
@@ -381,7 +381,7 @@ export const reviewClubSuccessStory = catchAsync(async (req: Request, res: Respo
 });
 
 // ==========================================
-// 5. CLUB ANALYTICS (SCREENSHOTS 2 & 3)
+// 5. CLUB ANALYTICS
 // ==========================================
 export const getClubAnalytics = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;

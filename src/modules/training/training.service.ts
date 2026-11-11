@@ -337,7 +337,7 @@ export class TrainingService {
       .sort({ sessionDate: -1, createdAt: -1 })
       .lean();
 
-    // Map each session matching UI Card specifications (Screenshot 1)
+    // Map each session matching UI Card specifications
     const formattedSessions = sessions.map((s: any) => {
       const team = (s.teamId && typeof s.teamId === 'object' ? s.teamId : {}) as any;
       const coach = (s.coachId && typeof s.coachId === 'object' ? s.coachId : {}) as any;
@@ -456,7 +456,7 @@ export class TrainingService {
   }
 
   // ==========================================
-  // GET ATTENDANCE SHEET FOR MODAL (SCREENSHOT 5)
+  // GET ATTENDANCE SHEET FOR MODAL
   // ==========================================
   async getSessionAttendance(
     sessionId: string,

@@ -463,7 +463,7 @@ export class AdminAnalyticsService {
     const totalUsers = facet.totalCount[0]?.count || 0;
 
     // -------------------------------------------------------------------------
-    // A. Build USER ROLE DISTRIBUTION (Pie Chart - Screenshot 2)
+    // A. Build USER ROLE DISTRIBUTION (Pie Chart)
     // -------------------------------------------------------------------------
     const roleCountsMap = new Map<string, number>();
     for (const r of ANALYTICS_ROLES) {
@@ -492,7 +492,7 @@ export class AdminAnalyticsService {
     });
 
     // -------------------------------------------------------------------------
-    // B. Build USER GROWTH BY ROLE (Line Chart - Screenshot 1: Jan-Feb .. Nov-Dec)
+    // B. Build USER GROWTH BY ROLE (Line Chart: Jan-Feb .. Nov-Dec)
     // -------------------------------------------------------------------------
     const growthMatrix = new Map<number, Record<string, number>>();
     for (const b of BI_MONTHLY_BUCKETS) {
@@ -529,8 +529,7 @@ export class AdminAnalyticsService {
         bucketIndex: b.index,
         total: periodTotal,
         cumulativeTotal: runningCumulativeUsers,
-        // Keys matching chart legend in Screenshot 1
-        Player: counts.PLAYER,
+        // Keys matching chart legendPlayer: counts.PLAYER,
         Coach: counts.COACH,
         Academy: counts.ACADEMY,
         Agent: counts.AGENT,
@@ -546,7 +545,7 @@ export class AdminAnalyticsService {
     });
 
     // -------------------------------------------------------------------------
-    // C. Build REVENUE BREAKDOWN (Bar Chart - Screenshot 2: subscriptions & reports per bi-month)
+    // C. Build REVENUE BREAKDOWN (Bar Chart: subscriptions & reports per bi-month)
     // -------------------------------------------------------------------------
     const revMatrix = new Map<
       number,
@@ -659,7 +658,7 @@ export class AdminAnalyticsService {
         period: b.label,
         label: b.label,
         bucketIndex: b.index,
-        // Exact keys shown in Screenshot 2 tooltip ("subscriptions : 3", "reports : 4")
+        // Exact keys shownoltip ("subscriptions : 3", "reports : 4")
         subscriptions: item.subscriptions,
         reports: item.reports,
         // Revenue dollar amounts per bar
@@ -678,7 +677,7 @@ export class AdminAnalyticsService {
     );
 
     return {
-      // Top 3 Summary Cards (Screenshot 1: TOTAL USERS, REVENUE, GAME REPORTS)
+      // Top 3 Summary Cards
       summary: {
         totalUsers,
         allTimeTotalUsers: allTimeUsersCount,
@@ -688,11 +687,11 @@ export class AdminAnalyticsService {
         gameReports: totalGameReportsCount,
         currency: '$',
       },
-      // Chart 1: USER GROWTH BY ROLE (Screenshot 1)
+      // Chart 1: USER GROWTH BY ROLE
       userGrowthByRole,
-      // Chart 2: USER ROLE DISTRIBUTION (Screenshot 2 - Left Pie Chart)
+      // Chart 2: USER ROLE DISTRIBUTION
       userRoleDistribution,
-      // Chart 3: REVENUE BREAKDOWN (Screenshot 2 - Right Dual Bar Chart)
+      // Chart 3: REVENUE BREAKDOWN
       revenueBreakdown,
     };
   }

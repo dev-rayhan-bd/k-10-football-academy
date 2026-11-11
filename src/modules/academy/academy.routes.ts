@@ -288,7 +288,7 @@ router.post(
 );
 router.post(
   '/evaluations/:evaluationId/submit',
-  auth('COACH', 'SUPER_ADMIN'),
+  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
   submitPlayerEvaluation,
 );
 
@@ -424,7 +424,7 @@ router.post(
 router.get('/teams', auth('ACADEMY', 'SUPER_ADMIN'), getTeams);
 router.get('/teams/:teamId', auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'ADMIN'), getTeamById);
 
-// Team Roster & Members Assignment (Screenshots 3, 4, 5)
+// Team Roster & Members Assignment
 router.get(
   '/teams/:teamId/roster',
   auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'ADMIN'),
@@ -738,7 +738,7 @@ router.delete(
 );
 
 // ==========================================
-// FEES & PAYMENTS ROUTES (SCREENSHOT 1)
+// FEES & PAYMENTS ROUTES
 // ==========================================
 router.get('/fees-payments/export', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getFeesPaymentsExport);
 router.get(
@@ -808,7 +808,7 @@ router.post(
 );
 
 // ==========================================
-// FINANCE COMMITTEE ROUTES (SCREENSHOT 2)
+// FINANCE COMMITTEE ROUTES
 // ==========================================
 router.get('/finance-committee', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getFinanceCommittee);
 router.get(
@@ -842,7 +842,7 @@ router.patch(
 );
 
 // ==========================================
-// MATCHES & MATCH SCHEDULE ROUTES (SCREENSHOTS)
+// MATCHES & MATCH SCHEDULE ROUTES
 // ==========================================
 router.get('/matches/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatchesMeta);
 router.get('/:academyId/matches/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getMatchesMeta);
@@ -883,7 +883,7 @@ router.delete('/matches/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteMatch);
 router.delete('/:academyId/matches/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteMatch);
 
 // ==========================================
-// EXTRA EVENTS ROUTES (SCREENSHOTS)
+// EXTRA EVENTS ROUTES
 // ==========================================
 router.get('/extra-events/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getExtraEventsMeta);
 router.get(
@@ -949,7 +949,7 @@ router.post(
 );
 
 // ==========================================
-// TOURNAMENT ARENA, CLUBS & SIMULATION ROUTES (SCREENSHOTS)
+// TOURNAMENT ARENA, CLUBS & SIMULATION ROUTES
 // ==========================================
 router.post(
   '/extra-events/:id/register-club',
@@ -1097,7 +1097,7 @@ router.post(
 );
 
 // ==========================================
-// ACADEMY SPONSORS ROUTES (SCREENSHOTS)
+// ACADEMY SPONSORS ROUTES
 // ==========================================
 router.get('/sponsors/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsorsMeta);
 router.get('/:academyId/sponsors/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getSponsorsMeta);
@@ -1138,7 +1138,7 @@ router.delete('/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSponsor);
 router.delete('/:academyId/sponsors/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSponsor);
 
 // ==========================================
-// ACADEMY NEWS ROUTES (SCREENSHOTS)
+// ACADEMY NEWS ROUTES
 // ==========================================
 router.get(
   '/academy-news/meta',
@@ -1232,7 +1232,7 @@ router.delete(
 );
 
 // ==========================================
-// ACADEMY SUCCESS STORY ROUTES (SCREENSHOTS)
+// ACADEMY SUCCESS STORY ROUTES
 // ==========================================
 router.get(
   '/success-stories/meta',
@@ -1318,7 +1318,7 @@ router.delete(
 );
 
 // ==========================================
-// ACADEMY GAME REPORTS DASHBOARD (SCREENSHOT 1)
+// ACADEMY GAME REPORTS DASHBOARD
 // ==========================================
 router.get(
   '/game-reports/dashboard',
@@ -1342,7 +1342,7 @@ router.get(
 );
 
 // ==========================================
-// ACADEMY VALIDATE CV DASHBOARD & NOTIFY (SCREENSHOT 4 & 5)
+// ACADEMY VALIDATE CV DASHBOARD & NOTIFY
 // ==========================================
 router.get(
   '/validate-cv/dashboard',
@@ -1375,7 +1375,7 @@ router.post(
 );
 
 // ==========================================
-// ACADEMY PLAYER EVALUATION DASHBOARD & DETAILS (SCREENSHOT 1 & 2)
+// ACADEMY PLAYER EVALUATION DASHBOARD & DETAILS
 // ==========================================
 router.get(
   '/player-evaluations/dashboard',
@@ -1421,7 +1421,7 @@ router.get(
 );
 
 // ==========================================
-// ACADEMY ANALYTICS REPORT (SCREENSHOTS 1-6)
+// ACADEMY ANALYTICS REPORT
 // ==========================================
 router.get(
   '/analytics-report/export',
@@ -1495,7 +1495,7 @@ router.get(
 );
 
 // ==========================================
-// ACADEMY MANAGEMENT DASHBOARD & ANALYTICS (SCREENSHOTS 1, 2, 3)
+// ACADEMY MANAGEMENT DASHBOARD & ANALYTICS
 // ==========================================
 router.get('/dashboard', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getAcademyManagementDashboard);
 router.get(
@@ -1535,7 +1535,7 @@ router.get(
 );
 
 // ==========================================
-// CVS LIBRARY (SCREENSHOT 1)
+// CVS LIBRARY
 // ==========================================
 router.get('/cvs-library', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getCvsLibrary);
 router.post('/cvs-library/:playerId/like', auth('ACADEMY', 'SUPER_ADMIN'), toggleLikePlayerCv);
@@ -1558,7 +1558,7 @@ router.get('/players/share/:playerId', getPublicPlayerCv);
 router.get('/public-cv/:playerId', getPublicPlayerCv);
 
 // ==========================================
-// PERFORMANCE ANALYTICS (SCREENSHOTS 2, 3, 4)
+// PERFORMANCE ANALYTICS
 // ==========================================
 router.get(
   '/analytics/performance',

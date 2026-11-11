@@ -136,22 +136,19 @@ router.get(
 );
 router.post(
   '/me/player-evaluations/:id/submit',
-  auth('COACH', 'SUPER_ADMIN'),
-  requireCoachSubscription(),
+  auth('COACH', 'ACADEMY', 'SUPER_ADMIN'),
   validateRequest(submitPlayerEvaluationZodSchema),
   submitPlayerEvaluation,
 );
 router.post(
   '/me/player-evaluations/submit',
-  auth('COACH', 'SUPER_ADMIN'),
-  requireCoachSubscription(),
+  auth('COACH', 'ACADEMY', 'SUPER_ADMIN'),
   validateRequest(submitPlayerEvaluationZodSchema),
   submitPlayerEvaluation,
 );
 router.post(
   '/players/:playerId/evaluate',
-  auth('COACH', 'SUPER_ADMIN'),
-  requireCoachSubscription(),
+  auth('COACH', 'ACADEMY', 'SUPER_ADMIN'),
   validateRequest(submitPlayerEvaluationZodSchema),
   submitPlayerEvaluation,
 );

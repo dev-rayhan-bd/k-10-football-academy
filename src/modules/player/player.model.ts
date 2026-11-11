@@ -121,6 +121,10 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
       currentClub: { type: String, default: '' },
       contractUntil: { type: Date },
       marketValue: { type: Number, default: 0 },
+      overallRating: { type: Number },
+      lastEvaluationDate: { type: Date },
+      nextEvaluationDue: { type: Date },
+      evaluationCycle: { type: String, default: '3_MONTHS' },
     },
     coachVerification: {
       isVerified: { type: Boolean, default: false },

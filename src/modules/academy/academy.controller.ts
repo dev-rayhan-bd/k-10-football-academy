@@ -853,7 +853,7 @@ export const unlinkPlayerFromParent = catchAsync(async (req: Request, res: Respo
 });
 
 // ==========================================
-// FEES & PAYMENTS CONTROLLERS (SCREENSHOT 1)
+// FEES & PAYMENTS CONTROLLERS
 // ==========================================
 
 export const getFeesPayments = catchAsync(async (req: Request, res: Response) => {
@@ -914,7 +914,7 @@ export const getFeesPaymentsExport = catchAsync(async (req: Request, res: Respon
 });
 
 // ==========================================
-// FINANCE COMMITTEE CONTROLLERS (SCREENSHOT 2)
+// FINANCE COMMITTEE CONTROLLERS
 // ==========================================
 
 export const getFinanceCommittee = catchAsync(async (req: Request, res: Response) => {
@@ -1039,7 +1039,7 @@ export const deleteMatch = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// ACADEMY EXTRA EVENTS CONTROLLERS (SCREENSHOTS)
+// ACADEMY EXTRA EVENTS CONTROLLERS
 // ==========================================
 
 export const getExtraEventsMeta = catchAsync(async (req: Request, res: Response) => {
@@ -1199,7 +1199,7 @@ export const registerForExtraEvent = catchAsync(async (req: Request, res: Respon
 });
 
 // ==========================================
-// TOURNAMENT & LIVE ARENA CONTROLLERS (SCREENSHOTS)
+// TOURNAMENT & LIVE ARENA CONTROLLERS
 // ==========================================
 
 export const registerTournamentClub = catchAsync(async (req: Request, res: Response) => {
@@ -1460,7 +1460,7 @@ export const simulateTournamentStage = catchAsync(async (req: Request, res: Resp
 });
 
 // ==========================================
-// ACADEMY SPONSORS CONTROLLERS (SCREENSHOTS)
+// ACADEMY SPONSORS CONTROLLERS
 // ==========================================
 
 export const getSponsorsMeta = catchAsync(async (req: Request, res: Response) => {
@@ -1539,7 +1539,7 @@ export const deleteSponsor = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// ACADEMY NEWS CONTROLLERS (SCREENSHOTS)
+// ACADEMY NEWS CONTROLLERS
 // ==========================================
 
 export const getAcademyNewsMeta = catchAsync(async (req: Request, res: Response) => {
@@ -1725,7 +1725,7 @@ export const deleteNewsPermanently = catchAsync(async (req: Request, res: Respon
 });
 
 // ==========================================
-// ACADEMY SUCCESS STORY CONTROLLERS (SCREENSHOTS)
+// ACADEMY SUCCESS STORY CONTROLLERS
 // ==========================================
 
 export const getSuccessStoriesMeta = catchAsync(async (req: Request, res: Response) => {
@@ -1892,7 +1892,7 @@ export const deleteSuccessStory = catchAsync(async (req: Request, res: Response)
 });
 
 // ==========================================
-// ACADEMY GAME REPORTS & VALIDATE CV CONTROLLERS (SCREENSHOTS)
+// ACADEMY GAME REPORTS & VALIDATE CV CONTROLLERS
 // ==========================================
 
 export const getAcademyGameReportsDashboard = catchAsync(async (req: Request, res: Response) => {
@@ -1940,7 +1940,7 @@ export const notifyCoachForCvValidation = catchAsync(async (req: Request, res: R
 });
 
 // ==========================================
-// ACADEMY PLAYER EVALUATIONS (SCREENSHOT 1 & 2)
+// ACADEMY PLAYER EVALUATIONS
 // ==========================================
 
 export const getAcademyPlayerEvaluationDashboard = catchAsync(
@@ -1989,7 +1989,7 @@ export const getAcademyPlayerEvaluationPdfData = catchAsync(async (req: Request,
 });
 
 // ==========================================
-// ACADEMY ANALYTICS REPORT CONTROLLERS (SCREENSHOTS 1-6)
+// ACADEMY ANALYTICS REPORT CONTROLLERS
 // ==========================================
 
 export const getAcademyAnalyticsReport = catchAsync(async (req: Request, res: Response) => {

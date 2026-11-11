@@ -5,6 +5,7 @@ import { AcademyProfile, PlayerEvaluation, AcademyCoach } from '../academy.model
 import { NotificationService } from '@/modules/notification/notification.service';
 import { PlayerProfile, PlayerAttributes } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
 
 const notificationService = new NotificationService();
 
@@ -397,7 +398,7 @@ export class AcademyEvaluationsService {
           day: 'numeric',
           year: 'numeric',
         })
-      : new Date(new Date(evalDate).getTime() + 120 * 24 * 60 * 60 * 1000).toLocaleDateString(
+      : new Date(new Date(evalDate).getTime() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString(
           'en-US',
           {
             month: 'short',
@@ -409,7 +410,7 @@ export class AcademyEvaluationsService {
     const rawRating = evaluation?.overallRating || player?.overallRating || 0;
     const ratingOutOf10 = rawRating > 10 ? +(rawRating / 10).toFixed(1) : +rawRating.toFixed(1);
 
-    // Standard list for TECHNICAL skills (matching Screenshot 2)
+    // Standard list for TECHNICAL skills
     const technicalSkillsConfig = [
       { key: 'dribbling', label: 'Dribbling' },
       { key: 'ballMastery', label: 'Ball Mastery' },
@@ -430,7 +431,7 @@ export class AcademyEvaluationsService {
       };
     });
 
-    // Standard list for MENTAL skills (matching Screenshot 2)
+    // Standard list for MENTAL skills
     const mentalSkillsConfig = [
       { key: 'gameAwareness', label: 'Game Awareness' },
       { key: 'gamesUnderstanding', label: 'Games Understanding' },
@@ -482,7 +483,7 @@ export class AcademyEvaluationsService {
       evaluationId: evaluation?._id || targetId,
       evaluationDate: evalDate,
       formattedDate,
-      cycle: '4-Month Progress Evaluation',
+      cycle: '3-Month Progress Evaluation',
       status: evaluation?.status || 'EVALUATED',
       nextEvaluationDue: nextDue,
       overallRating: ratingOutOf10,
@@ -559,7 +560,7 @@ export class AcademyEvaluationsService {
     const overdue: any[] = [];
 
     for (const item of evaluations) {
-      // Auto check expiration (4-month cycle)
+      // Auto check expiration (3-month cycle)
       if (item.expiresAt && new Date(item.expiresAt) < now && item.status !== 'EXPIRED') {
         item.status = 'EXPIRED';
         item.save().catch(() => {});
@@ -580,7 +581,7 @@ export class AcademyEvaluationsService {
         evaluatedCount: evaluated.length,
         dueCount: due.length,
         overdueCount: overdue.length,
-        evaluationCycleMonths: 4,
+        evaluationCycleMonths: 3,
       },
       due,
       overdue,
@@ -628,9 +629,9 @@ export class AcademyEvaluationsService {
       );
     }
 
-    // 4-month expiration deadline
+    // 3-month expiration deadline
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 120 * 24 * 60 * 60 * 1000); // 120 days = 4 months
+    const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days = 3 months
 
     const evaluation = await PlayerEvaluation.create({
       academyId: academy._id,
@@ -640,7 +641,7 @@ export class AcademyEvaluationsService {
       nextEvaluationDue: now,
       expiresAt,
       requestedByManagerId: new Types.ObjectId(managerUserId),
-      notes: payload.notes || '4-month official academy player evaluation requested by management.',
+      notes: payload.notes || '3-month official academy player evaluation requested by management.',
     });
 
     // Notify Coach
@@ -723,11 +724,24 @@ export class AcademyEvaluationsService {
       payload.overallRating ||
       Math.round((payload.technicalScore + payload.physicalScore + payload.mentalScore) / 3);
 
+    // Calculate improvementDelta compared to the previous evaluation (if any)
+    const previousEvaluation = await PlayerEvaluation.findOne({
+      playerId: evaluation.playerId,
+      _id: { $ne: evaluation._id },
+      status: 'EVALUATED',
+    }).sort({ evaluationDate: -1, createdAt: -1 });
+
+    const improvementDelta =
+      previousEvaluation?.overallRating !== undefined
+        ? overallRating - previousEvaluation.overallRating
+        : 0;
+
     const now = new Date();
-    const nextDue = new Date(now.getTime() + 120 * 24 * 60 * 60 * 1000); // 4 months cycle
+    const nextDue = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 3 months cycle (90 days)
 
     evaluation.evaluationDate = now;
     evaluation.overallRating = overallRating;
+    evaluation.improvementDelta = improvementDelta;
     evaluation.technicalScore = payload.technicalScore;
     evaluation.physicalScore = payload.physicalScore;
     evaluation.mentalScore = payload.mentalScore;
@@ -749,17 +763,30 @@ export class AcademyEvaluationsService {
       { upsert: true },
     );
 
-    // Notify player and manager
+    // Update PlayerProfile with evaluation data and next due date
     const player = await PlayerProfile.findById(evaluation.playerId);
-    if (player && player.userId) {
-      await notificationService.createNotification({
-        recipientId: player.userId,
-        recipientRole: 'PLAYER',
-        title: 'Player Evaluation Completed',
-        message: `Coach ${coach.fullName} has completed your official 4-month evaluation. Rating: ${overallRating}/100.`,
-        type: 'PLAYER_EVALUATION_COMPLETED',
-        data: { evaluationId: evaluation._id, overallRating },
-      });
+    if (player) {
+      player.overallRating = overallRating;
+      player.playerEvaluation = {
+        ...(player.playerEvaluation || {}),
+        lastEvaluationDate: now,
+        nextEvaluationDue: nextDue,
+        overallRating,
+        evaluationCycle: '3_MONTHS',
+      };
+      await player.save();
+      await playerCacheService.invalidatePlayerCache(player._id, player.userId);
+
+      if (player.userId) {
+        await notificationService.createNotification({
+          recipientId: player.userId,
+          recipientRole: 'PLAYER',
+          title: 'Player Evaluation Completed',
+          message: `Coach ${coach.fullName} has completed your official 3-month evaluation. Rating: ${overallRating}/100.`,
+          type: 'PLAYER_EVALUATION_COMPLETED',
+          data: { evaluationId: evaluation._id, overallRating },
+        });
+      }
     }
 
     return evaluation;

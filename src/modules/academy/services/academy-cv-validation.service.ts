@@ -48,7 +48,7 @@ export class AcademyCvValidationService {
     const defaultCoachName = (defaultAcademyCoach?.coachId as any)?.fullName || '';
     const defaultCoachId = (defaultAcademyCoach?.coachId as any)?._id || null;
 
-    // 3. Metrics Cards: Total, Gold, Silver, Bronze (Screenshot 4)
+    // 3. Metrics Cards: Total, Gold, Silver, Bronze
     let goldCount = 0;
     let silverCount = 0;
     let bronzeCount = 0;

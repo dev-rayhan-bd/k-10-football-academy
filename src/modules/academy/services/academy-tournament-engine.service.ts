@@ -311,7 +311,7 @@ export class AcademyTournamentEngineService {
       });
     }
 
-    // Initialize Bracket Tree (Screenshot Structure)
+    // Initialize Bracket Tree
     const bracket: any = {
       semifinals: [
         {

@@ -546,9 +546,9 @@ export const getPlayerEvaluationDetails = catchAsync(async (req: Request, res: R
 });
 
 export const submitPlayerEvaluation = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId;
+  const user = (req as any).user;
   const { id } = req.params;
-  const result = await coachService.submitPlayerEvaluation(userId, id, req.body);
+  const result = await coachService.submitPlayerEvaluation(user, id, req.body);
   sendResponse(res, {
     statusCode: 200,
     success: true,

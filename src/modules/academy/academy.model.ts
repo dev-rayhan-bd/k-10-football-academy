@@ -263,7 +263,7 @@ export const TransferRequest = model<ITransferRequestDocument>(
 );
 
 // ==========================================
-// FEES & PAYMENTS SCHEMA (SCREENSHOT 1)
+// FEES & PAYMENTS SCHEMA
 // ==========================================
 const AcademyFeePaymentSchema = new Schema<IAcademyFeePaymentDocument>(
   {
@@ -298,7 +298,7 @@ export const AcademyFeePayment = model<IAcademyFeePaymentDocument>(
 );
 
 // ==========================================
-// FINANCE COMMITTEE SCHEMA (SCREENSHOT 2)
+// FINANCE COMMITTEE SCHEMA
 // ==========================================
 const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDocument>(
   {
@@ -409,7 +409,7 @@ AcademyMatchSchema.index({ ourTeamId: 1, matchDate: 1 });
 export const AcademyMatch = model<IAcademyMatchDocument>('AcademyMatch', AcademyMatchSchema);
 
 // ==========================================
-// EXTRA EVENTS & TOURNAMENT SCHEMAS & MODEL (SCREENSHOTS)
+// EXTRA EVENTS & TOURNAMENT SCHEMAS & MODEL
 // ==========================================
 const ExtraEventParticipantSchema = new Schema<IExtraEventParticipant>(
   {
@@ -684,7 +684,7 @@ ExtraEventSchema.index({ academyId: 1, status: 1 });
 export const ExtraEvent = model<IExtraEventDocument>('ExtraEvent', ExtraEventSchema);
 
 // ==========================================
-// ACADEMY SPONSORS SCHEMA & MODEL (SCREENSHOTS)
+// ACADEMY SPONSORS SCHEMA & MODEL
 // ==========================================
 export const AcademySponsorSchema = new Schema<IAcademySponsorDocument>(
   {
@@ -785,7 +785,7 @@ export const AcademySponsor = model<IAcademySponsorDocument>(
 );
 
 // ==========================================
-// ACADEMY NEWS SCHEMA & MODEL (SCREENSHOTS)
+// ACADEMY NEWS SCHEMA & MODEL
 // ==========================================
 export const AcademyNewsSchema = new Schema<IAcademyNewsDocument>(
   {
@@ -861,7 +861,7 @@ AcademyNewsSchema.index({ academyId: 1, isDeleted: 1 });
 export const AcademyNews = model<IAcademyNewsDocument>('AcademyNews', AcademyNewsSchema);
 
 // ==========================================
-// ACADEMY SUCCESS STORY MODEL (SCREENSHOTS)
+// ACADEMY SUCCESS STORY MODEL
 // ==========================================
 const AcademySuccessStorySchema = new Schema<IAcademySuccessStoryDocument>(
   {

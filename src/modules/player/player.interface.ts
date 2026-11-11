@@ -120,6 +120,11 @@ export interface IPlayerProfile {
     marketValue?: number;
     marketValueFormatted?: string;
     canSpecifyMarketValue?: boolean;
+    overallRating?: number;
+    lastEvaluationDate?: Date | string;
+    nextEvaluationDue?: Date | string;
+    evaluationCycle?: string;
+    latestEvaluation?: any;
   };
   coachVerification?: {
     isVerified?: boolean;

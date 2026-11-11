@@ -29,7 +29,7 @@ router.get('/:academyId/teams', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getTeam
 router.get('/coaches', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getCoachesDropdown);
 router.get('/:academyId/coaches', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getCoachesDropdown);
 
-// Session List / Grid (Screenshot 1)
+// Session List / Grid
 router.get('/', auth('ACADEMY', 'COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'), getTrainingSessions);
 router.get(
   '/academy/:academyId',
@@ -42,7 +42,7 @@ router.get(
   getTrainingSessions,
 );
 
-// Create Session (Screenshots 2, 3, 4)
+// Create Session
 router.post(
   '/',
   auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
@@ -56,7 +56,7 @@ router.post(
   createTrainingSession,
 );
 
-// Attendance Sheet & Save Attendance (Screenshot 5)
+// Attendance Sheet & Save Attendance
 router.get('/:sessionId/attendance', auth('ACADEMY', 'COACH', 'SUPER_ADMIN'), getSessionAttendance);
 router.put(
   '/:sessionId/attendance',

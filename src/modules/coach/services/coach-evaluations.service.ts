@@ -3,7 +3,7 @@ import { AppError } from '@/utils/AppError';
 import { UserModel } from '@/modules/user/user.model';
 import { CoachProfile } from '../coach.model';
 import { PlayerProfile, PlayerAttributes } from '@/modules/player/player.model';
-import { PlayerEvaluation } from '@/modules/academy/academy.model';
+import { PlayerEvaluation, AcademyProfile } from '@/modules/academy/academy.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { NotificationService } from '@/modules/notification/notification.service';
 
@@ -106,14 +106,33 @@ export class CoachEvaluationsService {
 
     let pendingCount = 0;
     let evaluatedCount = 0;
+    let expiredCount = 0;
+    const now = new Date();
 
     const mappedPlayers = allMatchingPlayers.map((p) => {
       const latestEval = evalMap.get(p._id.toString());
-      const isEvaluated = latestEval && latestEval.status === 'EVALUATED';
+      const hasEvaluation =
+        !!latestEval && (latestEval.status === 'EVALUATED' || !!latestEval.evaluationDate);
 
-      if (isEvaluated) {
-        evaluatedCount++;
+      let isEvaluated = false;
+      let isExpired = false;
+      let isPending = false;
+      let status: 'EVALUATED' | 'PENDING' | 'EXPIRED';
+
+      if (hasEvaluation) {
+        const dueDate = latestEval.nextEvaluationDue || latestEval.expiresAt;
+        if (dueDate && new Date(dueDate).getTime() < now.getTime()) {
+          isExpired = true;
+          status = 'EXPIRED';
+          expiredCount++;
+        } else {
+          isEvaluated = true;
+          status = 'EVALUATED';
+          evaluatedCount++;
+        }
       } else {
+        isPending = true;
+        status = 'PENDING';
         pendingCount++;
       }
 
@@ -141,8 +160,13 @@ export class CoachEvaluationsService {
         rating,
         academy: p.currentClub || coach.currentClub || 'N/A',
         lastEvaluated: lastEvaluatedStr,
-        status: isEvaluated ? 'EVALUATED' : 'PENDING',
-        nextEvaluationDue: latestEval?.nextEvaluationDue || null,
+        lastEvaluationDate: latestEval?.evaluationDate || null,
+        status,
+        isEvaluated,
+        isPending,
+        isExpired,
+        nextEvaluationDue: latestEval?.nextEvaluationDue || latestEval?.expiresAt || null,
+        overallRating: rating,
       };
     });
 
@@ -152,6 +176,8 @@ export class CoachEvaluationsService {
       filteredList = mappedPlayers.filter((p) => p.status === 'EVALUATED');
     } else if (statusFilter === 'PENDING') {
       filteredList = mappedPlayers.filter((p) => p.status === 'PENDING');
+    } else if (statusFilter === 'EXPIRED') {
+      filteredList = mappedPlayers.filter((p) => p.status === 'EXPIRED');
     }
 
     const totalCount = filteredList.length;
@@ -168,8 +194,11 @@ export class CoachEvaluationsService {
       },
       data: {
         summary: {
+          total: mappedPlayers.length,
           pendingCount,
           evaluatedCount,
+          expiredCount,
+          overdueCount: expiredCount,
         },
         players: paginatedPlayers,
       },
@@ -313,7 +342,7 @@ export class CoachEvaluationsService {
           month: 'long',
           year: 'numeric',
         })
-      : new Date(new Date(evalDate).getTime() + 120 * 24 * 60 * 60 * 1000).toLocaleDateString(
+      : new Date(new Date(evalDate).getTime() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString(
           'en-GB',
           {
             day: 'numeric',
@@ -336,7 +365,7 @@ export class CoachEvaluationsService {
       evaluationId: evaluation?._id || targetId,
       evaluationDate: evalDate,
       formattedDate,
-      cycle: '4-Month Progress Evaluation',
+      cycle: '3-Month Progress Evaluation',
       status: evaluation?.status || 'COMPLETED',
       nextEvaluationDue: nextDue,
       overallRating,
@@ -384,10 +413,23 @@ export class CoachEvaluationsService {
     };
   }
 
-  async submitPlayerEvaluation(userId: string, targetId: string, payload: any) {
+  async submitPlayerEvaluation(userOrUserId: any, targetId: string, payload: any) {
+    const userId = typeof userOrUserId === 'string' ? userOrUserId : userOrUserId?.userId;
+    const userRole = typeof userOrUserId === 'object' ? userOrUserId?.role : undefined;
+
     const coach = await CoachProfile.findOne({ userId });
-    if (!coach) {
-      throw new AppError(404, 'Coach profile not found');
+    let academy = null;
+
+    if (!coach && (userRole === 'ACADEMY' || userRole === 'SUPER_ADMIN')) {
+      academy = await AcademyProfile.findOne({ userId });
+    }
+
+    if (!coach && !academy) {
+      // Check if user is academy user
+      academy = await AcademyProfile.findOne({ userId });
+      if (!academy) {
+        throw new AppError(404, 'Coach or Academy profile not found');
+      }
     }
 
     let evaluation: any = null;
@@ -413,16 +455,20 @@ export class CoachEvaluationsService {
     }
 
     if (!evaluation) {
-      evaluation = await PlayerEvaluation.findOne({
-        playerId: player._id,
-        coachId: coach._id,
-        status: { $in: ['NEED_EVALUATION', 'PENDING'] },
-      });
+      const evalFilter: any = { playerId: player._id };
+      if (coach) {
+        evalFilter.coachId = coach._id;
+      } else if (academy) {
+        evalFilter.academyId = academy._id;
+      }
+      evalFilter.status = { $in: ['NEED_EVALUATION', 'PENDING'] };
+
+      evaluation = await PlayerEvaluation.findOne(evalFilter);
       if (!evaluation) {
         evaluation = new PlayerEvaluation({
           playerId: player._id,
-          coachId: coach._id,
-          academyId: coach.academyId || player.academyId,
+          coachId: coach ? coach._id : player.verifyingCoachId || new Types.ObjectId(),
+          academyId: academy ? academy._id : coach?.academyId || player.academyId,
           status: 'NEED_EVALUATION',
         });
       }
@@ -478,11 +524,26 @@ export class CoachEvaluationsService {
     const overallRating =
       payload.overallRating || Math.round((technicalScore + mentalScore + physicalScore) / 3);
 
+    // Calculate improvementDelta compared to the previous evaluation (if any)
+    const previousEvaluation = await PlayerEvaluation.findOne({
+      playerId: player._id,
+      _id: { $ne: evaluation._id },
+      status: 'EVALUATED',
+    }).sort({ evaluationDate: -1, createdAt: -1 });
+
+    const improvementDelta =
+      previousEvaluation?.overallRating !== undefined
+        ? overallRating - previousEvaluation.overallRating
+        : player.overallRating
+          ? overallRating - player.overallRating
+          : 0;
+
     const now = new Date();
-    const nextDue = new Date(now.getTime() + 120 * 24 * 60 * 60 * 1000); // 4-month cycle
+    const nextDue = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 3-month cycle (90 days)
 
     evaluation.evaluationDate = now;
     evaluation.overallRating = overallRating;
+    evaluation.improvementDelta = improvementDelta;
     evaluation.technicalScore = technicalScore;
     evaluation.mentalScore = mentalScore;
     evaluation.physicalScore = physicalScore;
@@ -498,11 +559,13 @@ export class CoachEvaluationsService {
 
     // Update player profile
     player.overallRating = overallRating;
-    if (!player.playerEvaluation) {
-      player.playerEvaluation = {} as any;
-    }
-    (player.playerEvaluation as any).lastEvaluationDate = now;
-    (player.playerEvaluation as any).overallRating = overallRating;
+    player.playerEvaluation = {
+      ...(player.playerEvaluation || {}),
+      lastEvaluationDate: now,
+      nextEvaluationDue: nextDue,
+      overallRating,
+      evaluationCycle: '3_MONTHS',
+    };
     await player.save();
     await playerCacheService.invalidatePlayerCache(player._id, player.userId);
 
@@ -520,11 +583,12 @@ export class CoachEvaluationsService {
 
     // Notify player
     if (player.userId) {
+      const evaluatorName = coach?.fullName || academy?.name || 'Academy Staff';
       await notificationService.createNotification({
         recipientId: player.userId,
         recipientRole: 'PLAYER',
         title: 'Player Development Report Completed',
-        message: `Coach ${coach.fullName} has completed your Player Development Programme progress evaluation. Overall Rating: ${overallRating}/100.`,
+        message: `${evaluatorName} has completed your Player Development Programme progress evaluation. Overall Rating: ${overallRating}/100.`,
         type: 'PLAYER_EVALUATION_COMPLETED',
         data: { evaluationId: evaluation._id, overallRating },
       });

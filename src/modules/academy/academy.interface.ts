@@ -200,7 +200,7 @@ export interface ITransferRequest {
 export interface ITransferRequestDocument extends ITransferRequest, Document {}
 
 // ==========================================
-// FEES & PAYMENTS INTERFACE (SCREENSHOT 1)
+// FEES & PAYMENTS INTERFACE
 // ==========================================
 export type FeePaymentType =
   | 'Monthly Fee'
@@ -230,7 +230,7 @@ export interface IAcademyFeePayment {
 export interface IAcademyFeePaymentDocument extends IAcademyFeePayment, Document {}
 
 // ==========================================
-// FINANCE COMMITTEE INTERFACE (SCREENSHOT 2)
+// FINANCE COMMITTEE INTERFACE
 // ==========================================
 export type FinanceTransactionType =
   'Game Report' | 'Parent Match Report' | 'CV Validation' | 'Commission' | string;
@@ -300,7 +300,7 @@ export interface IAcademyMatch {
 export interface IAcademyMatchDocument extends IAcademyMatch, Document {}
 
 // ==========================================
-// EXTRA EVENTS & TOURNAMENT INTERFACES (SCREENSHOTS)
+// EXTRA EVENTS & TOURNAMENT INTERFACES
 // ==========================================
 export type ExtraEventStatus = 'OPEN' | 'CLOSING SOON' | 'CLOSED';
 export type TournamentStatus = 'REGISTRATION' | 'LIVE GAME' | 'COMPLETED';
@@ -483,7 +483,7 @@ export interface IExtraEvent {
 export interface IExtraEventDocument extends IExtraEvent, Document {}
 
 // ==========================================
-// ACADEMY SPONSORS INTERFACES (SCREENSHOTS)
+// ACADEMY SPONSORS INTERFACES
 // ==========================================
 export type SponsorshipType =
   | 'EQUIPMENT'
@@ -524,7 +524,7 @@ export interface IAcademySponsor {
 export interface IAcademySponsorDocument extends IAcademySponsor, Document {}
 
 // ==========================================
-// ACADEMY NEWS INTERFACES (SCREENSHOTS)
+// ACADEMY NEWS INTERFACES
 // ==========================================
 export type NewsStatus = 'PUBLISHED' | 'DRAFT' | 'BIN';
 export type NewsVisibility = 'PUBLIC' | 'PRIVATE';
@@ -555,7 +555,7 @@ export interface IAcademyNews {
 export interface IAcademyNewsDocument extends IAcademyNews, Document {}
 
 // ==========================================
-// ACADEMY SUCCESS STORY INTERFACES (SCREENSHOTS)
+// ACADEMY SUCCESS STORY INTERFACES
 // ==========================================
 export type SuccessStoryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 

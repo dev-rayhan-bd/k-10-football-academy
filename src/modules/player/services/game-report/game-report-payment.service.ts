@@ -17,6 +17,7 @@ import { redisClient } from '@/config/redis';
 import { resolveOrCreatePlayerProfile } from './game-report.utils';
 import { gameReportAccessLinkService } from './game-report-access-link.service';
 import { gameReportPdfService } from './game-report-pdf.service';
+import { subscriptionService } from '@/modules/subscription/subscription.service';
 
 export class GameReportPaymentService {
   /**
@@ -348,8 +349,24 @@ export class GameReportPaymentService {
           }
 
           if (academy) {
+            let hasActiveSubscription = false;
+            if (academy.userId) {
+              try {
+                const sub = await subscriptionService.getUserSubscription(String(academy.userId));
+                hasActiveSubscription = Boolean(sub?.hasActiveSubscription);
+              } catch {
+                hasActiveSubscription = false;
+              }
+            }
+
             const cost = updatedRecord.coachReview?.paymentAmount || 3.99;
-            const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
+            // Feature Lock: If Academy has active subscription (UNLOCKED), they receive $1.00 commission.
+            // If subscription is inactive/locked (LOCKED), commission stays 100% with K10 Platform ($0.00 to Academy).
+            const commissionAcademy = hasActiveSubscription
+              ? cost === 3.99
+                ? 1.0
+                : parseFloat((cost * 0.4).toFixed(2))
+              : 0.0;
             const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
             await AcademyFinanceTransaction.findOneAndUpdate(
@@ -362,11 +379,13 @@ export class GameReportPaymentService {
                 transactionType: 'Game Report',
                 cost,
                 commissionAcademy,
-                payoutStatus: 'PENDING_TRANSFER',
-                payoutStatusAcademy: 'PENDING',
+                payoutStatus: hasActiveSubscription ? 'PENDING_TRANSFER' : 'COMMISSION_LOCKED',
+                payoutStatusAcademy: hasActiveSubscription ? 'PENDING' : 'LOCKED_NO_SUBSCRIPTION',
                 transactionDate: new Date(),
                 status: 'COMPLETED',
-                notes: `Stripe payment received by K10 Platform (${transactionId || 'session'}). K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy} (Awaiting Admin Payout)`,
+                notes: hasActiveSubscription
+                  ? `Stripe payment received by K10 Platform (${transactionId || 'session'}). Academy Subscription UNLOCKED: K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy} (Awaiting Admin Payout)`
+                  : `Stripe payment received by K10 Platform (${transactionId || 'session'}). Academy Subscription LOCKED: 100% Retained by K10 Platform ($${k10Commission}), Academy Share: $0.00`,
               },
               { upsert: true, new: true, session },
             );
@@ -428,8 +447,24 @@ export class GameReportPaymentService {
           }
 
           if (academy) {
+            let hasActiveSubscription = false;
+            if (academy.userId) {
+              try {
+                const sub = await subscriptionService.getUserSubscription(String(academy.userId));
+                hasActiveSubscription = Boolean(sub?.hasActiveSubscription);
+              } catch {
+                hasActiveSubscription = false;
+              }
+            }
+
             const cost = updatedRecord.coachReview?.paymentAmount || 3.99;
-            const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
+            // Feature Lock: If Academy has active subscription (UNLOCKED), they receive $1.00 commission.
+            // If subscription is inactive/locked (LOCKED), commission stays 100% with K10 Platform ($0.00 to Academy).
+            const commissionAcademy = hasActiveSubscription
+              ? cost === 3.99
+                ? 1.0
+                : parseFloat((cost * 0.4).toFixed(2))
+              : 0.0;
             const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
             await AcademyFinanceTransaction.findOneAndUpdate(
@@ -442,11 +477,13 @@ export class GameReportPaymentService {
                 transactionType: 'Game Report',
                 cost,
                 commissionAcademy,
-                payoutStatus: 'PENDING_TRANSFER',
-                payoutStatusAcademy: 'PENDING',
+                payoutStatus: hasActiveSubscription ? 'PENDING_TRANSFER' : 'COMMISSION_LOCKED',
+                payoutStatusAcademy: hasActiveSubscription ? 'PENDING' : 'LOCKED_NO_SUBSCRIPTION',
                 transactionDate: new Date(),
                 status: 'COMPLETED',
-                notes: `Stripe payment received by K10 Platform (${transactionId || 'session'}). K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy} (Awaiting Admin Payout)`,
+                notes: hasActiveSubscription
+                  ? `Stripe payment received by K10 Platform (${transactionId || 'session'}). Academy Subscription UNLOCKED: K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy} (Awaiting Admin Payout)`
+                  : `Stripe payment received by K10 Platform (${transactionId || 'session'}). Academy Subscription LOCKED: 100% Retained by K10 Platform ($${k10Commission}), Academy Share: $0.00`,
               },
               { upsert: true, new: true },
             );

@@ -7,6 +7,7 @@ import { UserModel } from '@/modules/user/user.model';
 import { Notification } from '@/modules/notification/notification.model';
 import { notificationService } from '@/modules/notification/notification.service';
 import { PlatformPayment } from '@/modules/admin/admin.model';
+import { AcademyProfile, AcademyFinanceTransaction } from '@/modules/academy/academy.model';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 
@@ -192,6 +193,30 @@ export class SubscriptionService {
         type: 'PAYMENT',
         data: { userId: user._id, subscriptionId: subscription._id, planId },
       });
+
+      // Lift restriction & automatically unlock previous locked commissions for this Academy
+      if (user.role === 'ACADEMY') {
+        const academy = await AcademyProfile.findOne({ userId: user._id });
+        if (academy) {
+          await AcademyFinanceTransaction.updateMany(
+            {
+              academyId: academy._id,
+              transactionType: 'Game Report',
+              commissionAcademy: 0,
+              payoutStatusAcademy: 'LOCKED_NO_SUBSCRIPTION',
+            },
+            {
+              $set: {
+                commissionAcademy: 1.0,
+                payoutStatus: 'PENDING_TRANSFER',
+                payoutStatusAcademy: 'PENDING',
+                notes:
+                  'Subscription Activated: Previous $1.00 Game Report Commission has been UNLOCKED and credited to Academy balance.',
+              },
+            },
+          );
+        }
+      }
     }
 
     return subscription;

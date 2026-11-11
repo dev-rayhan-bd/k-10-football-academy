@@ -10,6 +10,7 @@ import { redisClient } from '@/config/redis';
 import { logger } from '@/utils/logger';
 import { notificationService } from '@/modules/notification/notification.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
+import { subscriptionService } from '@/modules/subscription/subscription.service';
 import { ParentProfile, ParentChild, ParentMatchReport } from '../parent.model';
 
 export class ParentMatchReportService {
@@ -514,9 +515,23 @@ export class ParentMatchReportService {
           }
 
           if (academy) {
+            let hasActiveSubscription = false;
+            if (academy.userId) {
+              try {
+                const sub = await subscriptionService.getUserSubscription(String(academy.userId));
+                hasActiveSubscription = Boolean(sub?.hasActiveSubscription);
+              } catch {
+                hasActiveSubscription = false;
+              }
+            }
+
             const cost = updatedReport.coachReviewPrice || 25.0;
-            const commissionAcademy = parseFloat((cost * 0.5).toFixed(2)); // 50% to Academy
-            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2)); // 50% to K10
+            // Feature Lock: If Academy has active subscription, they receive 50% commission.
+            // If subscription is inactive/locked, commission stays 100% with K10 Platform ($0.00 to Academy).
+            const commissionAcademy = hasActiveSubscription
+              ? parseFloat((cost * 0.5).toFixed(2))
+              : 0.0;
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
             await AcademyFinanceTransaction.findOneAndUpdate(
               { reportId: updatedReport._id },
@@ -530,7 +545,9 @@ export class ParentMatchReportService {
                 commissionAcademy,
                 transactionDate: new Date(),
                 status: 'COMPLETED',
-                notes: `Paid to K10 via Stripe (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+                notes: hasActiveSubscription
+                  ? `Paid to K10 via Stripe (${transactionId || 'session'}). Academy Subscription UNLOCKED: K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`
+                  : `Paid to K10 via Stripe (${transactionId || 'session'}). Academy Subscription LOCKED: 100% Retained by K10 Platform ($${k10Commission}), Academy Share: $0.00`,
               },
               { upsert: true, new: true, session: mongoSession },
             );
@@ -593,9 +610,23 @@ export class ParentMatchReportService {
           }
 
           if (academy) {
+            let hasActiveSubscription = false;
+            if (academy.userId) {
+              try {
+                const sub = await subscriptionService.getUserSubscription(String(academy.userId));
+                hasActiveSubscription = Boolean(sub?.hasActiveSubscription);
+              } catch {
+                hasActiveSubscription = false;
+              }
+            }
+
             const cost = updatedReport.coachReviewPrice || 25.0;
-            const commissionAcademy = parseFloat((cost * 0.5).toFixed(2)); // 50% to Academy
-            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2)); // 50% to K10
+            // Feature Lock: If Academy has active subscription, they receive 50% commission.
+            // If subscription is inactive/locked, commission stays 100% with K10 Platform ($0.00 to Academy).
+            const commissionAcademy = hasActiveSubscription
+              ? parseFloat((cost * 0.5).toFixed(2))
+              : 0.0;
+            const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
 
             await AcademyFinanceTransaction.findOneAndUpdate(
               { reportId: updatedReport._id },
@@ -609,7 +640,9 @@ export class ParentMatchReportService {
                 commissionAcademy,
                 transactionDate: new Date(),
                 status: 'COMPLETED',
-                notes: `Paid to K10 via Stripe (${transactionId || 'session'}). K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+                notes: hasActiveSubscription
+                  ? `Paid to K10 via Stripe (${transactionId || 'session'}). Academy Subscription UNLOCKED: K10 Commission: $${k10Commission}, Academy Share: $${commissionAcademy}`
+                  : `Paid to K10 via Stripe (${transactionId || 'session'}). Academy Subscription LOCKED: 100% Retained by K10 Platform ($${k10Commission}), Academy Share: $0.00`,
               },
               { upsert: true, new: true },
             );

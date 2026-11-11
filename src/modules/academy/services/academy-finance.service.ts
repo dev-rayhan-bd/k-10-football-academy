@@ -4,6 +4,7 @@ import { AcademyFeePayment, AcademyFinanceTransaction } from '../academy.model';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import { ParentMatchReport } from '@/modules/parent/parent.model';
 import { academyResolverService } from './academy-resolver.service';
+import { subscriptionService } from '@/modules/subscription/subscription.service';
 
 export class AcademyFinanceService {
   async getFeesPayments(user: any, query: any = {}, academyIdentifier?: string) {
@@ -286,6 +287,16 @@ export class AcademyFinanceService {
     const academyPlayerIds = academyPlayers.map((p) => p._id);
 
     if (academyPlayerIds.length > 0) {
+      let hasActiveSubscription = false;
+      if (academy.userId) {
+        try {
+          const sub = await subscriptionService.getUserSubscription(String(academy.userId));
+          hasActiveSubscription = Boolean(sub?.hasActiveSubscription);
+        } catch {
+          hasActiveSubscription = false;
+        }
+      }
+
       const matchReports = await MatchRecord.find({
         playerId: { $in: academyPlayerIds },
         'coachReview.paymentStatus': 'PAID',
@@ -293,7 +304,13 @@ export class AcademyFinanceService {
 
       for (const m of matchReports) {
         const cost = m.coachReview?.paymentAmount || 3.99;
-        const commissionAcademy = cost === 3.99 ? 1.0 : parseFloat((cost * 0.4).toFixed(2));
+        // Feature Lock: If Academy has active subscription (UNLOCKED), they receive $1.00 commission.
+        // If subscription is inactive/locked (LOCKED), commission stays 100% with K10 Platform ($0.00 to Academy).
+        const commissionAcademy = hasActiveSubscription
+          ? cost === 3.99
+            ? 1.0
+            : parseFloat((cost * 0.4).toFixed(2))
+          : 0.0;
         const k10Commission = parseFloat((cost - commissionAcademy).toFixed(2));
         const status =
           m.coachReview?.status === 'COMPLETED'
@@ -314,7 +331,9 @@ export class AcademyFinanceService {
             commissionAcademy,
             transactionDate: m.createdAt || m.matchDate || new Date(),
             status,
-            notes: `Stripe payment via K10 (${m.coachReview?.transactionId || 'session'}). K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy}`,
+            notes: hasActiveSubscription
+              ? `Stripe payment via K10 (${m.coachReview?.transactionId || 'session'}). Academy Subscription UNLOCKED: K10 Share: $${k10Commission}, Academy Share: $${commissionAcademy}`
+              : `Stripe payment via K10 (${m.coachReview?.transactionId || 'session'}). Academy Subscription LOCKED: 100% Retained by K10 Platform ($${k10Commission}), Academy Share: $0.00`,
           },
           { upsert: true, new: true },
         );

@@ -31,15 +31,19 @@ const app: Application = express();
 app.set('trust proxy', 1);
 
 /**
- * 2. HTTP Header & CORS Security
+ * 2. CORS & HTTP Security Headers
+ * Note: CORS must be mounted before helmet & other middlewares to ensure preflight (OPTIONS)
+ * requests receive proper Access-Control headers and 200 response immediately.
  */
+app.use(corsSecurity);
+app.options('*', corsSecurity);
+
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/docs')) {
     return next();
   }
   helmetSecurity(req, res, next);
 });
-app.use(corsSecurity);
 
 /**
  * 3. Global Rate Limiter (Redis-backed)

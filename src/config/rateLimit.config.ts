@@ -36,6 +36,7 @@ export const globalRateLimiter = rateLimit({
   max: isDev ? 5000 : 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   store: createRedisStore('global'),
   handler: (_req, _res, next) => {
     next(
@@ -55,6 +56,7 @@ export const authRateLimiter = rateLimit({
   max: isDev ? 1000 : 30, // 1000 in dev, 30 in prod
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   store: createRedisStore('auth'),
   handler: (_req, _res, next) => {
     next(
@@ -74,6 +76,7 @@ export const searchRateLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   store: createRedisStore('search'),
   handler: (_req, _res, next) => {
     next(

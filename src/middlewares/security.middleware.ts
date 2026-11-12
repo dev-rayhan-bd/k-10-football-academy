@@ -23,6 +23,7 @@ export const helmetSecurity = helmet({
       upgradeInsecureRequests: [],
     },
   },
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginEmbedderPolicy: false,
 });
 
@@ -62,31 +63,55 @@ const envAllowedOrigins = process.env.ALLOWED_ORIGINS
 
 const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
 
-logger.warn(allowedOrigins);
+/**
+ * Checks if incoming origin matches allowed patterns:
+ * - Explicit origins in allowedOrigins
+ * - Wildcard '*'
+ * - Any subdomain or root of k10football.com (e.g. k10football.com, www.k10football.com, api.k10football.com)
+ * - Any localhost / 127.0.0.1 port (for local frontend testing)
+ */
+const isAllowedOrigin = (origin?: string): boolean => {
+  // Allow non-browser requests (Postman, mobile apps, server-to-server, curl)
+  if (!origin) return true;
+
+  const normalizedOrigin = origin.trim().replace(/\/$/, '');
+
+  // Exact match or global wildcard
+  if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
+    return true;
+  }
+
+  // Allow any k10football.com domain or subdomain
+  if (/^https?:\/\/([a-zA-Z0-9-]+\.)*k10football\.com(:\d+)?$/.test(normalizedOrigin)) {
+    return true;
+  }
+
+  // Allow localhost or 127.0.0.1 on any port in development/testing
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)) {
+    return true;
+  }
+
+  return false;
+};
 
 /**
- * 4. Strict CORS Security Configuration
+ * 4. Dynamic & Robust CORS Security Configuration
+ * - Reflects origin dynamically to support credentials (cookies & auth headers)
+ * - Dynamically accepts request headers (prevents preflight failures on custom/tracing headers)
+ * - optionsSuccessStatus: 200 ensures older proxies/browsers don't fail on 204
  */
 export const corsSecurity = cors({
-  // origin: (origin, callback) => {
-  //   // Allow non-browser requests (e.g. Postman, mobile apps, server-to-server)
-  //   if (!origin) return callback(null, true);
-
-  //   const normalizedOrigin = origin.trim().replace(/\/$/, '');
-
-  //   if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
-  //     return callback(null, origin);
-  //   }
-
-  //   // In development mode, allow any localhost origin
-  //   if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-  //     return callback(null, origin);
-  //   }
-
-  //   callback(null, false);
-  // },
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      // Reflect origin back to satisfy credentials: true
+      callback(null, origin || true);
+    } else {
+      logger.warn({ origin }, 'Blocked by CORS security policy');
+      callback(null, false);
+    }
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  exposedHeaders: ['Set-Cookie', 'Authorization'],
+  optionsSuccessStatus: 200,
 });

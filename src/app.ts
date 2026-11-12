@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import fs from 'fs';
 import path from 'path';
 import YAML from 'yaml';
+import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
 import { StatusCodes } from 'http-status-codes';
 import {
@@ -83,6 +84,7 @@ app.use((err: any, req: Request, _res: Response, next: express.NextFunction) => 
   next(err);
 });
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(cookieParser());
 app.use(parseBodyData);
 
 /**

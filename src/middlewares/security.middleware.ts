@@ -62,27 +62,30 @@ const envAllowedOrigins = process.env.ALLOWED_ORIGINS
 
 const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
 
+logger.warn(allowedOrigins);
+
 /**
  * 4. Strict CORS Security Configuration
  */
 export const corsSecurity = cors({
-  origin: (origin, callback) => {
-    // Allow non-browser requests (e.g. Postman, mobile apps, server-to-server)
-    if (!origin) return callback(null, true);
+  // origin: (origin, callback) => {
+  //   // Allow non-browser requests (e.g. Postman, mobile apps, server-to-server)
+  //   if (!origin) return callback(null, true);
 
-    const normalizedOrigin = origin.trim().replace(/\/$/, '');
+  //   const normalizedOrigin = origin.trim().replace(/\/$/, '');
 
-    if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
-      return callback(null, origin);
-    }
+  //   if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
+  //     return callback(null, origin);
+  //   }
 
-    // In development mode, allow any localhost origin
-    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-      return callback(null, origin);
-    }
+  //   // In development mode, allow any localhost origin
+  //   if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+  //     return callback(null, origin);
+  //   }
 
-    callback(null, false);
-  },
+  //   callback(null, false);
+  // },
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,

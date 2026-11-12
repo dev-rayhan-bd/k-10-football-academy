@@ -170,10 +170,17 @@ export class CoachStripeConnectService {
         // Fallback to US if platform account lookup fails
       }
 
-      const countryCode = this.resolveCountryCode(
-        bodyOptions?.country || coach.stripeConnect?.country || coach.birthCountry,
-        platformCountry,
-      );
+      const targetCountry =
+        bodyOptions?.country || coach.stripeConnect?.country || coach.birthCountry;
+      let countryCode = this.resolveCountryCode(targetCountry, platformCountry);
+
+      const unsupportedByUsPlatform = ['BR', 'IN', 'ID', 'PH'];
+      if (platformCountry === 'US' && unsupportedByUsPlatform.includes(countryCode)) {
+        logger.warn(
+          `Coach ${coach.fullName} country '${countryCode}' is not supported for cross-border Express Connect by US platform. Falling back to platform country '${platformCountry}'.`,
+        );
+        countryCode = platformCountry;
+      }
 
       const nameParts = (coach.fullName || 'Official Coach').trim().split(/\s+/);
       const firstName = nameParts[0] || 'Official';

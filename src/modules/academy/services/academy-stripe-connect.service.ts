@@ -76,10 +76,20 @@ export class AcademyStripeConnectService {
         // Fallback to US if platform account lookup fails
       }
 
-      const countryCode = this.resolveCountryCode(
-        bodyOptions?.country || academy.stripeConnect?.country || academy.country,
-        platformCountry,
-      );
+      const targetCountry =
+        bodyOptions?.country || academy.stripeConnect?.country || academy.country;
+      let countryCode = this.resolveCountryCode(targetCountry, platformCountry);
+
+      // Stripe Cross-Border Connect restriction check:
+      // A US platform cannot create Express connected accounts in Brazil (BR), India (IN), etc. without custom Stripe approval.
+      // If platform is US and the country is BR, fallback to platformCountry (US) or a supported Stripe Express country.
+      const unsupportedByUsPlatform = ['BR', 'IN', 'ID', 'PH'];
+      if (platformCountry === 'US' && unsupportedByUsPlatform.includes(countryCode)) {
+        logger.warn(
+          `Academy ${academy.name} country '${countryCode}' is not supported for cross-border Express Connect by US platform. Falling back to platform country '${platformCountry}'.`,
+        );
+        countryCode = platformCountry;
+      }
 
       try {
         const account = await stripe.accounts.create({

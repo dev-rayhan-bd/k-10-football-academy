@@ -126,6 +126,15 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
     for (const file of req.files as Express.Multer.File[]) {
       if (file.fieldname === 'profileImage' || file.fieldname === 'avatar') {
         payload.profileImage = await uploadToStorage(file, 'player_profiles');
+      } else if (
+        file.fieldname === 'coverPhoto' ||
+        file.fieldname === 'coverImage' ||
+        file.fieldname === 'cover' ||
+        file.fieldname === 'banner'
+      ) {
+        const coverUrl = await uploadToStorage(file, 'player_covers');
+        payload.coverPhoto = coverUrl;
+        payload.coverImage = coverUrl;
       } else if (file.fieldname === 'highlightVideo' || file.fieldname === 'video') {
         payload.highlightVideo = await uploadToStorage(file, 'player_videos');
       } else if (
@@ -167,9 +176,24 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
       payload.clubLogo = await uploadToStorage(req.file, 'club_crests');
     } else if (req.file.fieldname === 'profileImage' || req.file.fieldname === 'avatar') {
       payload.profileImage = await uploadToStorage(req.file, 'player_profiles');
+    } else if (
+      req.file.fieldname === 'coverPhoto' ||
+      req.file.fieldname === 'coverImage' ||
+      req.file.fieldname === 'cover' ||
+      req.file.fieldname === 'banner'
+    ) {
+      const coverUrl = await uploadToStorage(req.file, 'player_covers');
+      payload.coverPhoto = coverUrl;
+      payload.coverImage = coverUrl;
     } else if (req.file.fieldname === 'highlightVideo' || req.file.fieldname === 'video') {
       payload.highlightVideo = await uploadToStorage(req.file, 'player_videos');
     }
+  }
+
+  if (payload.coverPhoto || payload.coverImage) {
+    const coverUrl = payload.coverPhoto || payload.coverImage;
+    payload.coverPhoto = coverUrl;
+    payload.coverImage = coverUrl;
   }
 
   if (typeof payload.secondaryPositions === 'string') {

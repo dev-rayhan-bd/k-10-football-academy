@@ -24,6 +24,10 @@ export const updatePlayerProfileZodSchema = z.object({
   body: z.object({
     fullName: z.string().optional(),
     position: z.string().optional(),
+    profileImage: z.string().optional(),
+    coverPhoto: z.string().optional(),
+    coverImage: z.string().optional(),
+    highlightVideo: z.string().optional(),
     secondaryPositions: z.union([z.array(z.string()), z.string()]).optional(),
     age: z.union([z.number(), z.string()]).optional(),
     dateOfBirth: z.string().or(z.date()).optional(),

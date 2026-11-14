@@ -247,6 +247,8 @@ export class PlayerCvPipelineService {
             age: user.age || 18,
             country: user.country || 'Bangladesh',
             profileImage: user.avatar || '',
+            coverPhoto: user.coverPhoto || '',
+            coverImage: user.coverPhoto || '',
           });
           await PlayerAttributes.findOneAndUpdate(
             { playerId: newProfile._id },

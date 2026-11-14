@@ -35,6 +35,8 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     cvTier: { type: String, enum: ['BRONZE', 'SILVER', 'GOLD'], default: 'BRONZE' },
     profileCompletion: { type: Number, default: 0 },
     profileImage: { type: String },
+    coverPhoto: { type: String },
+    coverImage: { type: String },
     highlightVideo: { type: String },
     height: { type: Number },
     weight: { type: Number },

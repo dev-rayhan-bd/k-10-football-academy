@@ -819,6 +819,17 @@ export class PlayerCvTransformerService {
     const finalProfile = {
       ...profileObj,
       playerId: aggregatedProfile._id,
+      coverPhoto:
+        aggregatedProfile.coverPhoto ||
+        aggregatedProfile.coverImage ||
+        aggregatedProfile.user?.coverPhoto ||
+        '',
+      coverImage:
+        aggregatedProfile.coverPhoto ||
+        aggregatedProfile.coverImage ||
+        aggregatedProfile.user?.coverPhoto ||
+        '',
+      profileImage: aggregatedProfile.profileImage || aggregatedProfile.user?.avatar || '',
       totalLikes,
       profileViews,
       age: accurateAge,

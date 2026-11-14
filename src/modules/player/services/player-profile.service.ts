@@ -224,6 +224,8 @@ export class PlayerProfileService {
 
     const result = rawResult.map((p: any) => {
       const obj = p.toObject ? p.toObject() : p;
+      obj.coverPhoto = obj.coverPhoto || obj.coverImage || '';
+      obj.coverImage = obj.coverPhoto || obj.coverImage || '';
       const card = fifaCardMap.get(obj._id?.toString());
       const favCount = favMap.get(obj._id?.toString()) || 0;
       obj.totalLikes = Math.max(obj.totalLikes ?? 0, favCount);
@@ -287,6 +289,8 @@ export class PlayerProfileService {
             age: payload.age || user.age || 18,
             country: payload.country || user.country || 'Bangladesh',
             profileImage: user.avatar || '',
+            coverPhoto: user.coverPhoto || '',
+            coverImage: user.coverPhoto || '',
           });
           await PlayerAttributes.findOneAndUpdate(
             { playerId: existing._id },
@@ -384,6 +388,12 @@ export class PlayerProfileService {
       userUpdates.name = nameVal;
     }
     if (payload.profileImage) userUpdates.avatar = payload.profileImage;
+    if (payload.coverPhoto || payload.coverImage) {
+      const coverVal = payload.coverPhoto || payload.coverImage;
+      payload.coverPhoto = coverVal;
+      payload.coverImage = coverVal;
+      userUpdates.coverPhoto = coverVal;
+    }
     if (payload.dateOfBirth) userUpdates.dateOfBirth = payload.dateOfBirth;
     if (payload.height !== undefined && payload.height !== '') userUpdates.height = payload.height;
     if (payload.weight !== undefined && payload.weight !== '') userUpdates.weight = payload.weight;
@@ -924,6 +934,7 @@ export class PlayerProfileService {
         }
       }
       const updatedProfile = await playerStatsService.recalculatePlayerStats(profile._id);
+      await playerCacheService.invalidatePlayerCache(profile._id, profile.userId);
       return updatedProfile || profile;
     }
 

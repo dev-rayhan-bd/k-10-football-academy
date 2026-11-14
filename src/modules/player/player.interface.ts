@@ -52,6 +52,8 @@ export interface IPlayerProfile {
   cvTier: CvTier;
   profileCompletion: number;
   profileImage?: string;
+  coverPhoto?: string;
+  coverImage?: string;
   highlightVideo?: string;
   height?: number;
   weight?: number;

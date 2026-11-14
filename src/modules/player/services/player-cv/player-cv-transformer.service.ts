@@ -288,9 +288,9 @@ export class PlayerCvTransformerService {
     }
 
     const l4Count = last4.length;
-    const l4AvgRating = l4Count > 0 ? Math.round((l4RatingSum / l4Count) * 10) / 10 : 8.1;
-    const l4AvgPassAcc = l4Count > 0 ? Math.round(l4PassAccSum / l4Count) : 92;
-    const l4AvgTackles = l4Count > 0 ? Math.round((l4Tackles / l4Count) * 10) / 10 : 2.4;
+    const l4AvgRating = l4Count > 0 ? Math.round((l4RatingSum / l4Count) * 10) / 10 : 0;
+    const l4AvgPassAcc = l4Count > 0 ? Math.round(l4PassAccSum / l4Count) : 0;
+    const l4AvgTackles = l4Count > 0 ? Math.round((l4Tackles / l4Count) * 10) / 10 : 0;
     const l4FormGuide = last4
       .map(
         (m) =>
@@ -304,7 +304,7 @@ export class PlayerCvTransformerService {
       totalMatches > 0 ? Math.round((totalTackles / totalMatches) * 10) / 10 : l4AvgTackles;
     const avgMatchRating =
       totalMatches > 0 ? Math.round((sumNormalizedRatings / totalMatches) * 10) / 100 : l4AvgRating;
-    const formGuide = l4FormGuide.length > 0 ? l4FormGuide : ['W', 'D', 'W', 'W'];
+    const formGuide = l4FormGuide;
 
     const recentMatches = matchRecords.slice(0, 4).map((match) => {
       const r =
@@ -927,12 +927,23 @@ export class PlayerCvTransformerService {
         agentName: '',
         agencyName: '',
       },
-      coachVerification: aggregatedProfile.coachVerification || {
-        isVerified: aggregatedProfile.isVerifiedByCoach || false,
-        coachName: '',
-        licenseNumber: '',
-        clubManaged: '',
-        verifiedAt: null,
+      coachVerification: {
+        ...(aggregatedProfile.coachVerification?.toObject
+          ? aggregatedProfile.coachVerification.toObject()
+          : aggregatedProfile.coachVerification || {}),
+        isVerified: Boolean(
+          aggregatedProfile.isVerifiedByCoach || aggregatedProfile.coachVerification?.isVerified,
+        ),
+        coachName:
+          aggregatedProfile.coachVerification?.coachName ||
+          aggregatedProfile.verifyingCoachName ||
+          '',
+        licenseNumber:
+          aggregatedProfile.coachVerification?.licenseNumber ||
+          aggregatedProfile.verifyingCoachLicense ||
+          '',
+        clubManaged: aggregatedProfile.coachVerification?.clubManaged || '',
+        verifiedAt: aggregatedProfile.coachVerification?.verifiedAt || null,
       },
       perceptionMetrics: {
         spaceAwareness: {

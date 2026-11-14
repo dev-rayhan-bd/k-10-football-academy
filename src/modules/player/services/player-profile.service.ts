@@ -19,7 +19,7 @@ import { playerCvService } from './player-cv.service';
 import { playerAttributeService } from './player-attribute.service';
 import { validateClubHistoryTimeline } from './player-career.service';
 import { videoQueue } from '@/jobs/queues/video.queue';
-import { calculateMetricGrade } from '@/utils/ratingCalculator';
+import { calculateMetricGrade, formatCardPosition } from '@/utils/ratingCalculator';
 
 export class PlayerProfileService {
   async createProfile(payload: Partial<IPlayerProfile>) {
@@ -224,15 +224,31 @@ export class PlayerProfileService {
 
     const result = rawResult.map((p: any) => {
       const obj = p.toObject ? p.toObject() : p;
+      if (obj.profileImage && obj.profileImage.includes('da1uxchgo')) {
+        obj.profileImage = '';
+      }
+      if (obj.avatar && obj.avatar.includes('da1uxchgo')) {
+        obj.avatar = '';
+      }
+      if (obj.userId && typeof obj.userId === 'object') {
+        if (obj.userId.avatar && obj.userId.avatar.includes('da1uxchgo')) {
+          obj.userId.avatar = '';
+        }
+      }
       obj.coverPhoto = obj.coverPhoto || obj.coverImage || '';
+      if (obj.coverPhoto && obj.coverPhoto.includes('da1uxchgo')) {
+        obj.coverPhoto = '';
+        obj.coverImage = '';
+      }
       obj.coverImage = obj.coverPhoto || obj.coverImage || '';
+      obj.cardPosition = formatCardPosition(obj.position || 'Forward');
       const card = fifaCardMap.get(obj._id?.toString());
       const favCount = favMap.get(obj._id?.toString()) || 0;
       obj.totalLikes = Math.max(obj.totalLikes ?? 0, favCount);
       obj.profileViews = obj.profileViews ?? 0;
       obj.fifaCardStats = {
         overallRating: card?.overallRating ?? obj.overallRating ?? 50,
-        position: card?.position ?? obj.position ?? 'Forward',
+        position: formatCardPosition(card?.position ?? obj.position ?? 'Forward'),
         pac: card?.pac ?? 50,
         sho: card?.sho ?? 50,
         pas: card?.pas ?? 50,

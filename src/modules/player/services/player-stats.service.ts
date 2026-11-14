@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { calculatePositionRating } from '@/utils/ratingCalculator';
+import { calculatePositionRating, formatCardPosition } from '@/utils/ratingCalculator';
 import { IPlayerProfile } from '../player.interface';
 import {
   PlayerProfile,
@@ -331,7 +331,7 @@ export class PlayerStatsService {
       { playerId: profile._id },
       {
         overallRating: profile.overallRating,
-        position: profile.position,
+        position: formatCardPosition(profile.position),
         pac: pacVal,
         sho: shoVal,
         pas: pasVal,

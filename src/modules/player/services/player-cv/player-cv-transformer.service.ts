@@ -1,5 +1,6 @@
 import {
   normalizePositionKey,
+  formatCardPosition,
   POSITION_ATTRIBUTE_COEFFICIENTS,
   getInterpretationScore,
   formatAttributeLabel,
@@ -734,7 +735,7 @@ export class PlayerCvTransformerService {
 
     const fifaCardStats = {
       overallRating,
-      position: aggregatedProfile.position || '',
+      position: formatCardPosition(aggregatedProfile.position || ''),
       pac: pacScore,
       sho: shoScore,
       pas: pasScore,
@@ -815,21 +816,31 @@ export class PlayerCvTransformerService {
         .catch(() => {});
     }
 
+    const cleanCover =
+      aggregatedProfile.coverPhoto && !aggregatedProfile.coverPhoto.includes('da1uxchgo')
+        ? aggregatedProfile.coverPhoto
+        : aggregatedProfile.coverImage && !aggregatedProfile.coverImage.includes('da1uxchgo')
+          ? aggregatedProfile.coverImage
+          : aggregatedProfile.user?.coverPhoto &&
+              !aggregatedProfile.user.coverPhoto.includes('da1uxchgo')
+            ? aggregatedProfile.user.coverPhoto
+            : '';
+
+    const cleanAvatar =
+      aggregatedProfile.profileImage && !aggregatedProfile.profileImage.includes('da1uxchgo')
+        ? aggregatedProfile.profileImage
+        : aggregatedProfile.user?.avatar && !aggregatedProfile.user.avatar.includes('da1uxchgo')
+          ? aggregatedProfile.user.avatar
+          : '';
+
     // 10. Assemble complete final profile
     const finalProfile = {
       ...profileObj,
       playerId: aggregatedProfile._id,
-      coverPhoto:
-        aggregatedProfile.coverPhoto ||
-        aggregatedProfile.coverImage ||
-        aggregatedProfile.user?.coverPhoto ||
-        '',
-      coverImage:
-        aggregatedProfile.coverPhoto ||
-        aggregatedProfile.coverImage ||
-        aggregatedProfile.user?.coverPhoto ||
-        '',
-      profileImage: aggregatedProfile.profileImage || aggregatedProfile.user?.avatar || '',
+      coverPhoto: cleanCover,
+      coverImage: cleanCover,
+      profileImage: cleanAvatar,
+      cardPosition: formatCardPosition(aggregatedProfile.position || 'Forward'),
       totalLikes,
       profileViews,
       age: accurateAge,

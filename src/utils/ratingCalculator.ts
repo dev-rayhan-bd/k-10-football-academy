@@ -665,6 +665,62 @@ export const normalizePositionKey = (pos: string): PositionKey => {
 };
 
 /**
+ * Short FIFA card badge position abbreviation (max 3-4 uppercase characters)
+ * e.g. "Central Attacking Midfielder" -> "CAM", "Forward" -> "FWD", "Goalkeeper (GK)" -> "GK"
+ */
+export const formatCardPosition = (pos?: string): string => {
+  if (!pos) return 'FWD';
+  const clean = pos.trim().toUpperCase();
+  if (
+    [
+      'ST',
+      'CF',
+      'RW',
+      'LW',
+      'CAM',
+      'CM',
+      'CDM',
+      'CB',
+      'LB',
+      'RB',
+      'LWB',
+      'RWB',
+      'GK',
+      'FWD',
+      'MID',
+      'DEF',
+    ].includes(clean)
+  ) {
+    return clean;
+  }
+  const parenMatch = clean.match(/\(([A-Z]{2,4})\)/);
+  if (parenMatch) return parenMatch[1];
+
+  if (clean.includes('GK') || clean.includes('GOAL')) return 'GK';
+  if (clean.includes('ATTACKING MID') || clean.includes('CAM')) return 'CAM';
+  if (clean.includes('DEFENSIVE MID') || clean.includes('CDM')) return 'CDM';
+  if (clean.includes('CENTRAL MID') || clean.includes('CM')) return 'CM';
+  if (clean.includes('WING BACK')) {
+    return clean.includes('RIGHT') || clean.includes('RWB') ? 'RWB' : 'LWB';
+  }
+  if (clean.includes('FULL BACK') || clean.includes('BACK')) {
+    if (clean.includes('CENTER') || clean.includes('CENTRE') || clean.includes('CB')) return 'CB';
+    if (clean.includes('RIGHT') || clean.includes('RB')) return 'RB';
+    if (clean.includes('LEFT') || clean.includes('LB')) return 'LB';
+    return 'CB';
+  }
+  if (clean.includes('WINGER') || clean.includes('WING')) {
+    return clean.includes('RIGHT') || clean.includes('RW') ? 'RW' : 'LW';
+  }
+  if (clean.includes('STRIKER') || clean.includes('ST')) return 'ST';
+  if (clean.includes('FORWARD')) return 'FWD';
+  if (clean.includes('MID')) return 'MID';
+  if (clean.includes('DEF')) return 'DEF';
+
+  return clean.slice(0, 4);
+};
+
+/**
  * Calculates Position Overall Rating (0-100) based on position weighted coefficients
  */
 export const calculatePositionRating = (

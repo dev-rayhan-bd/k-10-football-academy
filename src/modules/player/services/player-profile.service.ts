@@ -255,6 +255,34 @@ export class PlayerProfileService {
         dri: card?.dri ?? 50,
         def: card?.def ?? 50,
         phy: card?.phy ?? 50,
+        cardImage:
+          card?.cardImage ||
+          obj.cardImage ||
+          obj.cardPhoto ||
+          obj.profileImage ||
+          obj.user?.avatar ||
+          '',
+        cardPhoto:
+          card?.cardPhoto ||
+          obj.cardImage ||
+          obj.cardPhoto ||
+          obj.profileImage ||
+          obj.user?.avatar ||
+          '',
+        cardImage:
+          card?.cardImage ||
+          obj.cardImage ||
+          obj.cardPhoto ||
+          obj.profileImage ||
+          obj.user?.avatar ||
+          '',
+        cardPhoto:
+          card?.cardPhoto ||
+          obj.cardImage ||
+          obj.cardPhoto ||
+          obj.profileImage ||
+          obj.user?.avatar ||
+          '',
       };
       obj.overviewStats = {
         profileViews: obj.profileViews,

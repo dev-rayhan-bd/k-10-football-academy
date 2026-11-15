@@ -733,6 +733,17 @@ export class PlayerCvTransformerService {
           ],
     };
 
+    const cleanCardImageForCard =
+      aggregatedProfile.cardImage && !aggregatedProfile.cardImage.includes('da1uxchgo')
+        ? aggregatedProfile.cardImage
+        : aggregatedProfile.cardPhoto && !aggregatedProfile.cardPhoto.includes('da1uxchgo')
+          ? aggregatedProfile.cardPhoto
+          : aggregatedProfile.profileImage && !aggregatedProfile.profileImage.includes('da1uxchgo')
+            ? aggregatedProfile.profileImage
+            : aggregatedProfile.user?.avatar && !aggregatedProfile.user.avatar.includes('da1uxchgo')
+              ? aggregatedProfile.user.avatar
+              : '';
+
     const fifaCardStats = {
       overallRating,
       position: formatCardPosition(aggregatedProfile.position || ''),
@@ -750,6 +761,8 @@ export class PlayerCvTransformerService {
       ref: isGK ? driScore : undefined,
       spe: isGK ? defScore : undefined,
       pos: isGK ? phyScore : undefined,
+      cardImage: cleanCardImageForCard,
+      cardPhoto: cleanCardImageForCard,
     };
 
     const hasAttributes = Boolean(aggregatedProfile.attributesDoc);
@@ -833,6 +846,8 @@ export class PlayerCvTransformerService {
           ? aggregatedProfile.user.avatar
           : '';
 
+    const cleanCardImage = cleanCardImageForCard;
+
     // 10. Assemble complete final profile
     const finalProfile = {
       ...profileObj,
@@ -840,6 +855,8 @@ export class PlayerCvTransformerService {
       coverPhoto: cleanCover,
       coverImage: cleanCover,
       profileImage: cleanAvatar,
+      cardImage: cleanCardImage || cleanAvatar,
+      cardPhoto: cleanCardImage || cleanAvatar,
       cardPosition: formatCardPosition(aggregatedProfile.position || 'Forward'),
       totalLikes,
       profileViews,

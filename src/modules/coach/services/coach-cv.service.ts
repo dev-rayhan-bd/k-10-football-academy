@@ -517,6 +517,54 @@ export class CoachCvService {
       ? calculateAgeFromDob(doc.dateOfBirth)
       : doc.age || null;
 
+    // Calculate Coach FIFA Manager Card Stats (ATT, TAC, DEF, IMP, EXP, LEA)
+    const rawCardStats = doc.cardStats || {};
+    const tacticsVal = Number(doc.coachProfileAnalysis?.tactics || 85);
+    const leadershipVal = Number(doc.coachProfileAnalysis?.leadership || 85);
+    const developmentVal = Number(doc.coachProfileAnalysis?.development || 85);
+    const disciplineVal = Number(doc.coachProfileAnalysis?.discipline || 85);
+    const yearsExp = Number(doc.yearsExperience || 0);
+
+    const att = Number(rawCardStats.att ?? tacticsVal);
+    const tac = Number(rawCardStats.tac ?? tacticsVal);
+    const def = Number(rawCardStats.def ?? disciplineVal);
+    const imp = Number(rawCardStats.imp ?? developmentVal);
+    const exp = Number(rawCardStats.exp ?? Math.min(99, Math.max(50, 60 + yearsExp * 2)));
+    const lea = Number(rawCardStats.lea ?? leadershipVal);
+    const calculatedOverall = Math.round((att + tac + def + imp + exp + lea) / 6);
+    const overallScore = Number(
+      rawCardStats.rating ??
+        (doc.overallRatingScore > 0 ? doc.overallRatingScore : calculatedOverall),
+    );
+
+    const cleanCoachCardImage =
+      doc.cardImage && !doc.cardImage.includes('da1uxchgo')
+        ? doc.cardImage
+        : doc.cardPhoto && !doc.cardPhoto.includes('da1uxchgo')
+          ? doc.cardPhoto
+          : '';
+
+    const coachCardStats = {
+      rating: overallScore,
+      overallRating: overallScore,
+      role: rawCardStats.role || 'MAN',
+      position: rawCardStats.role || 'MAN',
+      att,
+      tac,
+      def,
+      imp,
+      exp,
+      lea,
+      ATT: att,
+      TAC: tac,
+      DEF: def,
+      IMP: imp,
+      EXP: exp,
+      LEA: lea,
+      cardImage: cleanCoachCardImage || doc.profileImage || user.avatar || '',
+      cardPhoto: cleanCoachCardImage || doc.profileImage || user.avatar || '',
+    };
+
     // Persist to database immediately if changed
     const updatesToPersist: Record<string, any> = {};
     if (doc.cvTier !== autoTier || doc.profileCompletion !== completionPercentage) {
@@ -553,6 +601,10 @@ export class CoachCvService {
       clubLogo: doc.clubLogo,
       profileImage: doc.profileImage || user.avatar,
       coverImage: doc.coverImage,
+      cardImage: cleanCoachCardImage || doc.profileImage || user.avatar || '',
+      cardPhoto: cleanCoachCardImage || doc.profileImage || user.avatar || '',
+      cardStats: coachCardStats,
+      coachCardStats,
       validationStatus: doc.validationStatus || '',
       revalidationRequested: Boolean(doc.revalidationRequested),
 

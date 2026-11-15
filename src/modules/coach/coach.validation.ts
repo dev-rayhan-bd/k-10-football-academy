@@ -42,7 +42,11 @@ export const updateCoachProfileZodSchema = z.object({
       location: z.string().optional(),
       validationStatus: z.string().optional(),
 
-      // Nested objects
+      profileImage: z.string().optional(),
+      coverImage: z.string().optional(),
+      cardImage: z.string().optional(),
+      cardPhoto: z.string().optional(),
+      cardStats: z.any().optional(),
       personalInformation: z.any().optional(),
       contact: z.any().optional(),
       seasonStats: z.any().optional(),

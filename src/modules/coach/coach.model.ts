@@ -138,6 +138,18 @@ const CoachProfileSchema = new Schema<ICoachProfileDocument>(
     // Hero & Personal Info
     profileImage: { type: String },
     coverImage: { type: String },
+    cardImage: { type: String },
+    cardPhoto: { type: String },
+    cardStats: {
+      rating: { type: Number },
+      role: { type: String, default: 'MAN' },
+      att: { type: Number },
+      tac: { type: Number },
+      def: { type: Number },
+      imp: { type: Number },
+      exp: { type: Number },
+      lea: { type: Number },
+    },
     dateOfBirth: { type: Schema.Types.Mixed },
     age: { type: Number },
     birthCountry: { type: String },

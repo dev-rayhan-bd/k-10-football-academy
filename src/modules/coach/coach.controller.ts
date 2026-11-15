@@ -68,6 +68,15 @@ export const updateMyCoachProfile = catchAsync(async (req: Request, res: Respons
       } else if (file.fieldname === 'coverImage' || file.fieldname === 'banner') {
         payload.coverImage = await uploadToStorage(file, 'coach_covers');
       } else if (
+        file.fieldname === 'cardImage' ||
+        file.fieldname === 'cardPhoto' ||
+        file.fieldname === 'cardPic' ||
+        file.fieldname === 'coachCardImage'
+      ) {
+        const cardUrl = await uploadToStorage(file, 'coach_cards');
+        payload.cardImage = cardUrl;
+        payload.cardPhoto = cardUrl;
+      } else if (
         file.fieldname === 'clubLogo' ||
         file.fieldname === 'clubImage' ||
         file.fieldname === 'logo'
@@ -101,11 +110,34 @@ export const updateMyCoachProfile = catchAsync(async (req: Request, res: Respons
     } else if (req.file.fieldname === 'coverImage' || req.file.fieldname === 'banner') {
       payload.coverImage = await uploadToStorage(req.file, 'coach_covers');
     } else if (
+      req.file.fieldname === 'cardImage' ||
+      req.file.fieldname === 'cardPhoto' ||
+      req.file.fieldname === 'cardPic' ||
+      req.file.fieldname === 'coachCardImage'
+    ) {
+      const cardUrl = await uploadToStorage(req.file, 'coach_cards');
+      payload.cardImage = cardUrl;
+      payload.cardPhoto = cardUrl;
+    } else if (
       req.file.fieldname === 'clubLogo' ||
       req.file.fieldname === 'clubImage' ||
       req.file.fieldname === 'logo'
     ) {
       payload.clubLogo = await uploadToStorage(req.file, 'club_crests');
+    }
+  }
+
+  if (payload.cardImage || payload.cardPhoto) {
+    const cardUrl = payload.cardImage || payload.cardPhoto;
+    payload.cardImage = cardUrl;
+    payload.cardPhoto = cardUrl;
+  }
+
+  if (typeof payload.cardStats === 'string') {
+    try {
+      payload.cardStats = JSON.parse(payload.cardStats);
+    } catch {
+      // ignore
     }
   }
 
@@ -141,6 +173,15 @@ export const updateCoachProfile = catchAsync(async (req: Request, res: Response)
       } else if (file.fieldname === 'coverImage' || file.fieldname === 'banner') {
         payload.coverImage = await uploadToStorage(file, 'coach_covers');
       } else if (
+        file.fieldname === 'cardImage' ||
+        file.fieldname === 'cardPhoto' ||
+        file.fieldname === 'cardPic' ||
+        file.fieldname === 'coachCardImage'
+      ) {
+        const cardUrl = await uploadToStorage(file, 'coach_cards');
+        payload.cardImage = cardUrl;
+        payload.cardPhoto = cardUrl;
+      } else if (
         file.fieldname === 'clubLogo' ||
         file.fieldname === 'clubImage' ||
         file.fieldname === 'logo'
@@ -174,11 +215,34 @@ export const updateCoachProfile = catchAsync(async (req: Request, res: Response)
     } else if (req.file.fieldname === 'coverImage' || req.file.fieldname === 'banner') {
       payload.coverImage = await uploadToStorage(req.file, 'coach_covers');
     } else if (
+      req.file.fieldname === 'cardImage' ||
+      req.file.fieldname === 'cardPhoto' ||
+      req.file.fieldname === 'cardPic' ||
+      req.file.fieldname === 'coachCardImage'
+    ) {
+      const cardUrl = await uploadToStorage(req.file, 'coach_cards');
+      payload.cardImage = cardUrl;
+      payload.cardPhoto = cardUrl;
+    } else if (
       req.file.fieldname === 'clubLogo' ||
       req.file.fieldname === 'clubImage' ||
       req.file.fieldname === 'logo'
     ) {
       payload.clubLogo = await uploadToStorage(req.file, 'club_crests');
+    }
+  }
+
+  if (payload.cardImage || payload.cardPhoto) {
+    const cardUrl = payload.cardImage || payload.cardPhoto;
+    payload.cardImage = cardUrl;
+    payload.cardPhoto = cardUrl;
+  }
+
+  if (typeof payload.cardStats === 'string') {
+    try {
+      payload.cardStats = JSON.parse(payload.cardStats);
+    } catch {
+      // ignore
     }
   }
 

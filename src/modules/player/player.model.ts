@@ -37,6 +37,8 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
     profileImage: { type: String },
     coverPhoto: { type: String },
     coverImage: { type: String },
+    cardImage: { type: String },
+    cardPhoto: { type: String },
     highlightVideo: { type: String },
     height: { type: Number },
     weight: { type: Number },
@@ -327,6 +329,8 @@ const FifaCardStatsSchema = new Schema<IFifaCardStatsDocument>({
   dri: { type: Number, default: 50 },
   def: { type: Number, default: 50 },
   phy: { type: Number, default: 50 },
+  cardImage: { type: String },
+  cardPhoto: { type: String },
 });
 
 const MatchRecordSchema = new Schema<IMatchRecordDocument>(

@@ -110,6 +110,27 @@ export interface ICoachProfileAnalysis {
   overall?: number;
 }
 
+export interface ICoachCardStats {
+  rating: number; // e.g. 87
+  overallRating?: number;
+  role: string; // 'MAN' (Manager)
+  position: string; // 'MAN'
+  att: number; // ATT (Attacking)
+  tac: number; // TAC (Tactical)
+  def: number; // DEF (Defending)
+  imp: number; // IMP (Impact / Development)
+  exp: number; // EXP (Experience)
+  lea: number; // LEA (Leadership)
+  ATT?: number;
+  TAC?: number;
+  DEF?: number;
+  IMP?: number;
+  EXP?: number;
+  LEA?: number;
+  cardImage?: string;
+  cardPhoto?: string;
+}
+
 export interface ICoachTournamentStats {
   win: number;
   loss: number;
@@ -174,6 +195,10 @@ export interface ICoachProfile {
   // Personal Info & Hero
   profileImage?: string;
   coverImage?: string;
+  cardImage?: string;
+  cardPhoto?: string;
+  cardStats?: Partial<ICoachCardStats>;
+  coachCardStats?: ICoachCardStats;
   dateOfBirth?: Date | string;
   age?: number;
   birthCountry?: string;

@@ -135,6 +135,15 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
         const coverUrl = await uploadToStorage(file, 'player_covers');
         payload.coverPhoto = coverUrl;
         payload.coverImage = coverUrl;
+      } else if (
+        file.fieldname === 'cardImage' ||
+        file.fieldname === 'cardPhoto' ||
+        file.fieldname === 'cardPic' ||
+        file.fieldname === 'fifaCardImage'
+      ) {
+        const cardUrl = await uploadToStorage(file, 'player_cards');
+        payload.cardImage = cardUrl;
+        payload.cardPhoto = cardUrl;
       } else if (file.fieldname === 'highlightVideo' || file.fieldname === 'video') {
         payload.highlightVideo = await uploadToStorage(file, 'player_videos');
       } else if (
@@ -185,6 +194,15 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
       const coverUrl = await uploadToStorage(req.file, 'player_covers');
       payload.coverPhoto = coverUrl;
       payload.coverImage = coverUrl;
+    } else if (
+      req.file.fieldname === 'cardImage' ||
+      req.file.fieldname === 'cardPhoto' ||
+      req.file.fieldname === 'cardPic' ||
+      req.file.fieldname === 'fifaCardImage'
+    ) {
+      const cardUrl = await uploadToStorage(req.file, 'player_cards');
+      payload.cardImage = cardUrl;
+      payload.cardPhoto = cardUrl;
     } else if (req.file.fieldname === 'highlightVideo' || req.file.fieldname === 'video') {
       payload.highlightVideo = await uploadToStorage(req.file, 'player_videos');
     }
@@ -194,6 +212,12 @@ export const updatePlayerProfile = catchAsync(async (req: Request, res: Response
     const coverUrl = payload.coverPhoto || payload.coverImage;
     payload.coverPhoto = coverUrl;
     payload.coverImage = coverUrl;
+  }
+
+  if (payload.cardImage || payload.cardPhoto) {
+    const cardUrl = payload.cardImage || payload.cardPhoto;
+    payload.cardImage = cardUrl;
+    payload.cardPhoto = cardUrl;
   }
 
   if (typeof payload.secondaryPositions === 'string') {

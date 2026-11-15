@@ -208,17 +208,57 @@ export class CoachProfileService {
       const cleanSheets = Number(p.cleanSheets || 0);
       const winRate = matchesCoached > 0 ? Math.round((totalWins / matchesCoached) * 100) : 0;
 
-      // Extract coach-specific card metrics (no PAC/SHO/PAS/DRI/DEF/PHY player stats)
+      const rawCardStats = p.cardStats || {};
       const tactics = Number(p.coachProfileAnalysis?.tactics || 85);
       const leadership = Number(p.coachProfileAnalysis?.leadership || 85);
       const communication = Number(p.coachProfileAnalysis?.communication || 85);
       const adaptability = Number(p.coachProfileAnalysis?.adaptability || 85);
       const discipline = Number(p.coachProfileAnalysis?.discipline || 85);
       const development = Number(p.coachProfileAnalysis?.development || 85);
+      const yearsExp = Number(p.yearsExperience || 0);
+
+      const att = Number(rawCardStats.att ?? tactics);
+      const tac = Number(rawCardStats.tac ?? tactics);
+      const def = Number(rawCardStats.def ?? discipline);
+      const imp = Number(rawCardStats.imp ?? development);
+      const exp = Number(rawCardStats.exp ?? Math.min(99, Math.max(50, 60 + yearsExp * 2)));
+      const lea = Number(rawCardStats.lea ?? leadership);
+      const calculatedOverall = Math.round((att + tac + def + imp + exp + lea) / 6);
+      const overallScore = Number(
+        rawCardStats.rating ??
+          (p.overallRatingScore > 0 ? p.overallRatingScore : calculatedOverall),
+      );
+
+      const cleanCoachCardImage =
+        p.cardImage && !p.cardImage.includes('da1uxchgo')
+          ? p.cardImage
+          : p.cardPhoto && !p.cardPhoto.includes('da1uxchgo')
+            ? p.cardPhoto
+            : p.profileImage && !p.profileImage.includes('da1uxchgo')
+              ? p.profileImage
+              : p.userId?.avatar && !p.userId.avatar.includes('da1uxchgo')
+                ? p.userId.avatar
+                : '';
 
       const coachCardStats = {
-        rating: p.overallRatingScore || 74,
-        position: 'MAN',
+        rating: overallScore,
+        overallRating: overallScore,
+        position: rawCardStats.role || 'MAN',
+        role: rawCardStats.role || 'MAN',
+        att,
+        tac,
+        def,
+        imp,
+        exp,
+        lea,
+        ATT: att,
+        TAC: tac,
+        DEF: def,
+        IMP: imp,
+        EXP: exp,
+        LEA: lea,
+        cardImage: cleanCoachCardImage,
+        cardPhoto: cleanCoachCardImage,
         matchesCoached,
         totalWins,
         losses,
@@ -235,7 +275,10 @@ export class CoachProfileService {
 
       return {
         ...p,
-        rating: p.overallRatingScore || 74,
+        rating: overallScore,
+        cardImage: cleanCoachCardImage,
+        cardPhoto: cleanCoachCardImage,
+        cardStats: coachCardStats,
         coachCardStats,
         stats: coachCardStats,
       };
@@ -304,6 +347,16 @@ export class CoachProfileService {
       };
     }
 
+    // 4b. Card stats mapping (FIFA Manager card: ATT, TAC, DEF, IMP, EXP, LEA, role)
+    const cardStats = parseIfJson(payload.cardStats);
+    if (cardStats && typeof cardStats === 'object') {
+      profile.cardStats = {
+        ...(profile.cardStats || {}),
+        ...cardStats,
+      };
+      profile.markModified('cardStats');
+    }
+
     // 5. Direct root scalar fields
     const directFields = [
       'fullName',
@@ -318,6 +371,8 @@ export class CoachProfileService {
       'additionalNotes',
       'profileImage',
       'coverImage',
+      'cardImage',
+      'cardPhoto',
       'currentClub',
       'clubLogo',
       'dateOfBirth',

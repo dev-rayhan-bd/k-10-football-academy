@@ -338,6 +338,8 @@ export class PlayerStatsService {
         dri: driVal,
         def: defVal,
         phy: phyVal,
+        cardImage: profile.cardImage || profile.cardPhoto || profile.profileImage || '',
+        cardPhoto: profile.cardPhoto || profile.cardImage || profile.profileImage || '',
       },
       { upsert: true },
     );

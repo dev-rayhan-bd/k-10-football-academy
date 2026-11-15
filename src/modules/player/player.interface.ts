@@ -54,6 +54,8 @@ export interface IPlayerProfile {
   profileImage?: string;
   coverPhoto?: string;
   coverImage?: string;
+  cardImage?: string;
+  cardPhoto?: string;
   highlightVideo?: string;
   height?: number;
   weight?: number;
@@ -279,6 +281,8 @@ export interface IFifaCardStats {
   dri: number;
   def: number;
   phy: number;
+  cardImage?: string;
+  cardPhoto?: string;
 }
 
 export interface IFifaCardStatsDocument extends IFifaCardStats, Document {}

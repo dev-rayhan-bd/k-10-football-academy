@@ -55,6 +55,10 @@ const defaultAllowedOrigins = [
   'https://www.k10football.com',
   'http://k10football.com',
   'http://www.k10football.com',
+  'https://dev.k10football.com',
+  'http://dev.k10football.com',
+  'https://www.dev.k10football.com',
+  'http://www.dev.k10football.com',
 ];
 
 const envAllowedOrigins = process.env.ALLOWED_ORIGINS

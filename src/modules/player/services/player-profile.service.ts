@@ -132,8 +132,18 @@ export class PlayerProfileService {
     // - CV Tier ("Gold", "Silver", "Bronze")
     // - Club name ("Youth Stars", "Santos FC")
     // ----------------------------------------------------
+    // Exclude administrative & non-player staff roles (SUPER_ADMIN, ADMIN, COACH, AGENT, ACADEMY, PARENT) from PLAYERS cards
+    const nonPlayerUsers = await UserModel.find({
+      role: { $in: ['SUPER_ADMIN', 'ADMIN', 'COACH', 'AGENT', 'ACADEMY', 'PARENT', 'GUARDIAN'] },
+    })
+      .select('_id')
+      .lean();
+    const excludedUserIds = nonPlayerUsers.map((u) => u._id);
+
     const rawSearch = (queryObj.search || queryObj.searchTerm) as string | undefined;
-    let baseQuery = PlayerProfile.find().populate('userId', 'name email avatar phone');
+    let baseQuery = PlayerProfile.find({
+      userId: { $nin: excludedUserIds },
+    }).populate('userId', 'name email avatar phone role');
 
     if (rawSearch && typeof rawSearch === 'string' && rawSearch.trim() !== '') {
       const term = rawSearch.trim();
@@ -255,20 +265,6 @@ export class PlayerProfileService {
         dri: card?.dri ?? 50,
         def: card?.def ?? 50,
         phy: card?.phy ?? 50,
-        cardImage:
-          card?.cardImage ||
-          obj.cardImage ||
-          obj.cardPhoto ||
-          obj.profileImage ||
-          obj.user?.avatar ||
-          '',
-        cardPhoto:
-          card?.cardPhoto ||
-          obj.cardImage ||
-          obj.cardPhoto ||
-          obj.profileImage ||
-          obj.user?.avatar ||
-          '',
         cardImage:
           card?.cardImage ||
           obj.cardImage ||

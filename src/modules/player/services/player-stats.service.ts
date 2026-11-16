@@ -457,6 +457,15 @@ export class PlayerStatsService {
       }
     }
 
+    // Exclude non-player roles from pitch position counts
+    const nonPlayerUsers = await UserModel.find({
+      role: { $in: ['SUPER_ADMIN', 'ADMIN', 'COACH', 'AGENT', 'ACADEMY', 'PARENT', 'GUARDIAN'] },
+    })
+      .select('_id')
+      .lean();
+    const excludedUserIds = nonPlayerUsers.map((u) => u._id);
+    filter.userId = { $nin: excludedUserIds };
+
     const allProfiles = await PlayerProfile.find(filter)
       .select('fullName position age country overallRating cvTier')
       .lean();

@@ -70,7 +70,7 @@ const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllow
  * - Explicit origins in allowedOrigins
  * - Wildcard '*'
  * - Any subdomain or root of k10football.com (e.g. k10football.com, www.k10football.com, api.k10football.com)
- * - Any localhost / 127.0.0.1 port (for local frontend testing)
+ * - Any localhost / 127.0.0.1 port (for local frontend testing)..
  */
 const isAllowedOrigin = (origin?: string): boolean => {
   // Allow non-browser requests (Postman, mobile apps, server-to-server, curl)

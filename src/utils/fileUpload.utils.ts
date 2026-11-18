@@ -25,11 +25,22 @@ if (cloudName && apiKey && apiSecret) {
 }
 
 /**
- * Creates an S3Client instance.
- * - If AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set in .env, uses explicit credentials.
- * - If omitted (recommended on EC2 with IAM Role like k10-football-ec2-app), SDK automatically resolves the EC2 IAM Role.
+ * Checks whether AWS S3 storage is enabled (Bucket + Region configured).
+ * Keys are optional because EC2 IAM Role automatically provides credentials.
  */
-const createS3Client = (region: string): S3Client => {
+export const isS3Enabled = (): boolean => {
+  const bucket = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
+  const region = (env.AWS_REGION || process.env.AWS_REGION || '').trim();
+  return Boolean(bucket && region);
+};
+
+/**
+ * Creates or gets an S3Client instance.
+ * - If AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY exist, uses explicit credentials.
+ * - If omitted, uses AWS default credential provider chain (EC2 IAM Role: k10-football-ec2-app).
+ */
+export const getS3Client = (): S3Client => {
+  const region = (env.AWS_REGION || process.env.AWS_REGION || 'eu-north-1').trim();
   const awsAccessKeyId = (env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '').trim();
   const awsSecretAccessKey = (
     env.AWS_SECRET_ACCESS_KEY ||
@@ -70,14 +81,12 @@ export const uploadToStorage = async (
   const awsBucketName = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
   const awsRegion = (env.AWS_REGION || process.env.AWS_REGION || 'eu-north-1').trim();
 
-  const isS3Enabled = Boolean(awsBucketName);
-
-  if (isS3Enabled) {
+  if (isS3Enabled()) {
     try {
       // ----------------------------------------------------
       // 1. Try Uploading to AWS S3 Bucket (IAM Role or Keys)
       // ----------------------------------------------------
-      const s3 = createS3Client(awsRegion);
+      const s3 = getS3Client();
 
       const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
       const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
@@ -146,10 +155,10 @@ export const uploadBufferToStorage = async (
   const awsBucketName = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
   const awsRegion = (env.AWS_REGION || process.env.AWS_REGION || 'eu-north-1').trim();
 
-  // 1. First: If AWS_BUCKET_NAME is configured, try AWS S3 (via EC2 IAM Role or explicit keys)
-  if (awsBucketName) {
+  // 1. First: If AWS S3 is enabled, try AWS S3 (via EC2 IAM Role or explicit keys)
+  if (isS3Enabled()) {
     try {
-      const s3 = createS3Client(awsRegion);
+      const s3 = getS3Client();
 
       const s3Key = `${folder}/${safeFilename}`;
       const command = new PutObjectCommand({
@@ -225,11 +234,9 @@ export const deleteFromStorage = async (fileUrl: string): Promise<boolean> => {
 
   try {
     if (fileUrl.includes('amazonaws.com')) {
-      const awsBucketName = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
-      const awsRegion = (env.AWS_REGION || process.env.AWS_REGION || 'eu-north-1').trim();
-
-      if (awsBucketName) {
-        const s3 = createS3Client(awsRegion);
+      if (isS3Enabled()) {
+        const s3 = getS3Client();
+        const awsBucketName = (env.AWS_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
 
         const urlObj = new URL(fileUrl);
         const key = urlObj.pathname.substring(1);

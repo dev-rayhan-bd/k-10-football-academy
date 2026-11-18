@@ -15,3 +15,12 @@ coverage/
 
 
 *.md
+
+# Architecture & generated design specs/diagrams
+k10-architecture-spec.html
+k10-production-deployment-architecture.png
+k10-system-architecture.png
+k10-cors-sequence-flow.png
+architecture_diagram.html
+*.png
+

@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { redisCache } from '@/utils/redisCache.util';
-import { PlayerProfile, PlayerAttributes } from '../player.model';
+import { PlayerProfile, PlayerAttributes, FifaCardStats } from '../player.model';
 import { playerStatsService } from './player-stats.service';
 import {
   calculatePositionRating,
@@ -191,6 +191,36 @@ export class PlayerAttributeService {
       flattenedPayload.interception = flattenedPayload.interceptions;
     }
 
+    // Support high-level Strength / FIFA card stat aliases sent from frontend
+    if (flattenedPayload.pace !== undefined) {
+      const paceVal = Number(flattenedPayload.pace);
+      if (flattenedPayload.acceleration === undefined) flattenedPayload.acceleration = paceVal;
+      if (flattenedPayload.sprintSpeed === undefined) flattenedPayload.sprintSpeed = paceVal;
+    }
+    if (flattenedPayload.shooting !== undefined) {
+      const shoVal = Number(flattenedPayload.shooting);
+      if (flattenedPayload.finishing === undefined) flattenedPayload.finishing = shoVal;
+      if (flattenedPayload.shotPower === undefined) flattenedPayload.shotPower = shoVal;
+    }
+    if (flattenedPayload.passing !== undefined) {
+      const pasVal = Number(flattenedPayload.passing);
+      if (flattenedPayload.shortPassing === undefined) flattenedPayload.shortPassing = pasVal;
+    }
+    if (flattenedPayload.dribbling !== undefined) {
+      const driVal = Number(flattenedPayload.dribbling);
+      if (flattenedPayload.ballControl === undefined) flattenedPayload.ballControl = driVal;
+    }
+    if (flattenedPayload.defending !== undefined) {
+      const defVal = Number(flattenedPayload.defending);
+      if (flattenedPayload.marking === undefined) flattenedPayload.marking = defVal;
+      if (flattenedPayload.standingTackle === undefined) flattenedPayload.standingTackle = defVal;
+    }
+    if (flattenedPayload.physical !== undefined) {
+      const phyVal = Number(flattenedPayload.physical);
+      if (flattenedPayload.strength === undefined) flattenedPayload.strength = phyVal;
+      if (flattenedPayload.stamina === undefined) flattenedPayload.stamina = phyVal;
+    }
+
     const attributes = await PlayerAttributes.findOneAndUpdate(
       { playerId: profile._id },
       flattenedPayload,
@@ -200,6 +230,24 @@ export class PlayerAttributeService {
         runValidators: true,
       },
     );
+
+    // Also update direct FifaCardStats face stats if passed
+    const fifaUpdates: Record<string, number> = {};
+    if (flattenedPayload.pace !== undefined) fifaUpdates.pac = Number(flattenedPayload.pace);
+    if (flattenedPayload.shooting !== undefined)
+      fifaUpdates.sho = Number(flattenedPayload.shooting);
+    if (flattenedPayload.passing !== undefined) fifaUpdates.pas = Number(flattenedPayload.passing);
+    if (flattenedPayload.dribbling !== undefined)
+      fifaUpdates.dri = Number(flattenedPayload.dribbling);
+    if (flattenedPayload.defending !== undefined)
+      fifaUpdates.def = Number(flattenedPayload.defending);
+    if (flattenedPayload.physical !== undefined)
+      fifaUpdates.phy = Number(flattenedPayload.physical);
+    if (Object.keys(fifaUpdates).length > 0) {
+      await FifaCardStats.findOneAndUpdate({ playerId: profile._id }, fifaUpdates, {
+        upsert: true,
+      });
+    }
 
     await playerStatsService.recalculatePlayerStats(profile._id);
 

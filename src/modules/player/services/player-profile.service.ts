@@ -879,14 +879,28 @@ export class PlayerProfileService {
 
     if (profile) {
       // Sync attribute updates into PlayerAttributes collection if passed
-      let attrsToUpdate =
-        payload.attributes || payload.analysisOfPlayerAttributes || payload.categories;
+      let attrsToUpdate: any =
+        payload.attributes ||
+        payload.strengths ||
+        payload.analysisOfPlayerAttributes ||
+        payload.categories;
       if (typeof attrsToUpdate === 'string') {
         try {
           attrsToUpdate = JSON.parse(attrsToUpdate);
         } catch {
           // ignore invalid json
         }
+      }
+      let strengthsObj: any = payload.strengths;
+      if (typeof strengthsObj === 'string') {
+        try {
+          strengthsObj = JSON.parse(strengthsObj);
+        } catch {
+          // ignore
+        }
+      }
+      if (strengthsObj && typeof strengthsObj === 'object') {
+        attrsToUpdate = { ...(attrsToUpdate || {}), ...strengthsObj };
       }
       if (attrsToUpdate) {
         await playerAttributeService.updateAttributes(profile._id.toString(), attrsToUpdate);

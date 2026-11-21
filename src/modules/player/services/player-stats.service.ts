@@ -1,5 +1,11 @@
 import { Types } from 'mongoose';
-import { calculatePositionRating, formatCardPosition } from '@/utils/ratingCalculator';
+import {
+  calculatePositionRating,
+  formatCardPosition,
+  normalizePositionKey,
+  PositionKey,
+  resolvePositionAttributeValue,
+} from '@/utils/ratingCalculator';
 import { IPlayerProfile } from '../player.interface';
 import {
   PlayerProfile,
@@ -251,106 +257,158 @@ export class PlayerStatsService {
 
     await profile.save({ validateModifiedOnly: true });
 
-    const isGK =
-      String(profile.position).toUpperCase().includes('GK') ||
-      String(profile.position).toUpperCase().includes('GOAL');
+    const normPos: PositionKey = normalizePositionKey(profile.position || 'CM');
+    const attrMap = attributes
+      ? ((typeof attributes.toObject === 'function' ? attributes.toObject() : attributes) as Record<
+          string,
+          any
+        >)
+      : null;
 
-    const pacVal = isGK
-      ? attributes
-        ? Math.round(
-            (Number((attributes as any).reflexes ?? (profile.overallRating || 50)) +
-              Number((attributes as any).shotStopping ?? (profile.overallRating || 50))) /
-              2,
-          )
-        : profile.overallRating || 50
-      : attributes
-        ? Math.round(
-            (Number((attributes as any).acceleration ?? (profile.overallRating || 50)) +
-              Number((attributes as any).sprintSpeed ?? (profile.overallRating || 50))) /
-              2,
-          )
-        : profile.overallRating || 50;
+    const POSITION_CARD_STAT_KEYS: Record<
+      PositionKey,
+      { pac: string[]; sho: string[]; pas: string[]; dri: string[]; def: string[]; phy: string[] }
+    > = {
+      GK: {
+        pac: ['reflexes', 'shotStopping'],
+        sho: ['handling', 'crossClaiming'],
+        pas: ['distribution', 'footwork'],
+        dri: ['reflexes', 'oneOnOne'],
+        def: ['footwork', 'aerialAbility'],
+        phy: ['positioning', 'decisions', 'composure'],
+      },
+      CB: {
+        pac: [],
+        sho: [],
+        pas: ['shortPassing'],
+        dri: ['ballControl'],
+        def: ['positioning', 'marking', 'tackling', 'interceptions', 'defensiveAwareness'],
+        phy: ['strength', 'aerialDuels'],
+      },
+      'RB-LB': {
+        pac: ['acceleration', 'sprintSpeed'],
+        sho: [],
+        pas: ['crossing', 'shortPassing'],
+        dri: ['ballControl'],
+        def: ['positioning', 'oneOnOne', 'tackling', 'interceptions'],
+        phy: ['stamina'],
+      },
+      'RWB-LWB': {
+        pac: ['acceleration', 'sprintSpeed'],
+        sho: [],
+        pas: ['crossing', 'shortPassing'],
+        dri: ['dribbling', 'ballControl'],
+        def: ['oneOnOne', 'positioning'],
+        phy: ['stamina'],
+      },
+      CDM: {
+        pac: [],
+        sho: [],
+        pas: ['shortPassing', 'longPassing', 'vision'],
+        dri: ['ballControl'],
+        def: ['positioning', 'interceptions', 'tackling', 'defensiveAwareness'],
+        phy: ['stamina'],
+      },
+      CM: {
+        pac: [],
+        sho: [],
+        pas: ['shortPassing', 'longPassing', 'vision'],
+        dri: ['firstTouch', 'ballControl'],
+        def: ['interceptions'],
+        phy: ['stamina'],
+      },
+      CAM: {
+        pac: [],
+        sho: ['finishing'],
+        pas: ['shortPassing', 'throughPassing', 'vision', 'creativity'],
+        dri: ['firstTouch', 'ballControl', 'dribbling'],
+        def: [],
+        phy: [],
+      },
+      'RW-LW': {
+        pac: ['acceleration', 'sprintSpeed'],
+        sho: ['finishing'],
+        pas: ['crossing', 'chanceCreation'],
+        dri: ['dribbling', 'ballControl', 'agility', 'firstTouch', 'oneOnOneAttacking'],
+        def: [],
+        phy: [],
+      },
+      CF: {
+        pac: [],
+        sho: ['finishing', 'shooting'],
+        pas: ['shortPassing', 'linkUpPlay'],
+        dri: ['firstTouch', 'ballControl', 'dribbling'],
+        def: [],
+        phy: ['strength'],
+      },
+      ST: {
+        pac: ['acceleration'],
+        sho: ['finishing', 'shotAccuracy', 'oneOnOneFinishing'],
+        pas: [],
+        dri: ['firstTouch'],
+        def: [],
+        phy: ['strength', 'aerialAbility'],
+      },
+    };
 
-    const shoVal = isGK
-      ? attributes
-        ? Math.round(
-            Number((attributes as any).handling ?? (profile.overallRating || 50)) * 0.6 +
-              Number((attributes as any).crossClaiming ?? (profile.overallRating || 50)) * 0.4,
-          )
-        : profile.overallRating || 50
-      : attributes
-        ? Math.round(
-            Number((attributes as any).finishing ?? (profile.overallRating || 50)) * 0.4 +
-              Number((attributes as any).shotPower ?? (profile.overallRating || 50)) * 0.3 +
-              Number((attributes as any).longShots ?? (profile.overallRating || 50)) * 0.3,
-          )
-        : profile.overallRating || 50;
+    const computeCardCategoryStat = (primaryKeys: string[], fallbackKeys: string[]): number => {
+      if (!attrMap) return profile.overallRating || 50;
+      const activeVals: number[] = [];
+      const usedKeys = new Set<string>();
 
-    const pasVal = isGK
-      ? attributes
-        ? Math.round(
-            Number((attributes as any).distribution ?? (profile.overallRating || 50)) * 0.7 +
-              Number((attributes as any).footwork ?? (profile.overallRating || 50)) * 0.3,
-          )
-        : profile.overallRating || 50
-      : attributes
-        ? Math.round(
-            Number((attributes as any).shortPassing ?? (profile.overallRating || 50)) * 0.4 +
-              Number((attributes as any).vision ?? (profile.overallRating || 50)) * 0.3 +
-              Number((attributes as any).longPassing ?? (profile.overallRating || 50)) * 0.2 +
-              Number((attributes as any).crossing ?? (profile.overallRating || 50)) * 0.1,
-          )
-        : profile.overallRating || 50;
+      for (const k of primaryKeys) {
+        activeVals.push(resolvePositionAttributeValue(k, attrMap));
+        usedKeys.add(k);
+      }
 
-    const driVal = isGK
-      ? attributes
-        ? Math.round(
-            Number((attributes as any).reflexes ?? (profile.overallRating || 50)) * 0.7 +
-              Number((attributes as any).oneOnOne ?? (profile.overallRating || 50)) * 0.3,
-          )
-        : profile.overallRating || 50
-      : attributes
-        ? Math.round(
-            Number((attributes as any).dribbling ?? (profile.overallRating || 50)) * 0.5 +
-              Number((attributes as any).ballControl ?? (profile.overallRating || 50)) * 0.3 +
-              Number((attributes as any).agility ?? (profile.overallRating || 50)) * 0.2,
-          )
-        : profile.overallRating || 50;
+      for (const k of fallbackKeys) {
+        if (usedKeys.has(k)) continue;
+        const rawV = attrMap[k];
+        if (rawV !== undefined && rawV !== null && Number(rawV) !== 50) {
+          activeVals.push(Number(rawV));
+          usedKeys.add(k);
+        }
+      }
 
-    const defVal = isGK
-      ? attributes
-        ? Math.round(
-            Number((attributes as any).footwork ?? (profile.overallRating || 50)) * 0.6 +
-              Number((attributes as any).acceleration ?? (profile.overallRating || 50)) * 0.4,
-          )
-        : profile.overallRating || 50
-      : attributes
-        ? Math.round(
-            Number((attributes as any).marking ?? (profile.overallRating || 50)) * 0.35 +
-              Number(
-                (attributes as any).standingTackle ??
-                  (attributes as any).tackling ??
-                  (profile.overallRating || 50),
-              ) *
-                0.35 +
-              Number((attributes as any).interceptions ?? (profile.overallRating || 50)) * 0.3,
-          )
-        : profile.overallRating || 50;
+      if (activeVals.length === 0) {
+        const baseVals = fallbackKeys
+          .map((k) => attrMap[k])
+          .filter((v) => v !== undefined && v !== null)
+          .map(Number);
+        if (baseVals.length === 0) return 50;
+        return Math.round(baseVals.reduce((a, b) => a + b, 0) / baseVals.length);
+      }
 
-    const phyVal = isGK
-      ? attributes
-        ? Math.round(
-            Number((attributes as any).positioning ?? (profile.overallRating || 50)) * 0.6 +
-              Number((attributes as any).decisions ?? (profile.overallRating || 50)) * 0.4,
-          )
-        : profile.overallRating || 50
-      : attributes
-        ? Math.round(
-            Number((attributes as any).strength ?? (profile.overallRating || 50)) * 0.5 +
-              Number((attributes as any).stamina ?? (profile.overallRating || 50)) * 0.3 +
-              Number((attributes as any).jumping ?? (profile.overallRating || 50)) * 0.2,
-          )
-        : profile.overallRating || 50;
+      return Math.round(activeVals.reduce((a, b) => a + b, 0) / activeVals.length);
+    };
+
+    const posCardKeys = POSITION_CARD_STAT_KEYS[normPos];
+    const isGK = normPos === 'GK';
+
+    const pacVal = computeCardCategoryStat(
+      posCardKeys.pac,
+      isGK ? ['reflexes', 'shotStopping'] : ['acceleration', 'sprintSpeed'],
+    );
+    const shoVal = computeCardCategoryStat(
+      posCardKeys.sho,
+      isGK ? ['handling', 'crossClaiming'] : ['finishing', 'shotPower', 'longShots'],
+    );
+    const pasVal = computeCardCategoryStat(
+      posCardKeys.pas,
+      isGK ? ['distribution', 'footwork'] : ['shortPassing', 'vision', 'longPassing', 'crossing'],
+    );
+    const driVal = computeCardCategoryStat(
+      posCardKeys.dri,
+      isGK ? ['reflexes', 'oneOnOne'] : ['dribbling', 'ballControl', 'agility'],
+    );
+    const defVal = computeCardCategoryStat(
+      posCardKeys.def,
+      isGK ? ['footwork', 'aerialAbility'] : ['marking', 'standingTackle', 'interceptions'],
+    );
+    const phyVal = computeCardCategoryStat(
+      posCardKeys.phy,
+      isGK ? ['positioning', 'decisions'] : ['strength', 'stamina', 'jumping'],
+    );
 
     await FifaCardStats.findOneAndUpdate(
       { playerId: profile._id },

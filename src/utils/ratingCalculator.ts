@@ -424,7 +424,7 @@ export const POSITION_ATTRIBUTE_COEFFICIENTS: Record<PositionKey, Record<string,
     tackling: 0.11,
     interceptions: 0.1,
     anticipation: 0.09,
-    aerialAbility: 0.09,
+    aerialDuels: 0.09,
     strength: 0.08,
     defensiveAwareness: 0.1,
     shortPassing: 0.05,
@@ -443,7 +443,7 @@ export const POSITION_ATTRIBUTE_COEFFICIENTS: Record<PositionKey, Record<string,
     crossing: 0.09,
     shortPassing: 0.07,
     ballControl: 0.06,
-    attPosition: 0.07,
+    offTheBall: 0.07,
     decisions: 0.08,
   },
   'RWB-LWB': {
@@ -509,7 +509,7 @@ export const POSITION_ATTRIBUTE_COEFFICIENTS: Record<PositionKey, Record<string,
     dribbling: 0.12,
     ballControl: 0.09,
     firstTouch: 0.07,
-    oneOnOne: 0.11,
+    oneOnOneAttacking: 0.11,
     crossing: 0.07,
     chanceCreation: 0.07,
     offTheBall: 0.07,
@@ -723,6 +723,69 @@ export const formatCardPosition = (pos?: string): string => {
 /**
  * Calculates Position Overall Rating (0-100) based on position weighted coefficients
  */
+export const resolvePositionAttributeValue = (
+  attr: string,
+  attributes: Record<string, any> = {},
+): number => {
+  let val = attributes[attr];
+  if (val === undefined || val === null) {
+    if (attr === 'positioning')
+      val = attributes.defensivePositioning ?? attributes.gkPositioning ?? attributes.positioning;
+    else if (attr === 'attPosition')
+      val = attributes.attackingPositioning ?? attributes.attPosition;
+    else if (attr === 'decisions') val = attributes.decisionMaking ?? attributes.decisions;
+    else if (attr === 'composure' || attr === 'composition')
+      val = attributes.composure ?? attributes.composition;
+    else if (attr === 'tackling') val = attributes.tackling ?? attributes.standingTackle;
+    else if (attr === 'interceptions') val = attributes.interceptions ?? attributes.interception;
+    else if (attr === 'aerialDuels')
+      val = attributes.aerialDuels ?? attributes.aerialAbility ?? attributes.heading;
+    else if (attr === 'aerialAbility')
+      val = attributes.aerialAbility ?? attributes.aerialDuels ?? attributes.heading;
+    else if (attr === 'oneOnOne' || attr === 'oneOnOneDefending')
+      val =
+        attributes.oneOnOneDefending ??
+        attributes.oneOnOne ??
+        attributes.standingTackle ??
+        attributes.tackling;
+    else if (attr === 'oneOnOneAttacking')
+      val = attributes.oneOnOneAttacking ?? attributes.oneOnOne ?? attributes.dribbling;
+    else if (attr === 'defensivePositioning')
+      val = attributes.defensivePositioning ?? attributes.positioning;
+    else if (attr === 'defensiveAwareness')
+      val = attributes.defensiveAwareness ?? attributes.awareness;
+    else if (attr === 'awareness') val = attributes.awareness ?? attributes.defensiveAwareness;
+    else if (attr === 'shortPassing' || attr === 'passing')
+      val = attributes.shortPassing ?? attributes.passing;
+    else if (attr === 'oneOnOneFinishing')
+      val = attributes.oneOnOneFinishing ?? attributes.finishing;
+    else if (attr === 'shotAccuracy')
+      val =
+        attributes.shotAccuracy ??
+        attributes.shooting ??
+        attributes.finishing ??
+        attributes.shotPower;
+    else if (attr === 'offTheBall')
+      val =
+        attributes.offTheBall ??
+        attributes.offTheBallMovement ??
+        attributes.attPosition ??
+        attributes.positioning;
+    else if (attr === 'throughPassing')
+      val = attributes.throughPassing ?? attributes.vision ?? attributes.shortPassing;
+    else if (attr === 'chanceCreation')
+      val =
+        attributes.chanceCreation ??
+        attributes.vision ??
+        attributes.shortPassing ??
+        attributes.crossing;
+    else if (attr === 'linkUpPlay')
+      val = attributes.linkUpPlay ?? attributes.teamwork ?? attributes.shortPassing;
+  }
+  const num = val !== undefined && val !== null ? Number(val) : 50;
+  return Number.isNaN(num) ? 50 : num;
+};
+
 export const calculatePositionRating = (
   position: string,
   attributes: Record<string, number>,
@@ -734,52 +797,7 @@ export const calculatePositionRating = (
   let totalWeight = 0;
 
   for (const [attr, weight] of Object.entries(coefficients)) {
-    let val = attributes[attr];
-    if (val === undefined) {
-      if (attr === 'attPosition') val = attributes.attackingPositioning ?? attributes.attPosition;
-      else if (attr === 'decisions') val = attributes.decisionMaking ?? attributes.decisions;
-      else if (attr === 'composure') val = attributes.composition ?? attributes.composure;
-      else if (attr === 'tackling') val = attributes.standingTackle ?? attributes.tackling;
-      else if (attr === 'interceptions') val = attributes.interception ?? attributes.interceptions;
-      else if (attr === 'aerialAbility' || attr === 'aerialDuels')
-        val = attributes.aerialDuels ?? attributes.heading ?? attributes.aerialAbility;
-      else if (attr === 'oneOnOne' || attr === 'oneOnOneDefending')
-        val =
-          attributes.oneOnOneDefending ??
-          attributes.standingTackle ??
-          attributes.tackling ??
-          attributes.oneOnOne;
-      else if (attr === 'defensivePositioning')
-        val = attributes.positioning ?? attributes.defensivePositioning;
-      else if (attr === 'defensiveAwareness')
-        val = attributes.defensiveAwareness ?? attributes.awareness;
-      else if (attr === 'shortPassing' || attr === 'passing')
-        val = attributes.shortPassing ?? attributes.passing;
-      else if (attr === 'oneOnOneFinishing')
-        val = attributes.finishing ?? attributes.oneOnOneFinishing;
-      else if (attr === 'shotAccuracy')
-        val =
-          attributes.shooting ??
-          attributes.finishing ??
-          attributes.shotPower ??
-          attributes.shotAccuracy;
-      else if (attr === 'offTheBall')
-        val = attributes.attPosition ?? attributes.positioning ?? attributes.offTheBall;
-      else if (attr === 'throughPassing')
-        val = attributes.vision ?? attributes.shortPassing ?? attributes.throughPassing;
-      else if (attr === 'oneOnOneAttacking')
-        val = attributes.dribbling ?? attributes.oneOnOneAttacking;
-      else if (attr === 'chanceCreation')
-        val =
-          attributes.vision ??
-          attributes.shortPassing ??
-          attributes.crossing ??
-          attributes.chanceCreation;
-      else if (attr === 'linkUpPlay')
-        val = attributes.teamwork ?? attributes.shortPassing ?? attributes.linkUpPlay;
-      else val = 50;
-    }
-    val = val ?? 50;
+    const val = resolvePositionAttributeValue(attr, attributes);
     totalScore += val * weight;
     totalWeight += weight;
   }
@@ -874,25 +892,48 @@ export const calculateMatchPerformance = (
   };
 };
 
-export const formatAttributeLabel = (key: string): string => {
+export const formatAttributeLabel = (key: string, position?: string): string => {
+  if (position) {
+    const normPos = normalizePositionKey(position);
+    if (normPos === 'GK') {
+      if (key === 'positioning') return 'GK Positioning';
+      if (key === 'oneOnOne') return 'One-on-One';
+    } else if (normPos === 'CB') {
+      if (key === 'positioning') return 'Defensive Positioning';
+      if (key === 'shortPassing') return 'Passing';
+    } else if (normPos === 'RB-LB' || normPos === 'RWB-LWB') {
+      if (key === 'positioning') return 'Defensive Positioning';
+      if (key === 'oneOnOne') return 'One-on-One Defending';
+      if (key === 'shortPassing') return 'Passing';
+    } else if (normPos === 'CDM') {
+      if (key === 'positioning') return 'Defensive Positioning';
+    } else if (normPos === 'RW-LW') {
+      if (key === 'oneOnOneAttacking' || key === 'oneOnOne') return 'One-on-One Attacking';
+    } else if (normPos === 'CF') {
+      if (key === 'shortPassing') return 'Passing';
+    }
+  }
+
   const map: Record<string, string> = {
     finishing: 'Finishing',
-    attPosition: 'Att. Positioning',
-    offTheBall: 'Off the Ball',
+    attPosition: 'Attacking Positioning',
+    offTheBall: 'Off-the-Ball Movement',
     firstTouch: 'First Touch',
     shotAccuracy: 'Shot Accuracy',
-    oneOnOneFinishing: '1v1 Finishing',
+    oneOnOneFinishing: 'One-on-One Finishing',
+    oneOnOneAttacking: 'One-on-One Attacking',
+    oneOnOneDefending: 'One-on-One Defending',
     aerialAbility: 'Aerial Ability',
     strength: 'Strength',
     acceleration: 'Acceleration',
     anticipation: 'Anticipation',
-    decisions: 'Decisions',
+    decisions: 'Decision Making',
     composure: 'Composure',
     positioning: 'Positioning',
     marking: 'Marking',
     tackling: 'Tackling',
     interceptions: 'Interceptions',
-    defensiveAwareness: 'Def. Awareness',
+    defensiveAwareness: 'Defensive Awareness',
     shortPassing: 'Short Passing',
     ballControl: 'Ball Control',
     sprintSpeed: 'Sprint Speed',
@@ -906,10 +947,10 @@ export const formatAttributeLabel = (key: string): string => {
     throughPassing: 'Through Passing',
     creativity: 'Creativity',
     chanceCreation: 'Chance Creation',
-    linkUpPlay: 'Link-up Play',
+    linkUpPlay: 'Link-Up Play',
     reflexes: 'Reflexes',
     handling: 'Handling',
-    oneOnOne: '1v1 Defending',
+    oneOnOne: 'One-on-One Defending',
     crossClaiming: 'Cross Claiming',
     shotStopping: 'Shot Stopping',
     footwork: 'Footwork',

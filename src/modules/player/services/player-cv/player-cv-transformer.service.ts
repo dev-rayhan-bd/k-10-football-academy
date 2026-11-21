@@ -6,6 +6,8 @@ import {
   formatAttributeLabel,
   formatMarketValue,
   calculateMetricGrade,
+  resolvePositionAttributeValue,
+  calculatePositionRating,
 } from '@/utils/ratingCalculator';
 import { playerAttributeService } from './../player-attribute.service';
 import { computeProfileCompletion, computePlayerCardTier } from '../player-stats.service';
@@ -60,69 +62,40 @@ export class PlayerCvTransformerService {
     // 3. Top Key Positional Attributes based on client's Excel weights
     const normPos = normalizePositionKey(aggregatedProfile.position || 'CM');
     const posCoefficients = POSITION_ATTRIBUTE_COEFFICIENTS[normPos] || {};
-    const sortedCoeffs = Object.entries(posCoefficients).sort((a, b) => b[1] - a[1]);
+    const excelOrderedCoeffs = Object.entries(posCoefficients);
+    const sortedCoeffs = [...excelOrderedCoeffs].sort((a, b) => b[1] - a[1]);
+    const positionOverall = calculatePositionRating(normPos, rawAttrDoc);
 
     const keyAttributes = sortedCoeffs.slice(0, 5).map(([attrKey, weight]) => {
-      let val = rawAttrDoc[attrKey];
-      if (val === undefined) {
-        if (attrKey === 'attPosition')
-          val = rawAttrDoc.attPosition ?? rawAttrDoc.attackingPositioning;
-        else if (attrKey === 'decisions') val = rawAttrDoc.decisions ?? rawAttrDoc.decisionMaking;
-        else if (attrKey === 'composure') val = rawAttrDoc.composure ?? rawAttrDoc.composition;
-        else if (attrKey === 'tackling') val = rawAttrDoc.tackling ?? rawAttrDoc.standingTackle;
-        else if (attrKey === 'interceptions')
-          val = rawAttrDoc.interceptions ?? rawAttrDoc.interception;
-        else if (attrKey === 'aerialAbility')
-          val = rawAttrDoc.aerialAbility ?? rawAttrDoc.aerialDuels ?? rawAttrDoc.heading;
-        else if (attrKey === 'oneOnOne') val = rawAttrDoc.oneOnOne ?? rawAttrDoc.standingTackle;
-        else val = 50;
-      }
-      val = val ?? 50;
+      const val = resolvePositionAttributeValue(attrKey, rawAttrDoc);
       return {
         key: attrKey,
-        label: formatAttributeLabel(attrKey),
+        label: formatAttributeLabel(attrKey, normPos),
         value: val,
         weight: Math.round(weight * 100),
       };
     });
 
-    // 4. Complete Positional Co-efficients list for UI
-    const posAttributeKeySet = new Set<string>();
+    // 4. Complete Positional Co-efficients list for UI (in exact client Excel order)
     const positionalCoefficientsList: Array<{
       key: string;
       label: string;
       value: number;
       score: number;
       grade: string;
-      weight?: number;
-    }> = [];
-
-    sortedCoeffs.forEach(([attrKey, weight]) => {
-      let val = rawAttrDoc[attrKey];
-      if (val === undefined || val === null) {
-        if (attrKey === 'attPosition')
-          val = rawAttrDoc.attPosition ?? rawAttrDoc.attackingPositioning;
-        else if (attrKey === 'decisions') val = rawAttrDoc.decisions ?? rawAttrDoc.decisionMaking;
-        else if (attrKey === 'composure' || attrKey === 'composition')
-          val = rawAttrDoc.composition ?? rawAttrDoc.composure;
-        else if (attrKey === 'tackling') val = rawAttrDoc.tackling ?? rawAttrDoc.standingTackle;
-        else if (attrKey === 'interceptions')
-          val = rawAttrDoc.interceptions ?? rawAttrDoc.interception;
-        else if (attrKey === 'aerialAbility')
-          val = rawAttrDoc.aerialAbility ?? rawAttrDoc.aerialDuels ?? rawAttrDoc.heading;
-        else if (attrKey === 'oneOnOne') val = rawAttrDoc.oneOnOne ?? rawAttrDoc.standingTackle;
-        else val = 50;
-      }
-      val = val !== undefined && val !== null ? Number(val) : 50;
-      posAttributeKeySet.add(attrKey);
-      positionalCoefficientsList.push({
+      weight: number;
+      weightedScore: number;
+    }> = excelOrderedCoeffs.map(([attrKey, weight]) => {
+      const val = resolvePositionAttributeValue(attrKey, rawAttrDoc);
+      return {
         key: attrKey,
-        label: formatAttributeLabel(attrKey),
+        label: formatAttributeLabel(attrKey, normPos),
         value: val,
         score: val,
         grade: calculateMetricGrade(val),
         weight: Math.round(weight * 100),
-      });
+        weightedScore: Math.round(val * weight * 100) / 100,
+      };
     });
 
     // Positional attributes are strictly position-specific according to the client's Excel specification
@@ -905,6 +878,7 @@ export class PlayerCvTransformerService {
       phone: userPhone,
       email: userEmail,
       overallRating,
+      positionOverall,
       interpretation: overallInterpretation,
       preferredFoot: prefFoot,
       rightFootDominance: rightFoot,

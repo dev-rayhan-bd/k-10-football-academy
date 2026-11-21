@@ -127,7 +127,10 @@ export const computePlayerCardTier = (params: {
 };
 
 export class PlayerStatsService {
-  async recalculatePlayerStats(profileId: Types.ObjectId | string) {
+  async recalculatePlayerStats(
+    profileId: Types.ObjectId | string,
+    options?: { preserveMarketValue?: boolean },
+  ) {
     const profile = await PlayerProfile.findById(profileId);
     if (!profile) return;
 
@@ -199,11 +202,33 @@ export class PlayerStatsService {
     });
     profile.cvTier = cvTier;
 
-    // 6. Compute marketValue
-    const ageBonus = Math.max(0, (30 - (profile.age || 20)) * 1000);
-    profile.marketValue = Math.round(
-      profile.overallRating * 2000 + totalGoals * 5000 + totalAssists * 3000 + ageBonus,
-    );
+    // 6. Compute marketValue only if not manually specified
+    if (!options?.preserveMarketValue && (!profile.marketValue || profile.marketValue <= 0)) {
+      const hasAgent =
+        String(profile.agentStatus || '')
+          .toUpperCase()
+          .includes('REPRESENTED') &&
+        !String(profile.agentStatus || '')
+          .toUpperCase()
+          .includes('UNREPRESENTED');
+      const hasClub =
+        (String(profile.clubStatus || '')
+          .toUpperCase()
+          .includes('SIGNED') ||
+          Boolean(profile.currentClub && profile.currentClub.trim())) &&
+        !String(profile.clubStatus || '')
+          .toUpperCase()
+          .includes('WITHOUT');
+
+      if (hasAgent || hasClub) {
+        const ageBonus = Math.max(0, (30 - (profile.age || 20)) * 1000);
+        profile.marketValue = Math.round(
+          profile.overallRating * 2000 + totalGoals * 5000 + totalAssists * 3000 + ageBonus,
+        );
+      } else {
+        profile.marketValue = 0;
+      }
+    }
 
     if (!profile.dateOfBirth) {
       const userDoc = await UserModel.findById(profile.userId).select('dateOfBirth');

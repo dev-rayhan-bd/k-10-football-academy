@@ -8,6 +8,7 @@ import {
   formatAttributeLabel,
   normalizePositionKey,
   POSITION_ATTRIBUTE_COEFFICIENTS,
+  resolvePositionAttributeValue,
 } from '@/utils/ratingCalculator';
 
 export class PlayerAttributeService {
@@ -83,31 +84,17 @@ export class PlayerAttributeService {
 
     const normPos = normalizePositionKey(position || 'CM');
     const coefficients = POSITION_ATTRIBUTE_COEFFICIENTS[normPos] || {};
-    const positionAttributes = Object.entries(coefficients)
-      .sort((a, b) => b[1] - a[1])
-      .map(([attrKey, weight]) => {
-        let val = raw[attrKey];
-        if (val === undefined || val === null) {
-          if (attrKey === 'attPosition') val = raw.attPosition ?? raw.attackingPositioning;
-          else if (attrKey === 'decisions') val = raw.decisions ?? raw.decisionMaking;
-          else if (attrKey === 'composure' || attrKey === 'composition')
-            val = raw.composition ?? raw.composure;
-          else if (attrKey === 'tackling') val = raw.tackling ?? raw.standingTackle;
-          else if (attrKey === 'interceptions') val = raw.interceptions ?? raw.interception;
-          else if (attrKey === 'aerialAbility')
-            val = raw.aerialAbility ?? raw.aerialDuels ?? raw.heading;
-          else if (attrKey === 'oneOnOne') val = raw.oneOnOne ?? raw.standingTackle;
-          else val = 50;
-        }
-        val = val !== undefined && val !== null ? Number(val) : 50;
-        return {
-          key: attrKey,
-          label: formatAttributeLabel(attrKey),
-          weight: Math.round(weight * 100),
-          percentage: `${Math.round(weight * 100)}%`,
-          value: val,
-        };
-      });
+    const positionAttributes = Object.entries(coefficients).map(([attrKey, weight]) => {
+      const val = resolvePositionAttributeValue(attrKey, raw);
+      return {
+        key: attrKey,
+        label: formatAttributeLabel(attrKey, normPos),
+        weight: Math.round(weight * 100),
+        percentage: `${Math.round(weight * 100)}%`,
+        value: val,
+        weightedScore: Math.round(val * weight * 100) / 100,
+      };
+    });
 
     const calculatedPositionRating = calculatePositionRating(normPos, raw);
 
@@ -189,6 +176,35 @@ export class PlayerAttributeService {
       flattenedPayload.interception === undefined
     ) {
       flattenedPayload.interception = flattenedPayload.interceptions;
+    }
+    if (
+      (flattenedPayload.defensivePositioning !== undefined ||
+        flattenedPayload.gkPositioning !== undefined) &&
+      flattenedPayload.positioning === undefined
+    ) {
+      flattenedPayload.positioning =
+        flattenedPayload.defensivePositioning ?? flattenedPayload.gkPositioning;
+    }
+    if (
+      flattenedPayload.attackingPositioning !== undefined &&
+      flattenedPayload.attPosition === undefined
+    ) {
+      flattenedPayload.attPosition = flattenedPayload.attackingPositioning;
+    }
+    if (flattenedPayload.decisionMaking !== undefined && flattenedPayload.decisions === undefined) {
+      flattenedPayload.decisions = flattenedPayload.decisionMaking;
+    }
+    if (
+      flattenedPayload.offTheBallMovement !== undefined &&
+      flattenedPayload.offTheBall === undefined
+    ) {
+      flattenedPayload.offTheBall = flattenedPayload.offTheBallMovement;
+    }
+    if (
+      flattenedPayload.oneOnOneDefending !== undefined &&
+      flattenedPayload.oneOnOne === undefined
+    ) {
+      flattenedPayload.oneOnOne = flattenedPayload.oneOnOneDefending;
     }
 
     // Support high-level Strength / FIFA card stat aliases sent from frontend

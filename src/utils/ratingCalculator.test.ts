@@ -1,11 +1,60 @@
 import {
   calculateMatchPerformance,
   calculatePositionRating,
+  formatAttributeLabel,
   getInterpretationScore,
+  POSITION_ATTRIBUTE_COEFFICIENTS,
+  PositionKey,
 } from './ratingCalculator';
 
 describe('Rating Calculator Utility Tests', () => {
   describe('calculatePositionRating', () => {
+    it('should match the exact client CB Excel sheet worked example (Weighted Sum 71.64 -> Overall 72)', () => {
+      const cbAttributes = {
+        positioning: 85, // Defensive Positioning 12% -> 10.20
+        marking: 75, // Marking 10% -> 7.50
+        tackling: 65, // Tackling 11% -> 7.15
+        interceptions: 70, // Interceptions 10% -> 7.00
+        anticipation: 71, // Anticipation 9% -> 6.39
+        aerialDuels: 57, // Aerial Duels 9% -> 5.13
+        strength: 69, // Strength 8% -> 5.52
+        defensiveAwareness: 70, // Defensive Awareness 10% -> 7.00
+        shortPassing: 87, // Passing 5% -> 4.35
+        ballControl: 81, // Ball Control 4% -> 3.24
+        decisions: 63, // Decision Making 7% -> 4.41
+        composure: 75, // Composure 5% -> 3.75
+      };
+
+      const rating = calculatePositionRating('CB', cbAttributes);
+      expect(rating).toBe(72);
+    });
+
+    it('should ensure all 10 positions have exactly 12 attributes with weights summing to 100%', () => {
+      const positions = Object.keys(POSITION_ATTRIBUTE_COEFFICIENTS) as PositionKey[];
+      expect(positions).toHaveLength(10);
+
+      for (const pos of positions) {
+        const entries = Object.entries(POSITION_ATTRIBUTE_COEFFICIENTS[pos]);
+        expect(entries).toHaveLength(12);
+        const totalWeight = entries.reduce((sum, [, w]) => sum + Math.round(w * 100), 0);
+        expect(totalWeight).toBe(100);
+      }
+    });
+
+    it('should return exact client Excel attribute labels for position-specific keys', () => {
+      expect(formatAttributeLabel('positioning', 'GK')).toBe('GK Positioning');
+      expect(formatAttributeLabel('oneOnOne', 'GK')).toBe('One-on-One');
+      expect(formatAttributeLabel('positioning', 'CB')).toBe('Defensive Positioning');
+      expect(formatAttributeLabel('aerialDuels', 'CB')).toBe('Aerial Duels');
+      expect(formatAttributeLabel('shortPassing', 'CB')).toBe('Passing');
+      expect(formatAttributeLabel('offTheBall', 'RB-LB')).toBe('Off-the-Ball Movement');
+      expect(formatAttributeLabel('oneOnOne', 'RB-LB')).toBe('One-on-One Defending');
+      expect(formatAttributeLabel('oneOnOneAttacking', 'RW-LW')).toBe('One-on-One Attacking');
+      expect(formatAttributeLabel('decisions', 'ST')).toBe('Decision Making');
+      expect(formatAttributeLabel('oneOnOneFinishing', 'ST')).toBe('One-on-One Finishing');
+      expect(formatAttributeLabel('linkUpPlay', 'CF')).toBe('Link-Up Play');
+    });
+
     it('should calculate weighted rating for ST position correctly', () => {
       const attributes = {
         finishing: 80,

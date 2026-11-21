@@ -841,6 +841,9 @@ export class PlayerProfileService {
       (normClub.includes('SIGNED') || Boolean(currentClub && currentClub.trim())) &&
       !normClub.includes('WITHOUT');
 
+    const hasExplicitMarketValue =
+      payload.marketValue !== undefined || evalData.marketValue !== undefined;
+
     let mv =
       payload.marketValue !== undefined
         ? Number(payload.marketValue)
@@ -987,7 +990,9 @@ export class PlayerProfileService {
           // Safe logging without interrupting HTTP response
         }
       }
-      const updatedProfile = await playerStatsService.recalculatePlayerStats(profile._id);
+      const updatedProfile = await playerStatsService.recalculatePlayerStats(profile._id, {
+        preserveMarketValue: hasExplicitMarketValue,
+      });
       await playerCacheService.invalidatePlayerCache(profile._id, profile.userId);
       return updatedProfile || profile;
     }

@@ -15,11 +15,13 @@ import {
   PlayerMedia,
 } from '../player.model';
 import { UserModel } from '@/modules/user/user.model';
+import { Media } from '@/modules/media/media.model';
 import { playerCacheService } from './player-cache.service';
 
 export const computeProfileCompletion = (
   profile: Partial<IPlayerProfile>,
   hasAttributes = false,
+  hasMediaVideo = false,
 ): number => {
   const fields = [
     profile.fullName,
@@ -29,7 +31,7 @@ export const computeProfileCompletion = (
     profile.country,
     profile.preferredFoot,
     profile.profileImage,
-    profile.highlightVideo,
+    profile.highlightVideo || (hasMediaVideo ? true : undefined),
     profile.height,
     profile.weight,
     profile.currentClub,
@@ -153,43 +155,43 @@ export class PlayerStatsService {
       positionRating = calculatePositionRating(profile.position || 'CM', attrObj);
     }
 
-    // 2. Get match records
+    // 2. Get match records (for career totals & card tier checklist)
     const matches = await MatchRecord.find({ playerId: profile._id });
     const matchCount = matches.length;
     let totalGoals = 0;
     let totalAssists = 0;
-    let avgMatchRating = 0;
 
     if (matchCount > 0) {
-      const sumRating = matches.reduce((acc, m) => {
-        const r = m.playerRating ?? 5.0;
-        const normalized100 = r <= 10 ? r * 10 : r;
-        return acc + normalized100;
-      }, 0);
       totalGoals = matches.reduce((acc, m) => acc + (m.goals || 0), 0);
       totalAssists = matches.reduce((acc, m) => acc + (m.assists || 0), 0);
-      avgMatchRating = sumRating / matchCount;
     }
 
-    // 3. Compute overall rating
-    let finalOverall = positionRating;
-    if (matchCount > 0) {
-      finalOverall = Math.round(positionRating * 0.7 + avgMatchRating * 0.3);
-    }
-    profile.overallRating = Math.min(100, Math.max(0, finalOverall));
+    // 3. Overall rating strictly equals the Excel Position Overall (keeps Dashboard, Public CV, and Cards 100% consistent)
+    profile.overallRating = Math.min(100, Math.max(0, positionRating));
 
-    // 4. Compute profileCompletion
+    // 4. Query media counts (both PlayerMedia & general Media) for completion & Tier calculation
+    const [playerVideoCount, playerPhotoCount, generalVideoCount, generalPhotoCount] =
+      await Promise.all([
+        PlayerMedia.countDocuments({ playerId: profile._id, mediaType: 'VIDEO' }).catch(() => 0),
+        PlayerMedia.countDocuments({ playerId: profile._id, mediaType: 'IMAGE' }).catch(() => 0),
+        Media.countDocuments({
+          $or: [{ playerId: profile._id }, { userId: profile.userId }],
+          mediaType: 'VIDEO',
+        }).catch(() => 0),
+        Media.countDocuments({
+          $or: [{ playerId: profile._id }, { userId: profile.userId }],
+          mediaType: 'IMAGE',
+        }).catch(() => 0),
+      ]);
+    const totalVideos =
+      Math.max(playerVideoCount, generalVideoCount) + (profile.highlightVideo ? 1 : 0);
+    const totalPhotos =
+      Math.max(playerPhotoCount, generalPhotoCount) + (profile.profileImage ? 1 : 0);
+
+    // 5. Compute profileCompletion (any uploaded Media video satisfies the highlightVideo requirement)
     const rawProfile = typeof profile.toObject === 'function' ? profile.toObject() : profile;
-    const completion = computeProfileCompletion(rawProfile, hasAttributes);
+    const completion = computeProfileCompletion(rawProfile, hasAttributes, totalVideos > 0);
     profile.profileCompletion = completion;
-
-    // 5. Query media counts & verification for Tier calculation
-    const [videoCount, photoCount] = await Promise.all([
-      PlayerMedia.countDocuments({ playerId: profile._id, mediaType: 'VIDEO' }).catch(() => 0),
-      PlayerMedia.countDocuments({ playerId: profile._id, mediaType: 'IMAGE' }).catch(() => 0),
-    ]);
-    const totalVideos = videoCount + (profile.highlightVideo ? 1 : 0);
-    const totalPhotos = photoCount + (profile.profileImage ? 1 : 0);
 
     const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const isUpdatedRecently = !profile.updatedAt || new Date(profile.updatedAt) >= threeMonthsAgo;

@@ -9,6 +9,7 @@ import { ClubProfile } from '@/modules/club/club.model';
 import { AcademyProfile } from '@/modules/academy/academy.model';
 import { videoQueue } from '@/jobs/queues/video.queue';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
+import { playerStatsService } from '@/modules/player/services/player-stats.service';
 import QueryBuilder from '@/builder/QueryBuilder';
 
 export class MediaService {
@@ -77,6 +78,9 @@ export class MediaService {
         mediaType,
         thumbnailUrl: payload.thumbnailUrl,
       }).catch(() => {});
+      await playerStatsService
+        .recalculatePlayerStats(playerId, { preserveMarketValue: true })
+        .catch(() => {});
       await playerCacheService.invalidatePlayerCache(playerId, userId.toString()).catch(() => {});
     }
 
@@ -277,6 +281,9 @@ export class MediaService {
     // Also remove from PlayerMedia if linked
     if (media.playerId) {
       await PlayerMedia.findOneAndDelete({ url: media.url }).catch(() => {});
+      await playerStatsService
+        .recalculatePlayerStats(media.playerId, { preserveMarketValue: true })
+        .catch(() => {});
       await playerCacheService
         .invalidatePlayerCache(media.playerId, media.userId.toString())
         .catch(() => {});

@@ -182,8 +182,10 @@ export class PlayerCvTransformerService {
       mental: {
         overallScore: mentalOverall,
         aggression: mentObj.aggression ?? 50,
-        interceptions: mentObj.interceptions ?? 50,
-        marking: mentObj.marking ?? 50,
+        concentration: mentObj.concentration ?? 50,
+        consistency: mentObj.consistency ?? 50,
+        interceptions: defObj.interception ?? 50,
+        marking: defObj.marking ?? 50,
         leadership: mentObj.leadership ?? 50,
       },
       attacking: {
@@ -739,10 +741,26 @@ export class PlayerCvTransformerService {
     };
 
     const hasAttributes = Boolean(aggregatedProfile.attributesDoc);
-    const completionPercentage =
-      aggregatedProfile.profileCompletion !== undefined && aggregatedProfile.profileCompletion > 0
-        ? aggregatedProfile.profileCompletion
-        : computeProfileCompletion(aggregatedProfile, hasAttributes);
+    const galleryVideosCount = Array.isArray(aggregatedProfile.mediaGallery)
+      ? aggregatedProfile.mediaGallery.filter((m: any) => m.mediaType === 'VIDEO').length
+      : 0;
+    const galleryPhotosCount = Array.isArray(aggregatedProfile.mediaGallery)
+      ? aggregatedProfile.mediaGallery.filter((m: any) => m.mediaType === 'IMAGE').length
+      : 0;
+    const videoCount =
+      (aggregatedProfile.highlightVideo ? 1 : 0) +
+      galleryVideosCount +
+      (Array.isArray(aggregatedProfile.videos) ? aggregatedProfile.videos.length : 0);
+    const photoCount =
+      (aggregatedProfile.profileImage ? 1 : 0) +
+      galleryPhotosCount +
+      (Array.isArray(aggregatedProfile.photos) ? aggregatedProfile.photos.length : 0);
+
+    const completionPercentage = computeProfileCompletion(
+      aggregatedProfile,
+      hasAttributes,
+      videoCount > 0,
+    );
 
     const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const isUpdatedRecently =
@@ -750,12 +768,6 @@ export class PlayerCvTransformerService {
     const isCoachValidated = Boolean(
       aggregatedProfile.isVerifiedByCoach || aggregatedProfile.coachVerification?.isVerified,
     );
-    const videoCount =
-      (aggregatedProfile.highlightVideo ? 1 : 0) +
-      (Array.isArray(aggregatedProfile.videos) ? aggregatedProfile.videos.length : 0);
-    const photoCount =
-      (aggregatedProfile.profileImage ? 1 : 0) +
-      (Array.isArray(aggregatedProfile.photos) ? aggregatedProfile.photos.length : 0);
 
     const { cvTier: autoTier, tierChecklist } = computePlayerCardTier({
       completion: completionPercentage,

@@ -49,37 +49,54 @@ export class PlayerAttributeService {
       jumping: raw.jumping ?? 50,
     };
 
+    const pick = (primary: any, ...fallbacks: any[]): number => {
+      if (primary !== undefined && primary !== null && Number(primary) !== 50) {
+        return Number(primary);
+      }
+      for (const fb of fallbacks) {
+        if (fb !== undefined && fb !== null && Number(fb) !== 50) {
+          return Number(fb);
+        }
+      }
+      return primary !== undefined && primary !== null ? Number(primary) : 50;
+    };
+
     const mental = {
-      aggression: raw.aggression ?? 50,
-      concentration: raw.concentration ?? 50,
-      consistency: raw.consistency ?? 50,
-      leadership: raw.leadership ?? 50,
-      bravery: raw.bravery ?? 50,
-      determination: raw.determination ?? 50,
-      heading: raw.heading ?? 50,
-      influence: raw.influence ?? 50,
+      aggression: pick(raw.aggression, raw.oneOnOne, raw.tackling, raw.strength),
+      concentration: pick(raw.concentration, raw.decisions, raw.composure, raw.anticipation),
+      consistency: pick(raw.consistency, raw.decisions, raw.stamina, raw.composure),
+      leadership: pick(raw.leadership, raw.communication, raw.teamwork, raw.decisions),
+      bravery: pick(raw.bravery, raw.oneOnOne, raw.aerialDuels, raw.aerialAbility),
+      determination: pick(raw.determination, raw.stamina, raw.decisions, raw.composure),
+      heading: pick(raw.heading, raw.headingAccuracy, raw.aerialDuels, raw.aerialAbility),
+      influence: pick(raw.influence, raw.creativity, raw.vision, raw.decisions),
     };
 
     const attacking = {
-      firstTouch: raw.firstTouch ?? 50,
-      shotPower: raw.shotPower ?? 50,
-      curve: raw.curve ?? 50,
-      freeKick: raw.freeKick ?? 50,
-      penalties: raw.penalties ?? 50,
-      volleys: raw.volleys ?? 50,
-      headingAccuracy: raw.headingAccuracy ?? raw.heading ?? 50,
-      weakFoot: raw.weakFoot ?? 50,
+      firstTouch: pick(raw.firstTouch, raw.ballControl),
+      shotPower: pick(raw.shotPower, raw.shooting, raw.finishing, raw.shotAccuracy),
+      curve: pick(raw.curve, raw.crossing, raw.longPassing, raw.shortPassing),
+      freeKick: pick(raw.freeKick, raw.crossing, raw.shotAccuracy, raw.shortPassing),
+      penalties: pick(raw.penalties, raw.finishing, raw.composure),
+      volleys: pick(raw.volleys, raw.finishing, raw.attPosition),
+      headingAccuracy: pick(raw.headingAccuracy, raw.heading, raw.aerialDuels, raw.aerialAbility),
+      weakFoot: pick(raw.weakFoot, raw.ballControl, raw.shortPassing),
     };
 
     const defending = {
-      standingTackle: raw.standingTackle ?? raw.tackling ?? 50,
-      slidingTackle: raw.slidingTackle ?? 50,
-      interception: raw.interception ?? raw.interceptions ?? 50,
-      marking: raw.marking ?? 50,
-      aerialDuels: raw.aerialDuels ?? 50,
-      clearance: raw.clearance ?? 50,
-      pressing: raw.pressing ?? 50,
-      defensiveAwareness: raw.defensiveAwareness ?? 50,
+      standingTackle: pick(raw.standingTackle, raw.tackling, raw.oneOnOne),
+      slidingTackle: pick(raw.slidingTackle, raw.tackling, raw.oneOnOne),
+      interception: pick(raw.interception, raw.interceptions, raw.positioning, raw.anticipation),
+      marking: pick(raw.marking, raw.oneOnOne, raw.positioning),
+      aerialDuels: pick(raw.aerialDuels, raw.aerialAbility, raw.heading),
+      clearance: pick(raw.clearance, raw.positioning, raw.tackling, raw.oneOnOne),
+      pressing: pick(raw.pressing, raw.stamina, raw.oneOnOne, raw.offTheBall),
+      defensiveAwareness: pick(
+        raw.defensiveAwareness,
+        raw.positioning,
+        raw.awareness,
+        raw.oneOnOne,
+      ),
     };
 
     const normPos = normalizePositionKey(position || 'CM');

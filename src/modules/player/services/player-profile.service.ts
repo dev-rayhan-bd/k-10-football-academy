@@ -19,7 +19,11 @@ import { playerCvService } from './player-cv.service';
 import { playerAttributeService } from './player-attribute.service';
 import { validateClubHistoryTimeline } from './player-career.service';
 import { videoQueue } from '@/jobs/queues/video.queue';
-import { calculateMetricGrade, formatCardPosition } from '@/utils/ratingCalculator';
+import {
+  calculateMetricGrade,
+  formatCardPosition,
+  normalizePositionKey,
+} from '@/utils/ratingCalculator';
 
 export class PlayerProfileService {
   async createProfile(payload: Partial<IPlayerProfile>) {
@@ -256,15 +260,34 @@ export class PlayerProfileService {
       const favCount = favMap.get(obj._id?.toString()) || 0;
       obj.totalLikes = Math.max(obj.totalLikes ?? 0, favCount);
       obj.profileViews = obj.profileViews ?? 0;
+      const cardPos = formatCardPosition(card?.position ?? obj.position ?? 'Forward');
+      const isGK =
+        cardPos === 'GK' ||
+        String(obj.position || '')
+          .toUpperCase()
+          .includes('GOAL');
+      const pac = card?.pac ?? 50;
+      const sho = card?.sho ?? 50;
+      const pas = card?.pas ?? 50;
+      const dri = card?.dri ?? 50;
+      const def = card?.def ?? 50;
+      const phy = card?.phy ?? 50;
       obj.fifaCardStats = {
         overallRating: card?.overallRating ?? obj.overallRating ?? 50,
-        position: formatCardPosition(card?.position ?? obj.position ?? 'Forward'),
-        pac: card?.pac ?? 50,
-        sho: card?.sho ?? 50,
-        pas: card?.pas ?? 50,
-        dri: card?.dri ?? 50,
-        def: card?.def ?? 50,
-        phy: card?.phy ?? 50,
+        position: cardPos,
+        pac,
+        sho,
+        pas,
+        dri,
+        def,
+        phy,
+        isGoalkeeper: isGK,
+        div: isGK ? pac : undefined,
+        han: isGK ? sho : undefined,
+        kic: isGK ? pas : undefined,
+        ref: isGK ? dri : undefined,
+        spe: isGK ? def : undefined,
+        pos: isGK ? phy : undefined,
         cardImage:
           card?.cardImage ||
           obj.cardImage ||
@@ -875,12 +898,21 @@ export class PlayerProfileService {
       marketValue: mv,
     };
 
+    const oldNormPos = normalizePositionKey(existing.position || 'CM');
+    const newNormPos = payload.position ? normalizePositionKey(payload.position) : oldNormPos;
+    const positionChanged = Boolean(payload.position && newNormPos !== oldNormPos);
+
     const profile = await PlayerProfile.findOneAndUpdate({ _id: existing._id }, payload, {
       new: true,
       runValidators: true,
     });
 
     if (profile) {
+      // Reset stale attributes from the previous position when canonical position changes
+      if (positionChanged) {
+        await playerAttributeService.resetAttributesForPositionChange(profile._id);
+      }
+
       // Sync attribute updates into PlayerAttributes collection if passed
       let attrsToUpdate: any =
         payload.attributes ||

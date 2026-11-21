@@ -117,6 +117,16 @@ export class PlayerAttributeService {
     };
   }
 
+  /**
+   * Reset all attributes (including dynamic strict:false positional fields) to baseline 50
+   * whenever a player switches to a different canonical position group.
+   */
+  async resetAttributesForPositionChange(playerId: Types.ObjectId | string) {
+    const objId = typeof playerId === 'string' ? new Types.ObjectId(playerId) : playerId;
+    await PlayerAttributes.deleteOne({ playerId: objId });
+    return await PlayerAttributes.create({ playerId: objId });
+  }
+
   async updateAttributes(playerId: string, payload: Record<string, any>) {
     const profile = await PlayerProfile.findOne({
       $or: [{ _id: playerId }, { userId: playerId }],
@@ -217,24 +227,33 @@ export class PlayerAttributeService {
       const shoVal = Number(flattenedPayload.shooting);
       if (flattenedPayload.finishing === undefined) flattenedPayload.finishing = shoVal;
       if (flattenedPayload.shotPower === undefined) flattenedPayload.shotPower = shoVal;
+      if (flattenedPayload.longShots === undefined) flattenedPayload.longShots = shoVal;
     }
     if (flattenedPayload.passing !== undefined) {
       const pasVal = Number(flattenedPayload.passing);
       if (flattenedPayload.shortPassing === undefined) flattenedPayload.shortPassing = pasVal;
+      if (flattenedPayload.vision === undefined) flattenedPayload.vision = pasVal;
+      if (flattenedPayload.longPassing === undefined) flattenedPayload.longPassing = pasVal;
+      if (flattenedPayload.crossing === undefined) flattenedPayload.crossing = pasVal;
     }
     if (flattenedPayload.dribbling !== undefined) {
       const driVal = Number(flattenedPayload.dribbling);
       if (flattenedPayload.ballControl === undefined) flattenedPayload.ballControl = driVal;
+      if (flattenedPayload.agility === undefined) flattenedPayload.agility = driVal;
     }
     if (flattenedPayload.defending !== undefined) {
       const defVal = Number(flattenedPayload.defending);
       if (flattenedPayload.marking === undefined) flattenedPayload.marking = defVal;
       if (flattenedPayload.standingTackle === undefined) flattenedPayload.standingTackle = defVal;
+      if (flattenedPayload.tackling === undefined) flattenedPayload.tackling = defVal;
+      if (flattenedPayload.interceptions === undefined) flattenedPayload.interceptions = defVal;
+      if (flattenedPayload.interception === undefined) flattenedPayload.interception = defVal;
     }
     if (flattenedPayload.physical !== undefined) {
       const phyVal = Number(flattenedPayload.physical);
       if (flattenedPayload.strength === undefined) flattenedPayload.strength = phyVal;
       if (flattenedPayload.stamina === undefined) flattenedPayload.stamina = phyVal;
+      if (flattenedPayload.jumping === undefined) flattenedPayload.jumping = phyVal;
     }
 
     const attributes = await PlayerAttributes.findOneAndUpdate(

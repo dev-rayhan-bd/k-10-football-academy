@@ -22,8 +22,8 @@ export class PlayerCvService {
     if (cacheKey) {
       const cached = await redisCache.get<any>(cacheKey);
       if (cached) {
-        // Track club viewing asynchronously without blocking response
-        playerCvViewTrackerService.trackClubInterest(cached, viewer);
+        // Track external profile view & club/agent interest even on cache hit
+        await playerCvViewTrackerService.trackClubInterest(cached, viewer);
         return this.applySafeguarding(cached, viewer);
       }
     }
@@ -34,8 +34,10 @@ export class PlayerCvService {
       viewer,
     );
 
-    // 3. Track profile view & club interest asynchronously without blocking response
-    playerCvViewTrackerService.trackClubInterest(aggregatedProfile, viewer);
+    // 3. Track profile view & club/agent interest before transforming and caching
+    await playerCvViewTrackerService.trackClubInterest(aggregatedProfile, viewer, {
+      skipCacheInvalidation: true,
+    });
 
     // 4. Transform raw aggregates into structured CV profile
     const finalProfile = playerCvTransformerService.transformAggregatedProfile(aggregatedProfile);
@@ -66,6 +68,8 @@ export class PlayerCvService {
     if (cacheKey) {
       const cached = await redisCache.get<any>(cacheKey);
       if (cached) {
+        // Track external profile view & club/agent interest even when served from CV cache
+        await playerCvViewTrackerService.trackClubInterest(cached, viewer);
         return this.applySafeguarding(cached, viewer);
       }
     }
@@ -74,7 +78,7 @@ export class PlayerCvService {
   }
 
   async getProfileByUserId(userId: string) {
-    return this.getProfileById(userId);
+    return this.getProfileById(userId, { userId });
   }
 
   async addClubInterest(

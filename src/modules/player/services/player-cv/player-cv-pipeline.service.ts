@@ -122,6 +122,24 @@ export class PlayerCvPipelineService {
           as: 'favouriteLikes',
         },
       },
+      // 5.2 $lookup academy CV likes count from academyprofiles
+      {
+        $lookup: {
+          from: 'academyprofiles',
+          let: { pId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$$pId', { $ifNull: ['$likedPlayerIds', []] }],
+                },
+              },
+            },
+            { $count: 'count' },
+          ],
+          as: 'academyLikes',
+        },
+      },
       // 6. $lookup team info (via teamId or player membership in team)
       {
         $lookup: {

@@ -7,6 +7,7 @@ import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { env } from '@/config/env';
 import { academyResolverService } from './academy-resolver.service';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
 
 const notificationService = new NotificationService();
 
@@ -471,11 +472,14 @@ export class AcademyCvValidationService {
 
     await academy.save();
 
+    const playerTotalLikes = await playerCacheService.syncPlayerTotalLikes(playerId, player.userId);
+
     return {
       playerId,
       playerName: player.fullName,
       isLiked,
       likedCount: academy.likedPlayerIds ? academy.likedPlayerIds.length : 0,
+      playerTotalLikes,
       message: isLiked
         ? `${player.fullName} added to Liked CVs`
         : `${player.fullName} removed from Liked CVs`,

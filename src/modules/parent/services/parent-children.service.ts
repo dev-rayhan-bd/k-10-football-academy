@@ -10,6 +10,7 @@ import {
   FifaCardStats,
 } from '@/modules/player/player.model';
 import { Team } from '@/modules/academy/academy.model';
+import { subscriptionService } from '@/modules/subscription/subscription.service';
 import { ParentProfile, ParentChild } from '../parent.model';
 import { normalizeRelationshipType, RelationshipType } from '../parent.interface';
 
@@ -378,6 +379,11 @@ export class ParentChildrenService {
       teamByPlayerId.set(t._id.toString(), t);
     });
 
+    const childSubscriptions =
+      await subscriptionService.getChildrenSubscriptionsForParent(parentId);
+    const childSubMap = new Map<string, (typeof childSubscriptions)[number]>();
+    childSubscriptions.forEach((cs) => childSubMap.set(cs.childPlayerId, cs));
+
     return links
       .filter((link: any) => link.childPlayerId)
       .map((link: any) => {
@@ -463,6 +469,7 @@ export class ParentChildrenService {
           childUser?.accountManagedBy === 'PARENT',
         );
 
+        const childSub = childSubMap.get(childPlayerId) || null;
         const item: any = {
           linkId: link._id,
           relationshipType: link.relationshipType,
@@ -484,6 +491,9 @@ export class ParentChildrenService {
           preferredFoot: child?.preferredFoot || 'RIGHT',
           currentClub,
           accountManagedBy: childUser?.accountManagedBy || 'PARENT',
+          hasActiveSubscription: Boolean(childSub?.hasActiveSubscription),
+          subscriptionStatus: childSub?.subscriptionStatus || 'FREE',
+          currentSubscription: childSub?.currentSubscription || null,
         };
 
         if (academyName) {

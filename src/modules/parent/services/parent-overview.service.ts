@@ -3,6 +3,7 @@ import { PlayerEvaluation } from '@/modules/academy/academy.model';
 import { TrainingSession, TrainingAttendance } from '@/modules/training/training.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { AcademyInvoice } from '@/modules/invoice/invoice.model';
+import { subscriptionService } from '@/modules/subscription/subscription.service';
 import { ParentProfile, ParentChild, ParentMatchReport } from '../parent.model';
 
 export class ParentOverviewService {
@@ -232,16 +233,24 @@ export class ParentOverviewService {
       nextSessionFormatted = `${dayName}, ${timeStr}`.trim();
     }
 
-    // Pending Fees for Parent's children
+    // Pending Fees (scoped to selected child when childPlayerId is provided, else all linked children)
+    const scopedPlayerIds =
+      query.childPlayerId && targetPlayerId ? [new Types.ObjectId(targetPlayerId)] : childPlayerIds;
+
     let pendingFeesAmount = 0;
-    if (targetParentIds.length > 0 || childPlayerIds.length > 0) {
-      const pendingFeesAgg = await AcademyInvoice.aggregate([
-        {
-          $match: {
+    if (scopedPlayerIds.length > 0 || (!query.childPlayerId && targetParentIds.length > 0)) {
+      const feeMatch: any = query.childPlayerId
+        ? { childPlayerId: { $in: scopedPlayerIds } }
+        : {
             $or: [
               { parentId: { $in: targetParentIds } },
               { childPlayerId: { $in: childPlayerIds } },
             ],
+          };
+      const pendingFeesAgg = await AcademyInvoice.aggregate([
+        {
+          $match: {
+            ...feeMatch,
             status: { $in: ['UNPAID', 'OVERDUE'] },
           },
         },
@@ -259,13 +268,27 @@ export class ParentOverviewService {
 
     // Active Reports (Match Reports awaiting coach review)
     let activeReportsCount = 0;
-    if (childPlayerIds.length > 0) {
+    if (scopedPlayerIds.length > 0) {
       activeReportsCount = await ParentMatchReport.countDocuments({
-        childPlayerId: { $in: childPlayerIds },
+        childPlayerId: { $in: scopedPlayerIds },
         coachReviewStatus: { $in: ['PENDING', 'AWAITING_PAYMENT'] },
       });
     }
     const activeReportsFormatted = `${activeReportsCount} Pending`;
+
+    // Per-child subscription breakdown (every child has their own separate subscription)
+    const childSubscriptions = await subscriptionService.getChildrenSubscriptionsForParent(userId);
+    const childSubMap = new Map<string, (typeof childSubscriptions)[number]>();
+    for (const cs of childSubscriptions) {
+      childSubMap.set(cs.childPlayerId, cs);
+    }
+
+    const activeChildSub = activePlayer
+      ? childSubMap.get(activePlayer._id.toString()) || null
+      : null;
+    const subscribedChildrenCount = childSubscriptions.filter(
+      (c) => c.hasActiveSubscription,
+    ).length;
 
     // 4. Youth Profile Data
     const tier = (activePlayer?.cvTier || 'BRONZE').toUpperCase();
@@ -273,6 +296,8 @@ export class ParentOverviewService {
       ? {
           _id: activePlayer._id,
           id: activePlayer._id,
+          userId: activePlayer.userId || null,
+          childUserId: activePlayer.userId || null,
           fullName: activePlayer.fullName,
           profileImage: activePlayer.profileImage || '',
           tier,
@@ -284,6 +309,9 @@ export class ParentOverviewService {
           ratingFormatted: `${activePlayer.overallRating ?? 50} RATING`,
           formattedSubtitle: `Position: ${activePlayer.position || 'Forward'} | Academy: ${activeAcademy?.name || activePlayer.academy || 'Academy'}`,
           headCoachFormatted: `Head Coach: ${headCoachName}`,
+          hasActiveSubscription: Boolean(activeChildSub?.hasActiveSubscription),
+          subscriptionStatus: activeChildSub?.subscriptionStatus || 'FREE',
+          currentSubscription: activeChildSub?.currentSubscription || null,
         }
       : null;
 
@@ -294,9 +322,9 @@ export class ParentOverviewService {
     const activities: any[] = [];
 
     // a. Player Evaluations
-    if (childPlayerIds.length > 0) {
+    if (scopedPlayerIds.length > 0) {
       const evaluations = await PlayerEvaluation.find({
-        playerId: { $in: childPlayerIds },
+        playerId: { $in: scopedPlayerIds },
       })
         .populate('coachId', 'fullName')
         .populate('playerId', 'fullName')
@@ -323,10 +351,16 @@ export class ParentOverviewService {
     }
 
     // b. Invoices Generated
-    if (targetParentIds.length > 0 || childPlayerIds.length > 0) {
-      const recentInvoices = await AcademyInvoice.find({
-        $or: [{ parentId: { $in: targetParentIds } }, { childPlayerId: { $in: childPlayerIds } }],
-      })
+    if (scopedPlayerIds.length > 0 || (!query.childPlayerId && targetParentIds.length > 0)) {
+      const invFilter: any = query.childPlayerId
+        ? { childPlayerId: { $in: scopedPlayerIds } }
+        : {
+            $or: [
+              { parentId: { $in: targetParentIds } },
+              { childPlayerId: { $in: childPlayerIds } },
+            ],
+          };
+      const recentInvoices = await AcademyInvoice.find(invFilter)
         .sort({ createdAt: -1 })
         .limit(5)
         .lean();
@@ -344,9 +378,9 @@ export class ParentOverviewService {
     }
 
     // c. Match Reports Submitted
-    if (childPlayerIds.length > 0) {
+    if (scopedPlayerIds.length > 0) {
       const matchReports = await ParentMatchReport.find({
-        childPlayerId: { $in: childPlayerIds },
+        childPlayerId: { $in: scopedPlayerIds },
       })
         .populate('coachId', 'name fullName')
         .sort({ createdAt: -1 })
@@ -355,15 +389,12 @@ export class ParentOverviewService {
 
       for (const rep of matchReports) {
         const cName =
-          (rep.coachId as any)?.fullName ||
-          (rep.coachId as any)?.name ||
-          headCoachName ||
-          'Coach Didier';
+          (rep.coachId as any)?.fullName || (rep.coachId as any)?.name || headCoachName || 'Coach';
         activities.push({
           id: `rep_${rep._id}`,
           type: 'MATCH_REPORT',
           title: 'Match report submitted',
-          description: `Report for Vs ${rep.opponentTeam || 'Palmeiras U17'} was sent to Coach ${cName} for verification.`,
+          description: `Report for Vs ${rep.opponentTeam || 'Opponent'} was sent to Coach ${cName} for verification.`,
           timestamp: rep.createdAt || rep.matchDate || new Date(),
           icon: 'report',
         });
@@ -378,23 +409,38 @@ export class ParentOverviewService {
       timeAgo: formatTimeAgo(act.timestamp),
     }));
 
-    // 7. Linked Children List (for profile selector)
+    // 7. Linked Children List (for profile selector dropdown)
     const childrenList = parentChildren.map((pc) => {
       const p = pc.player;
       const cTier = (p.cvTier || 'BRONZE').toUpperCase();
+      const cSub = childSubMap.get(p._id.toString()) || null;
       return {
         _id: p._id,
         id: p._id,
+        childPlayerId: p._id,
+        childUserId: p.userId || null,
         fullName: p.fullName,
         position: p.position || 'Forward',
         profileImage: p.profileImage || '',
         overallRating: p.overallRating || 50,
         tier: cTier,
         isCurrent: activePlayer ? p._id.toString() === activePlayer._id.toString() : false,
+        hasActiveSubscription: Boolean(cSub?.hasActiveSubscription),
+        subscriptionStatus: cSub?.subscriptionStatus || 'FREE',
+        currentSubscription: cSub?.currentSubscription || null,
       };
     });
 
     return {
+      hasActiveSubscription: Boolean(activeChildSub?.hasActiveSubscription),
+      subscriptionStatus: activeChildSub?.subscriptionStatus || 'FREE',
+      currentSubscription: activeChildSub?.currentSubscription || null,
+      subscriptionSummary: {
+        activeChildHasSubscription: Boolean(activeChildSub?.hasActiveSubscription),
+        hasAnySubscribedChild: subscribedChildrenCount > 0,
+        subscribedChildrenCount,
+        totalChildrenCount: childrenCount,
+      },
       stats: {
         children: {
           count: childrenCount,

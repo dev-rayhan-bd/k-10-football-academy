@@ -574,12 +574,15 @@ export class ClubScoutingService {
           (id) => id.toString() !== targetId,
         );
         await club.save();
-        await PlayerProfile.updateOne(
-          { _id: targetId, totalLikes: { $gt: 0 } },
-          { $inc: { totalLikes: -1 } },
+        const playerTotalLikes = await playerCacheService.syncPlayerTotalLikes(
+          targetId,
+          player.userId,
         );
-        await playerCacheService.invalidatePlayerCache(targetId, player.userId);
-        return { isFavourite: false, message: 'Player removed from favourites' };
+        return {
+          isFavourite: false,
+          playerTotalLikes,
+          message: 'Player removed from favourites',
+        };
       } else {
         await ClubFavourite.create({
           clubId: club._id,
@@ -591,9 +594,15 @@ export class ClubScoutingService {
           club.likedPlayerIds = [...(club.likedPlayerIds || []), new Types.ObjectId(targetId)];
           await club.save();
         }
-        await PlayerProfile.updateOne({ _id: targetId }, { $inc: { totalLikes: 1 } });
-        await playerCacheService.invalidatePlayerCache(targetId, player.userId);
-        return { isFavourite: true, message: 'Player added to favourites' };
+        const playerTotalLikes = await playerCacheService.syncPlayerTotalLikes(
+          targetId,
+          player.userId,
+        );
+        return {
+          isFavourite: true,
+          playerTotalLikes,
+          message: 'Player added to favourites',
+        };
       }
     } else {
       const coach = await CoachProfile.findById(targetId);

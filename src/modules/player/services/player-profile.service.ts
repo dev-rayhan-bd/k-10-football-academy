@@ -8,7 +8,7 @@ import {
   PlayerFullPotential,
   FifaCardStats,
 } from '../player.model';
-import { PlayerEvaluation } from '@/modules/academy/academy.model';
+import { PlayerEvaluation, AcademyProfile } from '@/modules/academy/academy.model';
 import { ClubFavourite } from '@/modules/club/club.model';
 import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
 import { UserModel } from '@/modules/user/user.model';
@@ -218,11 +218,17 @@ export class PlayerProfileService {
     const meta = await playerQuery.countTotal();
 
     const playerIds = rawResult.map((p: any) => p._id);
-    const [fifaCards, clubFavs] = await Promise.all([
+    const [fifaCards, clubFavs, academyFavs] = await Promise.all([
       FifaCardStats.find({ playerId: { $in: playerIds } }).lean(),
       ClubFavourite.aggregate([
         { $match: { targetType: 'PLAYER', targetPlayerId: { $in: playerIds } } },
         { $group: { _id: '$targetPlayerId', total: { $sum: 1 } } },
+      ]),
+      AcademyProfile.aggregate([
+        { $match: { likedPlayerIds: { $in: playerIds } } },
+        { $unwind: '$likedPlayerIds' },
+        { $match: { likedPlayerIds: { $in: playerIds } } },
+        { $group: { _id: '$likedPlayerIds', total: { $sum: 1 } } },
       ]),
     ]);
 
@@ -234,6 +240,10 @@ export class PlayerProfileService {
     const favMap = new Map<string, number>();
     clubFavs.forEach((f: any) => {
       favMap.set(f._id.toString(), f.total);
+    });
+    academyFavs.forEach((f: any) => {
+      const key = f._id.toString();
+      favMap.set(key, (favMap.get(key) || 0) + f.total);
     });
 
     const result = rawResult.map((p: any) => {
@@ -258,7 +268,7 @@ export class PlayerProfileService {
       obj.cardPosition = formatCardPosition(obj.position || 'Forward');
       const card = fifaCardMap.get(obj._id?.toString());
       const favCount = favMap.get(obj._id?.toString()) || 0;
-      obj.totalLikes = Math.max(obj.totalLikes ?? 0, favCount);
+      obj.totalLikes = favCount;
       obj.profileViews = obj.profileViews ?? 0;
       const cardPos = formatCardPosition(card?.position ?? obj.position ?? 'Forward');
       const isGK =

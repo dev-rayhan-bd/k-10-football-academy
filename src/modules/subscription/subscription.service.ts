@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { IMembershipPlan } from './subscription.interface';
 import { MembershipPlan, UserSubscription } from './subscription.model';
 import { UserModel } from '@/modules/user/user.model';
+import { PlayerProfile } from '@/modules/player/player.model';
+import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
 import { Notification } from '@/modules/notification/notification.model';
 import { notificationService } from '@/modules/notification/notification.service';
 import { PlatformPayment } from '@/modules/admin/admin.model';
@@ -253,14 +256,9 @@ export class SubscriptionService {
   }
 
   /**
-   * Current active subscription status and remaining days
-   * (history has been separated into GET /billing-history)
+   * Direct subscription status for a single userId (no parent/child aggregation).
    */
-  async getUserSubscription(userId: string) {
-    if (!userId) {
-      throw new AppError(StatusCodes.BAD_REQUEST, 'User ID is required');
-    }
-
+  private async getDirectUserSubscription(userId: string) {
     const user = await UserModel.findById(userId).select('role name email').lean();
 
     const subscriptions = await UserSubscription.find({ userId })
@@ -348,13 +346,189 @@ export class SubscriptionService {
       !currentSubscription.isExpired,
     );
 
+    const subscriptionStatus: 'ACTIVE' | 'EXPIRED' | 'FREE' = hasActiveSubscription
+      ? 'ACTIVE'
+      : currentSubscription?.isExpired
+        ? 'EXPIRED'
+        : 'FREE';
+
     return {
       hasActiveSubscription,
+      subscriptionStatus,
       userRole: user?.role || null,
-      currentSubscription: hasActiveSubscription
-        ? currentSubscription
-        : currentSubscription || null,
+      currentSubscription: currentSubscription || null,
     };
+  }
+
+  /**
+   * Resolves per-child subscription status for every child linked to a parent/guardian.
+   * Each child requires their own separate athlete subscription.
+   */
+  async getChildrenSubscriptionsForParent(parentUserId: string) {
+    const targetParentIds: any[] = [];
+    if (Types.ObjectId.isValid(parentUserId)) {
+      targetParentIds.push(new Types.ObjectId(parentUserId));
+    }
+
+    const parentProfile = await ParentProfile.findOne({
+      $or: [{ _id: parentUserId }, { userId: parentUserId }],
+    }).lean();
+
+    if (parentProfile) {
+      if (parentProfile._id) targetParentIds.push(new Types.ObjectId(parentProfile._id));
+      if (parentProfile.userId) targetParentIds.push(new Types.ObjectId(parentProfile.userId));
+    }
+
+    if (targetParentIds.length === 0) return [];
+
+    const links = await ParentChild.find({
+      parentId: { $in: targetParentIds },
+    })
+      .populate('childPlayerId', '_id userId fullName position profileImage')
+      .lean();
+
+    const seenChildIds = new Set<string>();
+    const results: Array<{
+      childPlayerId: string;
+      childUserId: string;
+      fullName: string;
+      position: string;
+      profileImage: string;
+      hasActiveSubscription: boolean;
+      subscriptionStatus: 'ACTIVE' | 'EXPIRED' | 'FREE';
+      currentSubscription: any | null;
+    }> = [];
+
+    for (const link of links) {
+      const childDoc: any = link.childPlayerId;
+      if (!childDoc || !childDoc._id) continue;
+      const childPlayerId = childDoc._id.toString();
+      if (seenChildIds.has(childPlayerId)) continue;
+      seenChildIds.add(childPlayerId);
+
+      const childUserId = childDoc.userId ? childDoc.userId.toString() : '';
+      const directSub = childUserId
+        ? await this.getDirectUserSubscription(childUserId)
+        : {
+            hasActiveSubscription: false,
+            subscriptionStatus: 'FREE' as const,
+            currentSubscription: null,
+          };
+
+      results.push({
+        childPlayerId,
+        childUserId,
+        fullName: childDoc.fullName || 'Athlete',
+        position: childDoc.position || 'Forward',
+        profileImage: childDoc.profileImage || '',
+        hasActiveSubscription: directSub.hasActiveSubscription,
+        subscriptionStatus: directSub.subscriptionStatus,
+        currentSubscription: directSub.currentSubscription,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Strict per-child subscription check by either PlayerProfile._id or child User._id.
+   */
+  async hasActiveChildSubscription(childPlayerOrUserId: string) {
+    if (!childPlayerOrUserId || !Types.ObjectId.isValid(childPlayerOrUserId)) {
+      return {
+        hasActiveSubscription: false,
+        subscriptionStatus: 'FREE' as const,
+        childPlayerId: null,
+        childUserId: null,
+        fullName: 'Athlete',
+        currentSubscription: null,
+      };
+    }
+
+    const player = await PlayerProfile.findOne({
+      $or: [{ _id: childPlayerOrUserId }, { userId: childPlayerOrUserId }],
+    })
+      .select('_id userId fullName')
+      .lean();
+
+    const childUserId = player?.userId ? player.userId.toString() : childPlayerOrUserId;
+    const directSub = await this.getDirectUserSubscription(childUserId);
+
+    return {
+      hasActiveSubscription: directSub.hasActiveSubscription,
+      subscriptionStatus: directSub.subscriptionStatus,
+      childPlayerId: player?._id ? player._id.toString() : null,
+      childUserId,
+      fullName: player?.fullName || 'Athlete',
+      currentSubscription: directSub.currentSubscription,
+    };
+  }
+
+  /**
+   * Current active subscription status and remaining days
+   * (history has been separated into GET /billing-history)
+   *
+   * For PARENT / GUARDIAN:
+   *  - Subscriptions are always purchased per-child on the child's athlete account.
+   *  - If `options.childPlayerId` is provided, returns that specific child's subscription status.
+   *  - Otherwise returns parent-level summary (`hasActiveSubscription = true` when at least 1 linked child is subscribed)
+   *    plus full `childSubscriptions` breakdown so frontend knows which child is unlocked vs locked.
+   */
+  async getUserSubscription(userId: string, options?: { childPlayerId?: string }) {
+    if (!userId) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'User ID is required');
+    }
+
+    const directSub = await this.getDirectUserSubscription(userId);
+    const role = String(directSub.userRole || '').toUpperCase();
+
+    if (role === 'PARENT' || role === 'GUARDIAN') {
+      const childSubscriptions = await this.getChildrenSubscriptionsForParent(userId);
+      const subscribedChildren = childSubscriptions.filter((c) => c.hasActiveSubscription);
+
+      if (options?.childPlayerId && Types.ObjectId.isValid(options.childPlayerId)) {
+        const target = childSubscriptions.find(
+          (c) =>
+            c.childPlayerId === options.childPlayerId || c.childUserId === options.childPlayerId,
+        );
+        return {
+          hasActiveSubscription: Boolean(target?.hasActiveSubscription),
+          subscriptionStatus: target?.subscriptionStatus || 'FREE',
+          userRole: directSub.userRole,
+          currentSubscription: target?.currentSubscription || null,
+          selectedChildPlayerId: target?.childPlayerId || options.childPlayerId,
+          subscribedChildrenCount: subscribedChildren.length,
+          totalChildrenCount: childSubscriptions.length,
+          childSubscriptions,
+        };
+      }
+
+      const activeChildSub = subscribedChildren[0] || null;
+      const fallbackChildSub = childSubscriptions.find((c) => c.currentSubscription) || null;
+      const hasActiveSubscription = Boolean(activeChildSub || directSub.hasActiveSubscription);
+      const currentSubscription =
+        activeChildSub?.currentSubscription ||
+        (directSub.hasActiveSubscription ? directSub.currentSubscription : null) ||
+        fallbackChildSub?.currentSubscription ||
+        directSub.currentSubscription ||
+        null;
+
+      return {
+        hasActiveSubscription,
+        subscriptionStatus: hasActiveSubscription
+          ? 'ACTIVE'
+          : currentSubscription?.isExpired
+            ? 'EXPIRED'
+            : 'FREE',
+        userRole: directSub.userRole,
+        currentSubscription,
+        subscribedChildrenCount: subscribedChildren.length,
+        totalChildrenCount: childSubscriptions.length,
+        childSubscriptions,
+      };
+    }
+
+    return directSub;
   }
 
   /**

@@ -59,6 +59,8 @@ export class InvoiceService {
   async getParentEventInvoices(
     user: any,
     query: {
+      childPlayerId?: string;
+      playerId?: string;
       status?: string;
       feeType?: string;
       search?: string;
@@ -81,7 +83,12 @@ export class InvoiceService {
     }
 
     // 1. Find all children linked to this parent
-    const links = await ParentChild.find({ parentId: { $in: targetParentIds } }).lean();
+    const linkFilter: any = { parentId: { $in: targetParentIds } };
+    const requestedChildId = (query?.childPlayerId || query?.playerId) as string | undefined;
+    if (requestedChildId && Types.ObjectId.isValid(requestedChildId)) {
+      linkFilter.childPlayerId = new Types.ObjectId(requestedChildId);
+    }
+    const links = await ParentChild.find(linkFilter).lean();
     const childPlayerIds = links.map((l) => l.childPlayerId);
 
     const emptyResult = {

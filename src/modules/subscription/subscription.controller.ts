@@ -53,7 +53,8 @@ export const verifyPayment = catchAsync(async (req: Request, res: Response) => {
 
 export const getUserSubscription = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user?.userId || (req as any).user?.id || req.params.userId;
-  const result = await subscriptionService.getUserSubscription(userId);
+  const childPlayerId = (req.query.childPlayerId || req.query.playerId) as string | undefined;
+  const result = await subscriptionService.getUserSubscription(userId, { childPlayerId });
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,

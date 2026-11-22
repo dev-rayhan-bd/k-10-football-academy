@@ -7,7 +7,7 @@ import { CoachProfile, TacticalFormation } from '@/modules/coach/coach.model';
 import { ClubProfile, ClubFavourite } from '@/modules/club/club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
-import { ParentProfile, ParentChild, ParentMatchReport } from '@/modules/parent/parent.model';
+import { ParentProfile, ParentMatchReport } from '@/modules/parent/parent.model';
 import { formatMarketValue } from '@/utils/ratingCalculator';
 import { cmsService } from '@/modules/cms/cms.service';
 import { subscriptionService } from '@/modules/subscription/subscription.service';
@@ -76,13 +76,14 @@ export class UserProfileService {
         userObj.isVerifiedByCoach = userObj.isVerifiedByCoach ?? playerProfile.isVerifiedByCoach;
         userObj.profileViews = playerProfile.profileViews ?? 0;
 
-        const [matchCount, parentMatchCount, favLikes] = await Promise.all([
+        const [matchCount, parentMatchCount, favLikes, academyLikes] = await Promise.all([
           MatchRecord.countDocuments({ playerId: playerProfile._id }),
           ParentMatchReport.countDocuments({ childPlayerId: playerProfile._id }),
           ClubFavourite.countDocuments({
             targetPlayerId: playerProfile._id,
             targetType: 'PLAYER',
           }),
+          AcademyProfile.countDocuments({ likedPlayerIds: playerProfile._id }),
         ]);
 
         const totalReports =
@@ -94,7 +95,7 @@ export class UserProfileService {
 
         delete (userObj as any).reports;
         userObj.totalReports = totalReports;
-        userObj.totalLikes = Math.max(playerProfile.totalLikes ?? 0, favLikes);
+        userObj.totalLikes = favLikes + academyLikes;
 
         userObj.overviewStats = {
           profileViews: userObj.profileViews,
@@ -155,33 +156,17 @@ export class UserProfileService {
       };
     } else {
       try {
-        const subInfo = await subscriptionService.getUserSubscription(String(user._id));
+        const subInfo: any = await subscriptionService.getUserSubscription(String(user._id));
         userObj.hasActiveSubscription = subInfo.hasActiveSubscription;
         userObj.currentSubscription = subInfo.currentSubscription;
+        if (user.role === 'PARENT' || (user.role as string) === 'GUARDIAN') {
+          userObj.subscribedChildrenCount = subInfo.subscribedChildrenCount ?? 0;
+          userObj.totalChildrenCount = subInfo.totalChildrenCount ?? 0;
+          userObj.childSubscriptions = subInfo.childSubscriptions ?? [];
+        }
       } catch {
         userObj.hasActiveSubscription = false;
         userObj.currentSubscription = null;
-      }
-
-      if (
-        !userObj.hasActiveSubscription &&
-        user.role === 'PLAYER' &&
-        user.accountManagedBy === 'PARENT'
-      ) {
-        try {
-          const parentLink = await ParentChild.findOne({ childUserId: user._id });
-          if (parentLink) {
-            const parentSub = await subscriptionService.getUserSubscription(
-              String(parentLink.parentId),
-            );
-            if (parentSub.hasActiveSubscription) {
-              userObj.hasActiveSubscription = true;
-              userObj.currentSubscription = parentSub.currentSubscription;
-            }
-          }
-        } catch {
-          // ignore
-        }
       }
     }
 

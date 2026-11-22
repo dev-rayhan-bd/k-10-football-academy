@@ -71,8 +71,8 @@ export class ParentService {
     return await parentMatchReportService.createMatchReport(parentId, payload, user);
   }
 
-  async getMatchReports(parentId: string) {
-    return await parentMatchReportService.getMatchReports(parentId);
+  async getMatchReports(parentId: string, childPlayerId?: string) {
+    return await parentMatchReportService.getMatchReports(parentId, childPlayerId);
   }
 
   async requestMatchReportReview(

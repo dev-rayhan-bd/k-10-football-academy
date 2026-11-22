@@ -174,7 +174,8 @@ export const createMatchReport = catchAsync(async (req: Request, res: Response) 
 export const getMatchReports = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const parentId = user?.userId || user?._id || user?.id || req.params.parentId;
-  const result = await parentService.getMatchReports(parentId);
+  const childPlayerId = (req.query.childPlayerId || req.query.playerId) as string | undefined;
+  const result = await parentService.getMatchReports(parentId, childPlayerId);
   sendResponse(res, {
     statusCode: 200,
     success: true,

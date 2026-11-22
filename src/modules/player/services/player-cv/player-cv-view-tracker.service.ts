@@ -2,39 +2,77 @@ import { AppError } from '@/utils/AppError';
 import { PlayerProfile } from '@/modules/player/player.model';
 import { ClubProfile } from '@/modules/club/club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
+import { playerCacheService } from '../player-cache.service';
 
 export class PlayerCvViewTrackerService {
   /**
-   * Track profile view and club/agent interest asynchronously without blocking response
+   * Track profile view and club/agent interest for non-owner viewers.
+   * Atomically increments profileViews in MongoDB, updates the in-memory response,
+   * and invalidates Redis cache (unless caller is about to repopulate cache immediately).
    */
-  trackClubInterest(profileOrCached: any, viewer?: { userId?: string; role?: string }): void {
+  async trackClubInterest(
+    profileOrCached: any,
+    viewer?: { userId?: string; role?: string },
+    options?: { skipCacheInvalidation?: boolean },
+  ): Promise<void> {
     if (!profileOrCached?._id) return;
 
     const playerId = profileOrCached._id;
-    const targetUserId = profileOrCached.userId ? String(profileOrCached.userId) : null;
-    const viewerUserId = viewer?.userId ? String(viewer?.userId) : null;
+    const rawUserId = profileOrCached.userId;
+    const targetUserId =
+      rawUserId?._id?.toString() ||
+      (rawUserId && typeof rawUserId === 'object' && typeof rawUserId.toString === 'function'
+        ? rawUserId.toString()
+        : rawUserId
+          ? String(rawUserId)
+          : null) ||
+      profileOrCached.user?._id?.toString() ||
+      null;
+    const viewerUserId = viewer?.userId ? String(viewer.userId) : null;
 
     // 1. If viewer is the player themselves, do not count as a profile view
-    if (viewerUserId && targetUserId && viewerUserId === targetUserId) {
+    if (
+      viewerUserId &&
+      ((targetUserId && viewerUserId === targetUserId) || viewerUserId === String(playerId))
+    ) {
       return;
     }
 
-    // 2. Increment profileViews for any external viewer (Club, Agent, Coach, Scout, Super Admin, Parent, or Anonymous Visitor)
-    PlayerProfile.updateOne({ _id: playerId }, { $inc: { profileViews: 1 } })
-      .exec()
-      .catch(() => {});
+    // 2. Atomically increment profileViews in MongoDB for any external viewer
+    try {
+      const updated = await PlayerProfile.findOneAndUpdate(
+        { _id: playerId },
+        { $inc: { profileViews: 1 } },
+        { new: true, projection: { profileViews: 1 } },
+      ).lean();
 
-    // Update in-memory object so immediate response reflects the new view count
-    profileOrCached.profileViews = (profileOrCached.profileViews || 0) + 1;
-    if (profileOrCached.overviewStats) {
-      profileOrCached.overviewStats.profileViews = profileOrCached.profileViews;
+      const nextViews =
+        typeof updated?.profileViews === 'number'
+          ? updated.profileViews
+          : (profileOrCached.profileViews || 0) + 1;
+
+      profileOrCached.profileViews = nextViews;
+      if (profileOrCached.overviewStats) {
+        profileOrCached.overviewStats.profileViews = nextViews;
+      }
+
+      // Invalidate Redis cache so player dashboard & subsequent reads immediately see updated views
+      if (!options?.skipCacheInvalidation) {
+        await playerCacheService.invalidatePlayerCache(playerId, targetUserId || undefined);
+      }
+    } catch {
+      // Non-fatal: still reflect increment in memory if DB update momentarily fails
+      profileOrCached.profileViews = (profileOrCached.profileViews || 0) + 1;
+      if (profileOrCached.overviewStats) {
+        profileOrCached.overviewStats.profileViews = profileOrCached.profileViews;
+      }
     }
 
     // 3. Track Club Interest if viewer is a Club
     if (viewer && viewer.role === 'CLUB' && viewer.userId) {
       ClubProfile.findOne({ userId: viewer.userId })
         .lean()
-        .then((club) => {
+        .then(async (club) => {
           if (club) {
             const clubName = club.name || 'Football Club';
             const clubLogo = club.logo || '';
@@ -43,7 +81,7 @@ export class PlayerCvViewTrackerService {
             );
 
             if (alreadyListedIndex >= 0) {
-              PlayerProfile.updateOne(
+              await PlayerProfile.updateOne(
                 { _id: playerId, 'clubsInterested.clubName': clubName },
                 {
                   $set: {
@@ -51,11 +89,9 @@ export class PlayerCvViewTrackerService {
                     'clubsInterested.$.logoUrl': clubLogo,
                   },
                 },
-              )
-                .exec()
-                .catch(() => {});
+              );
             } else {
-              PlayerProfile.updateOne(
+              await PlayerProfile.updateOne(
                 { _id: playerId },
                 {
                   $push: {
@@ -65,9 +101,7 @@ export class PlayerCvViewTrackerService {
                     },
                   },
                 },
-              )
-                .exec()
-                .catch(() => {});
+              );
 
               profileOrCached.clubsInterested = profileOrCached.clubsInterested || [];
               profileOrCached.clubsInterested.unshift({
@@ -76,6 +110,7 @@ export class PlayerCvViewTrackerService {
                 viewedAt: new Date(),
               });
             }
+            await playerCacheService.invalidatePlayerCache(playerId, targetUserId || undefined);
           }
         })
         .catch(() => {});
@@ -85,7 +120,7 @@ export class PlayerCvViewTrackerService {
     if (viewer && viewer.role === 'AGENT' && viewer.userId) {
       AgentProfile.findOne({ userId: viewer.userId })
         .lean()
-        .then((agent) => {
+        .then(async (agent) => {
           if (agent) {
             const agencyName =
               agent.agencyName || agent.fullName || agent.name || 'Scouting Agency';
@@ -95,7 +130,7 @@ export class PlayerCvViewTrackerService {
             );
 
             if (alreadyListedIndex >= 0) {
-              PlayerProfile.updateOne(
+              await PlayerProfile.updateOne(
                 { _id: playerId, 'clubsInterested.clubName': agencyName },
                 {
                   $set: {
@@ -103,11 +138,9 @@ export class PlayerCvViewTrackerService {
                     'clubsInterested.$.logoUrl': agencyLogo,
                   },
                 },
-              )
-                .exec()
-                .catch(() => {});
+              );
             } else {
-              PlayerProfile.updateOne(
+              await PlayerProfile.updateOne(
                 { _id: playerId },
                 {
                   $push: {
@@ -117,9 +150,7 @@ export class PlayerCvViewTrackerService {
                     },
                   },
                 },
-              )
-                .exec()
-                .catch(() => {});
+              );
 
               profileOrCached.clubsInterested = profileOrCached.clubsInterested || [];
               profileOrCached.clubsInterested.unshift({
@@ -128,6 +159,7 @@ export class PlayerCvViewTrackerService {
                 viewedAt: new Date(),
               });
             }
+            await playerCacheService.invalidatePlayerCache(playerId, targetUserId || undefined);
           }
         })
         .catch(() => {});
@@ -153,6 +185,7 @@ export class PlayerCvViewTrackerService {
     });
     profile.profileViews = (profile.profileViews || 0) + 1;
     await profile.save();
+    await playerCacheService.invalidatePlayerCache(profile._id, profile.userId);
 
     return profile.clubsInterested;
   }

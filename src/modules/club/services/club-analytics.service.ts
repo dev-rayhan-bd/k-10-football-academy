@@ -9,6 +9,7 @@ import { Media } from '@/modules/media/media.model';
 import { Notification } from '@/modules/notification/notification.model';
 import { ClubFavourite } from '../club.model';
 import { clubResolverService } from './club-resolver.service';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
 
 export class ClubAnalyticsService {
   async getClubAnalytics(userId: string, query: any = {}) {
@@ -310,6 +311,7 @@ export class ClubAnalyticsService {
           },
         },
       );
+      await playerCacheService.invalidatePlayerCache(playerId, player.userId);
     }
 
     return {

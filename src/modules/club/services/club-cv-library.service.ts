@@ -6,6 +6,7 @@ import { PlayerProfile } from '@/modules/player/player.model';
 import { ClubFavourite } from '../club.model';
 import { AgentProfile } from '@/modules/agent/agent.model';
 import { clubResolverService } from './club-resolver.service';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
 
 export class ClubCvLibraryService {
   async getClubCvsLibrary(userId: string, query: any = {}) {
@@ -224,14 +225,18 @@ export class ClubCvLibraryService {
       isLiked = true;
     }
 
-    const totalLikedCvs = await ClubFavourite.countDocuments({
-      clubId: club._id,
-      targetType: 'PLAYER',
-    });
+    const [totalLikedCvs, playerTotalLikes] = await Promise.all([
+      ClubFavourite.countDocuments({
+        clubId: club._id,
+        targetType: 'PLAYER',
+      }),
+      playerCacheService.syncPlayerTotalLikes(playerId, player.userId),
+    ]);
 
     return {
       isLiked,
       totalLikedCvs,
+      playerTotalLikes,
       message: isLiked ? 'Player added to liked CVs' : 'Player removed from liked CVs',
     };
   }

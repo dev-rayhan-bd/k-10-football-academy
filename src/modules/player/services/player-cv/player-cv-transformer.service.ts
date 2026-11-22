@@ -509,7 +509,8 @@ export class PlayerCvTransformerService {
     const userEmail = userObj.email || '';
     const profileViews = aggregatedProfile.profileViews ?? 0;
     const favLikes = aggregatedProfile.favouriteLikes?.[0]?.count ?? 0;
-    const totalLikes = Math.max(aggregatedProfile.totalLikes ?? 0, favLikes);
+    const academyLikes = aggregatedProfile.academyLikes?.[0]?.count ?? 0;
+    const totalLikes = favLikes + academyLikes;
     const calculatedReports = totalMatches + mappedProfessionalReports.length;
     const totalReportsCount =
       aggregatedProfile.reports !== undefined &&
@@ -805,7 +806,7 @@ export class PlayerCvTransformerService {
     if (aggregatedProfile.dateOfBirth && aggregatedProfile.age !== accurateAge) {
       updatesToPersist.age = accurateAge;
     }
-    if (totalLikes > (aggregatedProfile.totalLikes ?? 0)) {
+    if (totalLikes !== (aggregatedProfile.totalLikes ?? 0)) {
       updatesToPersist.totalLikes = totalLikes;
     }
     if (Object.keys(updatesToPersist).length > 0) {

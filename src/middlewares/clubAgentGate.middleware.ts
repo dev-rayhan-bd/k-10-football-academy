@@ -8,7 +8,7 @@ import { AgentProfile } from '@/modules/agent/agent.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { UserModel } from '@/modules/user/user.model';
 import { PlayerProfile } from '@/modules/player/player.model';
-import { ParentChild } from '@/modules/parent/parent.model';
+import { ParentProfile, ParentChild } from '@/modules/parent/parent.model';
 
 /**
  * Gatekeeper Middleware for Professional Football Clubs and Football Agents
@@ -174,68 +174,92 @@ export const requirePlayerSubscription = () => {
       const sub = await UserSubscription.findOne({
         userId: targetUserId,
         status: 'ACTIVE',
-      });
+      }).sort({ updatedAt: -1, createdAt: -1 });
       if (!sub) return { ok: false, reason: 'NOT_FOUND' };
-      if (sub.nextBillingDate && new Date(sub.nextBillingDate) < new Date()) {
+      const targetDate = sub.endDate || sub.nextBillingDate;
+      if (targetDate && new Date(targetDate) < new Date()) {
         return { ok: false, reason: 'EXPIRED' };
       }
       return { ok: true, sub };
     };
 
     if (user.role === 'PLAYER') {
+      // Every athlete/child requires their own active subscription
       const check = await checkSubscriptionForUser(user.userId);
       if (!check.ok) {
-        // Also check if account is managed by parent and parent has active subscription
-        const userDoc = await UserModel.findById(user.userId).select('accountManagedBy');
-        let parentHasSub = false;
-        if (userDoc?.accountManagedBy === 'PARENT') {
-          const parentLink = await ParentChild.findOne({ childUserId: user.userId });
-          if (parentLink) {
-            const parentCheck = await checkSubscriptionForUser(parentLink.parentId);
-            if (parentCheck.ok) parentHasSub = true;
-          }
-        }
-
-        if (!parentHasSub) {
-          if (check.reason === 'EXPIRED') {
-            throw new AppError(
-              StatusCodes.PAYMENT_REQUIRED,
-              'Subscription Expired: Your athlete membership subscription has expired. Please renew your subscription to access game reports and analysis tools.',
-            );
-          }
+        if (check.reason === 'EXPIRED') {
           throw new AppError(
             StatusCodes.PAYMENT_REQUIRED,
-            'Payment Required: An active athlete membership subscription is required to submit game reports and access athlete performance tools. Please subscribe to an athlete membership plan.',
+            'Subscription Expired: Your athlete membership subscription has expired. Please renew your subscription to access game reports and analysis tools.',
           );
         }
+        throw new AppError(
+          StatusCodes.PAYMENT_REQUIRED,
+          'Payment Required: An active athlete membership subscription is required to submit game reports and access athlete performance tools. Please subscribe to an athlete membership plan.',
+        );
       }
       return next();
     }
 
-    if (user.role === 'PARENT') {
-      // Check if parent has active subscription
-      const parentCheck = await checkSubscriptionForUser(user.userId);
-      if (parentCheck.ok) {
-        return next();
-      }
-
-      // Check if target child has active subscription
+    if (user.role === 'PARENT' || (user.role as string) === 'GUARDIAN') {
+      // Subscriptions are purchased per-child on each child's athlete account.
       const targetChildId =
-        req.body?.playerId || req.body?.userId || req.params?.playerId || req.params?.userId;
-      if (targetChildId && Types.ObjectId.isValid(targetChildId)) {
-        let childUserId = targetChildId;
-        const playerProf = await PlayerProfile.findById(targetChildId);
-        if (playerProf?.userId) childUserId = playerProf.userId;
+        req.body?.childPlayerId ||
+        req.body?.playerId ||
+        req.body?.childUserId ||
+        req.body?.userId ||
+        req.params?.childPlayerId ||
+        req.params?.playerId ||
+        req.params?.userId ||
+        (req.query?.childPlayerId as string | undefined) ||
+        (req.query?.playerId as string | undefined);
 
+      if (targetChildId && Types.ObjectId.isValid(targetChildId)) {
+        const playerProf = await PlayerProfile.findOne({
+          $or: [{ _id: targetChildId }, { userId: targetChildId }],
+        })
+          .select('_id userId fullName')
+          .lean();
+
+        const childUserId = playerProf?.userId || targetChildId;
         const childCheck = await checkSubscriptionForUser(childUserId);
         if (childCheck.ok) {
           return next();
+        }
+
+        const childLabel = playerProf?.fullName || 'this child';
+        throw new AppError(
+          StatusCodes.PAYMENT_REQUIRED,
+          childCheck.reason === 'EXPIRED'
+            ? `Subscription Expired: The athlete subscription for ${childLabel} has expired. Please renew ${childLabel}'s subscription to continue.`
+            : `Payment Required: An active athlete subscription is required for ${childLabel}. Please switch to ${childLabel}'s athlete account and complete their subscription payment.`,
+        );
+      }
+
+      // If no specific child was provided, allow if at least one linked child has an active subscription
+      const parentProfile = await ParentProfile.findOne({
+        $or: [{ _id: user.userId }, { userId: user.userId }],
+      }).lean();
+      const targetParentIds: any[] = [new Types.ObjectId(user.userId)];
+      if (parentProfile?._id) targetParentIds.push(new Types.ObjectId(parentProfile._id));
+
+      const links = await ParentChild.find({ parentId: { $in: targetParentIds } })
+        .populate('childPlayerId', 'userId')
+        .lean();
+
+      for (const link of links) {
+        const childUserId = (link.childPlayerId as any)?.userId;
+        if (childUserId) {
+          const childCheck = await checkSubscriptionForUser(childUserId);
+          if (childCheck.ok) {
+            return next();
+          }
         }
       }
 
       throw new AppError(
         StatusCodes.PAYMENT_REQUIRED,
-        'Payment Required: An active membership subscription is required to submit game reports. Please complete your subscription payment.',
+        'Payment Required: An active athlete membership subscription is required for your child to submit game reports. Please switch to your child account and complete their subscription.',
       );
     }
 

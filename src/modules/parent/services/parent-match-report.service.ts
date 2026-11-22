@@ -61,6 +61,20 @@ export class ParentMatchReportService {
       );
     }
 
+    // Strict per-child subscription check: each child requires their own active athlete subscription
+    if (user?.role !== 'SUPER_ADMIN') {
+      const childSub = await subscriptionService.hasActiveChildSubscription(player._id.toString());
+      if (!childSub.hasActiveSubscription) {
+        const childName = player.fullName || 'this child';
+        throw new AppError(
+          StatusCodes.PAYMENT_REQUIRED,
+          childSub.subscriptionStatus === 'EXPIRED'
+            ? `Subscription Expired: The athlete subscription for ${childName} has expired. Please switch to ${childName}'s account and renew their subscription.`
+            : `Payment Required: An active athlete subscription is required for ${childName} to submit match reports. Please switch to ${childName}'s athlete account and complete their subscription.`,
+        );
+      }
+    }
+
     let plottedEventsJson = payload.plottedEventsJson || '';
     let plottedCount = 0;
     if (Array.isArray(payload.plottedEvents)) {
@@ -120,7 +134,7 @@ export class ParentMatchReportService {
     return clean;
   }
 
-  async getMatchReports(parentId: string) {
+  async getMatchReports(parentId: string, childPlayerId?: string) {
     const targetParentIds: any[] = [parentId];
     if (Types.ObjectId.isValid(parentId)) {
       const parentProfile = await ParentProfile.findOne({
@@ -132,9 +146,14 @@ export class ParentMatchReportService {
       }
     }
 
-    const reports = await ParentMatchReport.find({
+    const filter: any = {
       parentId: { $in: targetParentIds },
-    })
+    };
+    if (childPlayerId && Types.ObjectId.isValid(childPlayerId)) {
+      filter.childPlayerId = new Types.ObjectId(childPlayerId);
+    }
+
+    const reports = await ParentMatchReport.find(filter)
       .populate('childPlayerId', 'fullName position profileImage overallRating age country')
       .populate('coachId', 'name email avatar')
       .sort({ matchDate: -1, createdAt: -1 })
@@ -244,6 +263,19 @@ export class ParentMatchReportService {
         StatusCodes.FORBIDDEN,
         'Access denied. You are not authorized to request review for this report.',
       );
+    }
+
+    // Strict per-child subscription check for the report's child
+    if (user?.role !== 'SUPER_ADMIN' && report.childPlayerId) {
+      const childSub = await subscriptionService.hasActiveChildSubscription(
+        report.childPlayerId.toString(),
+      );
+      if (!childSub.hasActiveSubscription) {
+        throw new AppError(
+          StatusCodes.PAYMENT_REQUIRED,
+          `Payment Required: An active athlete subscription is required for ${childSub.fullName} to request coach review. Please switch to ${childSub.fullName}'s athlete account and complete their subscription.`,
+        );
+      }
     }
 
     // Idempotency: If already paid, do not recreate checkout session

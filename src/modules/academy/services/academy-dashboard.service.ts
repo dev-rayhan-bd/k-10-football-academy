@@ -12,7 +12,7 @@ import {
 import { PlayerProfile, MatchRecord, PlayerCvValidation } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { User } from '@/modules/user/user.model';
-import { ClubProfile, ClubFavourite } from '@/modules/club/club.model';
+import { ClubFavourite } from '@/modules/club/club.model';
 import { academyResolverService } from './academy-resolver.service';
 
 export class AcademyDashboardService {
@@ -1263,7 +1263,7 @@ export class AcademyDashboardService {
       .limit(6)
       .lean();
 
-    let pendingGameReports = pendingGameReportsRaw.map((rep: any) => ({
+    const pendingGameReports = pendingGameReportsRaw.map((rep: any) => ({
       id: rep._id,
       playerId: rep.playerId?._id || rep.playerId,
       playerName: rep.playerId?.fullName || rep.scoutName || 'Player',
@@ -1273,41 +1273,6 @@ export class AcademyDashboardService {
       matchName: rep.matchName,
       matchDate: rep.matchDate,
     }));
-
-    if (pendingGameReports.length === 0) {
-      pendingGameReports = [
-        {
-          id: 'mock-gr-1',
-          playerId: 'p-1',
-          playerName: 'Marcus Silva',
-          playerAvatar: null,
-          position: 'FORWARD',
-          score: '9.2',
-          matchName: 'Championship Match',
-          matchDate: new Date(),
-        },
-        {
-          id: 'mock-gr-2',
-          playerId: 'p-2',
-          playerName: 'David Chen',
-          playerAvatar: null,
-          position: 'MIDFIELDER',
-          score: '8.8',
-          matchName: 'League Match',
-          matchDate: new Date(),
-        },
-        {
-          id: 'mock-gr-3',
-          playerId: 'p-3',
-          playerName: 'Alex Jonson',
-          playerAvatar: null,
-          position: 'DEFENDER',
-          score: '8.5',
-          matchName: 'Youth Cup',
-          matchDate: new Date(),
-        },
-      ];
-    }
 
     // 6. SIDEBAR - PENDING CV VALIDATIONS
     const pendingCvValidationsRaw = await PlayerCvValidation.find({
@@ -1360,7 +1325,7 @@ export class AcademyDashboardService {
         .lean();
 
       if (unverifiedPlayers.length > 0) {
-        pendingCvValidations = unverifiedPlayers.map((p: any, idx: number) => {
+        pendingCvValidations = unverifiedPlayers.map((p: any) => {
           const createdDate = new Date(p.createdAt || Date.now());
           const ageDays = Math.floor((Date.now() - createdDate.getTime()) / (24 * 60 * 60 * 1000));
           const deadlineDays = 7;
@@ -1369,8 +1334,7 @@ export class AcademyDashboardService {
             ? `OVERDUE ${Math.max(1, ageDays - deadlineDays)}D`
             : `${Math.max(1, deadlineDays - ageDays)}D LEFT`;
 
-          const coachName =
-            p.coachVerification?.coachName || (idx % 2 === 0 ? 'Pep Guardiola' : 'Carlo Ancelotti');
+          const coachName = p.coachVerification?.coachName || 'Unassigned';
 
           return {
             id: p._id,
@@ -1384,29 +1348,7 @@ export class AcademyDashboardService {
           };
         });
       } else {
-        // Fallback UI mock to match exact design if database is completely empty
-        pendingCvValidations = [
-          {
-            id: 'mock-cv-1',
-            playerId: 'mock-p-1',
-            playerName: 'Lucas Paquetá',
-            playerAvatar: null,
-            coachName: 'Pep Guardiola',
-            coachLabel: 'COACH: PEP GUARDIOLA',
-            badge: 'OVERDUE 3D',
-            isOverdue: true,
-          },
-          {
-            id: 'mock-cv-2',
-            playerId: 'mock-p-2',
-            playerName: 'Vinícius Júnior',
-            playerAvatar: null,
-            coachName: 'Carlo Ancelotti',
-            coachLabel: 'COACH: CARLO ANCELOTTI',
-            badge: '12D LEFT',
-            isOverdue: false,
-          },
-        ];
+        pendingCvValidations = [];
       }
     }
 
@@ -1420,63 +1362,26 @@ export class AcademyDashboardService {
       .limit(6)
       .lean();
 
-    let sidebarPlayerEvaluations: any[];
+    const sidebarPlayerEvaluations: any[] = playerEvaluationsRaw.map((ev: any) => {
+      const evDate = new Date(ev.evaluationDate || ev.createdAt || Date.now());
+      const diffDays = Math.floor((Date.now() - evDate.getTime()) / (24 * 60 * 60 * 1000));
+      let badge = 'NEED EVALUATION';
+      if (ev.status === 'EXPIRED') badge = 'EXPIRED';
+      else if (ev.status === 'OVERDUE' || diffDays > 30) badge = `OVERDUE ${diffDays}D`;
+      else if (ev.status === 'EVALUATED') badge = 'EVALUATED';
 
-    if (playerEvaluationsRaw.length > 0) {
-      sidebarPlayerEvaluations = playerEvaluationsRaw.map((ev: any) => {
-        const evDate = new Date(ev.evaluationDate || ev.createdAt || Date.now());
-        const diffDays = Math.floor((Date.now() - evDate.getTime()) / (24 * 60 * 60 * 1000));
-        let badge = 'NEED EVALUATION';
-        if (ev.status === 'EXPIRED') badge = 'EXPIRED';
-        else if (ev.status === 'OVERDUE' || diffDays > 30) badge = `OVERDUE ${diffDays}D`;
-        else if (ev.status === 'EVALUATED') badge = 'EVALUATED';
-
-        const coachName = (ev.coachId as any)?.fullName || (ev.coachId as any)?.name || 'Coach';
-        return {
-          id: ev._id,
-          playerId: ev.playerId?._id || ev.playerId,
-          playerName: ev.playerId?.fullName || 'Player',
-          playerAvatar: ev.playerId?.avatar || null,
-          coachName,
-          coachLabel: `COACH: ${coachName.toUpperCase()}`,
-          badge,
-          status: ev.status,
-        };
-      });
-    } else {
-      sidebarPlayerEvaluations = [
-        {
-          id: 'mock-ev-1',
-          playerId: 'mock-ev-p1',
-          playerName: 'James Brown',
-          playerAvatar: null,
-          coachName: 'Greg Vanney',
-          coachLabel: 'COACH: GREG VANNEY',
-          badge: 'OVERDUE 197D',
-          status: 'OVERDUE',
-        },
-        {
-          id: 'mock-ev-2',
-          playerId: 'mock-ev-p2',
-          playerName: 'Antoine Dupont',
-          playerAvatar: null,
-          coachName: 'Didier Deschamps',
-          coachLabel: 'COACH: DIDIER DESCHAMPS',
-          badge: 'OVERDUE 161D',
-          status: 'OVERDUE',
-        },
-        {
-          id: 'mock-ev-3',
-          playerId: 'mock-ev-p3',
-          playerName: 'Marcus Silva',
-          playerAvatar: null,
-          coachName: 'Pep Guardiola',
-          coachLabel: 'COACH: PEP GUARDIOLA',
-          badge: 'EXPIRED',
-          status: 'EXPIRED',
-        },
-      ];
-    }
+      const coachName = (ev.coachId as any)?.fullName || (ev.coachId as any)?.name || 'Coach';
+      return {
+        id: ev._id,
+        playerId: ev.playerId?._id || ev.playerId,
+        playerName: ev.playerId?.fullName || 'Player',
+        playerAvatar: ev.playerId?.avatar || null,
+        coachName,
+        coachLabel: `COACH: ${coachName.toUpperCase()}`,
+        badge,
+        status: ev.status,
+      };
+    });
 
     // 8. SIDEBAR - CLUBS INTERESTED
     const clubFavourites = await ClubFavourite.find({
@@ -1486,7 +1391,7 @@ export class AcademyDashboardService {
       .limit(6)
       .lean();
 
-    let clubsInterested = clubFavourites
+    const clubsInterested = clubFavourites
       .map((fav: any) => fav.clubId)
       .filter((c: any) => c && c.name)
       .map((c: any) => ({
@@ -1498,38 +1403,29 @@ export class AcademyDashboardService {
         league: c.league,
       }));
 
-    if (clubsInterested.length === 0) {
-      const fallbackClubs = await ClubProfile.find().limit(4).lean();
-      clubsInterested = fallbackClubs.map((c) => ({
-        clubId: c._id,
-        clubName: c.name,
-        clubLogo: c.logo || null,
-        action: 'VIEWED YOUR PROFILE',
-        country: c.country,
-        league: c.league,
-      }));
-    }
-
-    // 9. SIDEBAR - QUICK STATS
+    // 9. SIDEBAR - QUICK STATS (Strictly Real DB Counts)
+    const realProfileViews = Number((academy as any).profileViews || 0);
+    const realTotalLikes = clubFavourites.length;
+    const realReportsCount = Number(gameReportsCount || 0);
     const quickStats = {
       profileViews: {
-        raw: 127,
-        formatted: '127',
+        raw: realProfileViews,
+        formatted: `${realProfileViews}`,
       },
       totalLikes: {
-        raw: 8,
-        formatted: '8',
+        raw: realTotalLikes,
+        formatted: `${realTotalLikes}`,
       },
       reports: {
-        raw: gameReportsCount || 12,
-        formatted: `${gameReportsCount || 12}`,
+        raw: realReportsCount,
+        formatted: `${realReportsCount}`,
       },
     };
 
     // Academy Banner Details
     const establishedYear = academy.establishedDate
       ? new Date(academy.establishedDate).getFullYear()
-      : 2018;
+      : null;
 
     return {
       academy: {
@@ -1537,18 +1433,16 @@ export class AcademyDashboardService {
         name: academy.name,
         badge: academy.logo || null,
         coverPhoto: academy.coverPhoto || null,
-        category: academy.category || 'Premier League Academy',
+        category: academy.category || '',
         foundedYear: establishedYear,
-        foundedText: `Founded ${establishedYear}`,
+        foundedText: establishedYear ? `Founded ${establishedYear}` : '',
         location:
           academy.location ||
-          (academy.city
-            ? `${academy.city}, ${academy.country}`
-            : academy.country || 'São Paulo, Brazil'),
+          (academy.city ? `${academy.city}, ${academy.country}` : academy.country || ''),
         status: 'ACTIVE ACADEMY',
         isActive: true,
-        contactPhone: (academyUser as any)?.phone || '+55 11 9999-8888',
-        contactEmail: (academyUser as any)?.email || 'contact@santosfc.academy',
+        contactPhone: (academyUser as any)?.phone || (academy as any).contactPhone || '',
+        contactEmail: (academyUser as any)?.email || (academy as any).contactEmail || '',
       },
       metricCards,
       analytics: {
@@ -1618,7 +1512,7 @@ export class AcademyDashboardService {
       else silverCount++;
     });
     const totalTiers = goldCount + silverCount;
-    const silverToGoldRatio = totalTiers > 0 ? Math.round((goldCount / totalTiers) * 100) : 60;
+    const silverToGoldRatio = totalTiers > 0 ? Math.round((goldCount / totalTiers) * 100) : 0;
 
     const metricCards = {
       teams: { label: 'TEAMS', count: teamsCount },

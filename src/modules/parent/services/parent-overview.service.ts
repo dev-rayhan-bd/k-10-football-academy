@@ -98,7 +98,7 @@ export class ParentOverviewService {
       if (coach) headCoachName = coach.fullName || '';
     }
     if (!headCoachName) {
-      headCoachName = 'Didier Deschamps';
+      headCoachName = '';
     }
 
     // 3. Stats Aggregation
@@ -305,14 +305,17 @@ export class ParentOverviewService {
         .lean();
 
       for (const ev of evaluations) {
-        const coach = (ev.coachId as any)?.fullName || headCoachName || 'Coach Didier Deschamps';
+        const coach = (ev.coachId as any)?.fullName || headCoachName || 'Coach';
         const pName = (ev.playerId as any)?.fullName || activePlayer?.fullName || 'Athlete';
-        const rating = ev.overallRating || 95;
+        const rating = ev.overallRating ?? 0;
         activities.push({
           id: `eval_${ev._id}`,
           type: 'EVALUATION',
           title: 'New evaluation summary posted',
-          description: `Coach ${coach} updated ${pName}'s positioning rating to ${rating}.`,
+          description:
+            rating > 0
+              ? `Coach ${coach} updated ${pName}'s evaluation rating to ${rating}.`
+              : `Coach ${coach} posted a new evaluation for ${pName}.`,
           timestamp: ev.createdAt || ev.evaluationDate || new Date(),
           icon: 'evaluation',
         });

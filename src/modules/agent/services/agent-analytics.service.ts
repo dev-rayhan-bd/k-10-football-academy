@@ -39,7 +39,7 @@ export class AgentAnalyticsService {
 
     // 1. Agent Profile Details
     const rawDob = (agentProfile as any)?.dateOfBirth || user?.dateOfBirth;
-    const computedAge = calculateAge(rawDob) ?? (agentProfile as any)?.age ?? 58;
+    const computedAge = calculateAge(rawDob) ?? (agentProfile as any)?.age ?? null;
     const profileCompletion =
       (agentProfile as any)?.profileCompletion ?? calculateProfileCompletion(agentProfile, user);
 
@@ -54,24 +54,20 @@ export class AgentAnalyticsService {
 
     const agentInfo = {
       id: agentProfile?._id || club._id,
-      name:
-        (agentProfile as any)?.fullName || (agentProfile as any)?.name || user?.name || 'JOHN DOE',
+      name: (agentProfile as any)?.fullName || (agentProfile as any)?.name || user?.name || '',
       role: 'PREMIUM AGENT',
       tier: 'ACTIVE AGENT',
       age: computedAge,
-      country: (agentProfile as any)?.country || user?.country || 'Brazil',
+      country: (agentProfile as any)?.country || user?.country || '',
       avatar: user?.avatar || (agentProfile as any)?.avatar || '',
       profileCompletion,
-      licenseId:
-        (agentProfile as any)?.licenseId ||
-        (agentProfile as any)?.fifaLicenseNumber ||
-        'UK-AG-2024-001',
-      certifications: (agentProfile as any)?.certifications || 'FIFA Licensed Agent',
-      contact: user?.phone || (agentProfile as any)?.contact || '+55 11 9999-8888',
-      email: user?.email || 'john.doe@example.com',
+      licenseId: (agentProfile as any)?.licenseId || (agentProfile as any)?.fifaLicenseNumber || '',
+      certifications: (agentProfile as any)?.certifications || '',
+      contact: user?.phone || (agentProfile as any)?.contact || '',
+      email: user?.email || '',
       agencyName: (agentProfile as any)?.agencyName || user?.agencyName || '',
       verificationStatus:
-        (agentProfile as any)?.verificationStatus || user?.verificationStatus || 'APPROVED',
+        (agentProfile as any)?.verificationStatus || user?.verificationStatus || 'PENDING',
       isApproved,
     };
 

@@ -59,386 +59,25 @@ export class PlayerAnalyticsService {
       MatchRecord.find({ playerId: profile._id }).sort({ matchDate: -1, createdAt: -1 }).lean(),
     ]);
 
-    // 1. TOP 4 SUMMARY CARDS
-    // Overall Rating
-    const ratedMatches = allMatches.filter((m: any) => {
-      const isCompleted =
-        m.coachReview?.status === 'COMPLETED' || m.reportCompletionType === 'SELF';
-      const rawRating = m.coachReview?.coachRating ?? m.playerRating;
-      return isCompleted && rawRating !== undefined && rawRating !== null && Number(rawRating) > 0;
-    });
-
-    let computedAvgRating = 0;
-    if (ratedMatches.length > 0) {
-      const sum = ratedMatches.reduce((acc: number, m: any) => {
-        const raw = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
-        return acc + (raw > 10 ? raw / 10 : raw);
-      }, 0);
-      computedAvgRating = Math.round((sum / ratedMatches.length) * 10) / 10;
-    }
-
-    const overallRating =
-      computedAvgRating > 0
-        ? computedAvgRating
-        : profile.overallRating && profile.overallRating > 0
-          ? profile.overallRating
-          : 8.7;
-
-    // Total Goals
-    const matchGoals = allMatches.reduce(
-      (acc: number, m: any) => acc + (m.goals ?? m.stats?.goalScored ?? 0),
-      0,
-    );
-    const totalGoals = matchGoals > 0 ? matchGoals : profile.careerStats?.totalGoals || 39;
-
-    // Total Assists
-    const matchAssists = allMatches.reduce(
-      (acc: number, m: any) => acc + (m.assists ?? m.stats?.assists ?? 0),
-      0,
-    );
-    const totalAssists = matchAssists > 0 ? matchAssists : profile.careerStats?.totalAssists || 33;
-
-    // Improvement
-    const improvement = '+15%';
-
-    const summary = {
-      overallRating: {
-        value: overallRating,
-        label: 'OVERALL RATING',
-        icon: 'star',
-      },
-      goals: {
-        value: totalGoals,
-        label: 'GOALS',
-        icon: 'target',
-      },
-      assists: {
-        value: totalAssists,
-        label: 'ASSISTS',
-        icon: 'check',
-      },
-      improvement: {
-        value: improvement,
-        label: 'IMPROVEMENT',
-        icon: 'trend',
-      },
+    const getScoreColor = (score: number): string => {
+      if (score >= 80) return '#00FF66';
+      if (score >= 60) return '#F59E0B';
+      return '#FF2222';
     };
 
-    const defaultVal = profile.overallRating || 50;
-
-    // 2. FULL POTENTIAL (Physical & Technical Attributes)
-    const potentialScore = potentialDoc?.overallPotentialScore ?? defaultVal;
-    const potentialGrowth = potentialDoc?.monthlyGrowth ?? 0;
-    const fullPotential = {
-      title: 'FULL POTENTIAL',
-      subtitle: 'Physical & Technical Attributes',
-      overallScore: potentialScore,
-      overallScoreDisplay: `${potentialScore}/100`,
-      scoreColor: '#EF4444',
-      growth: potentialGrowth,
-      growthDisplay: `↑ ${Math.abs(potentialGrowth)}%`,
-      growthDirection: potentialGrowth >= 0 ? 'up' : 'down',
-      growthText: 'Growth vs last month',
-      radarColor: '#EF4444',
-      radarData: [
-        {
-          attribute: 'Vision',
-          value: potentialDoc?.vision ?? attributesDoc?.vision ?? defaultVal,
-          fullMark: 100,
-        },
-        {
-          attribute: 'Strength',
-          value: potentialDoc?.strength ?? attributesDoc?.strength ?? defaultVal,
-          fullMark: 100,
-        },
-        {
-          attribute: 'Pace',
-          value: potentialDoc?.pace ?? attributesDoc?.sprintSpeed ?? defaultVal,
-          fullMark: 100,
-        },
-        {
-          attribute: 'Stamina',
-          value: potentialDoc?.stamina ?? attributesDoc?.stamina ?? defaultVal,
-          fullMark: 100,
-        },
-        {
-          attribute: 'Shooting',
-          value: potentialDoc?.shooting ?? attributesDoc?.shooting ?? defaultVal,
-          fullMark: 100,
-        },
-        {
-          attribute: 'Passing',
-          value: potentialDoc?.passing ?? attributesDoc?.shortPassing ?? defaultVal,
-          fullMark: 100,
-        },
-      ],
-      attributes: {
-        vision: potentialDoc?.vision ?? attributesDoc?.vision ?? defaultVal,
-        strength: potentialDoc?.strength ?? attributesDoc?.strength ?? defaultVal,
-        pace: potentialDoc?.pace ?? attributesDoc?.sprintSpeed ?? defaultVal,
-        stamina: potentialDoc?.stamina ?? attributesDoc?.stamina ?? defaultVal,
-        shooting: potentialDoc?.shooting ?? attributesDoc?.shooting ?? defaultVal,
-        passing: potentialDoc?.passing ?? attributesDoc?.shortPassing ?? defaultVal,
-      },
+    const pickVal = (primary: any, ...fallbacks: any[]): number => {
+      if (primary !== undefined && primary !== null && Number(primary) !== 50) {
+        return Number(primary);
+      }
+      for (const fb of fallbacks) {
+        if (fb !== undefined && fb !== null && Number(fb) !== 50) {
+          return Number(fb);
+        }
+      }
+      return primary !== undefined && primary !== null ? Number(primary) : 50;
     };
 
-    // 3. MENTAL ANALYSIS (Psychological Performance Metrics)
-    const mentalScore = mentalDoc?.overallMentalScore ?? defaultVal;
-    const mentalGrowth = mentalDoc?.monthlyGrowth ?? 0;
-    const mentalAnalysis = {
-      title: 'MENTAL ANALYSIS',
-      subtitle: 'Psychological Performance Metrics',
-      overallScore: mentalScore,
-      overallScoreDisplay: `${mentalScore}/100`,
-      scoreColor: '#00FF66',
-      growth: mentalGrowth,
-      growthDisplay: `↑ ${Math.abs(mentalGrowth)}%`,
-      growthDirection: mentalGrowth >= 0 ? 'up' : 'down',
-      growthText: 'Growth vs last month',
-      radarColor: '#00FF66',
-      radarData: [
-        { attribute: 'Creativity', value: mentalDoc?.creativity ?? defaultVal, fullMark: 100 },
-        { attribute: 'Leadership', value: mentalDoc?.leadership ?? defaultVal, fullMark: 100 },
-        { attribute: 'Confidence', value: mentalDoc?.confidence ?? defaultVal, fullMark: 100 },
-        {
-          attribute: 'Composure',
-          value: mentalDoc?.composure ?? attributesDoc?.composure ?? defaultVal,
-          fullMark: 100,
-        },
-        { attribute: 'Motivation', value: mentalDoc?.motivation ?? defaultVal, fullMark: 100 },
-        { attribute: 'Focus', value: mentalDoc?.focus ?? defaultVal, fullMark: 100 },
-      ],
-      attributes: {
-        creativity: mentalDoc?.creativity ?? defaultVal,
-        leadership: mentalDoc?.leadership ?? defaultVal,
-        confidence: mentalDoc?.confidence ?? defaultVal,
-        composure: mentalDoc?.composure ?? attributesDoc?.composure ?? defaultVal,
-        motivation: mentalDoc?.motivation ?? defaultVal,
-        focus: mentalDoc?.focus ?? defaultVal,
-      },
-    };
-
-    // 4. SKILLS ANALYSIS (6 Cards: PACE, PASSING, SHOOTING, PHYSICAL, DEFENDING, DRIBBLING)
-    const pacVal =
-      fifaCardDoc?.pac ??
-      Math.round(
-        ((attributesDoc?.acceleration ?? defaultVal) + (attributesDoc?.sprintSpeed ?? defaultVal)) /
-          2,
-      );
-    const pasVal =
-      fifaCardDoc?.pas ??
-      Math.round(
-        (attributesDoc?.shortPassing ?? defaultVal) * 0.4 +
-          (attributesDoc?.vision ?? defaultVal) * 0.3 +
-          (attributesDoc?.longPassing ?? defaultVal) * 0.2 +
-          (attributesDoc?.crossing ?? defaultVal) * 0.1,
-      );
-    const shoVal =
-      fifaCardDoc?.sho ??
-      Math.round(
-        (attributesDoc?.finishing ?? defaultVal) * 0.4 +
-          (attributesDoc?.shotPower ?? defaultVal) * 0.3 +
-          (attributesDoc?.longShots ?? defaultVal) * 0.3,
-      );
-    const phyVal =
-      fifaCardDoc?.phy ??
-      Math.round(
-        (attributesDoc?.strength ?? defaultVal) * 0.5 +
-          (attributesDoc?.stamina ?? defaultVal) * 0.3 +
-          (attributesDoc?.jumping ?? defaultVal) * 0.2,
-      );
-    const defVal =
-      fifaCardDoc?.def ??
-      Math.round(
-        (attributesDoc?.marking ?? defaultVal) * 0.35 +
-          (attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? defaultVal) * 0.35 +
-          (attributesDoc?.interceptions ?? defaultVal) * 0.3,
-      );
-    const driVal =
-      fifaCardDoc?.dri ??
-      Math.round(
-        (attributesDoc?.dribbling ?? defaultVal) * 0.5 +
-          (attributesDoc?.ballControl ?? defaultVal) * 0.3 +
-          (attributesDoc?.agility ?? defaultVal) * 0.2,
-      );
-
-    const skillsAnalysis = [
-      {
-        id: 'pace',
-        title: 'PACE',
-        score: pacVal,
-        percentage: `${pacVal}%`,
-        color: '#00FF66',
-        subSkills: [
-          {
-            key: 'acceleration',
-            name: 'ACCELERATION',
-            value: attributesDoc?.acceleration ?? defaultVal,
-            percentage: `${attributesDoc?.acceleration ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-          {
-            key: 'sprintSpeed',
-            name: 'SPRINT SPEED',
-            value: attributesDoc?.sprintSpeed ?? defaultVal,
-            percentage: `${attributesDoc?.sprintSpeed ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-        ],
-      },
-      {
-        id: 'passing',
-        title: 'PASSING',
-        score: pasVal,
-        percentage: `${pasVal}%`,
-        color: '#00FF66',
-        subSkills: [
-          {
-            key: 'vision',
-            name: 'VISION',
-            value: attributesDoc?.vision ?? defaultVal,
-            percentage: `${attributesDoc?.vision ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-          {
-            key: 'shortPassing',
-            name: 'SHORT PASS',
-            value: attributesDoc?.shortPassing ?? defaultVal,
-            percentage: `${attributesDoc?.shortPassing ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-          {
-            key: 'longPassing',
-            name: 'LONG PASS',
-            value: attributesDoc?.longPassing ?? defaultVal,
-            percentage: `${attributesDoc?.longPassing ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-        ],
-      },
-      {
-        id: 'shooting',
-        title: 'SHOOTING',
-        score: shoVal,
-        percentage: `${shoVal}%`,
-        color: '#00FF66',
-        subSkills: [
-          {
-            key: 'finishing',
-            name: 'FINISHING',
-            value: attributesDoc?.finishing ?? defaultVal,
-            percentage: `${attributesDoc?.finishing ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-          {
-            key: 'longShots',
-            name: 'LONG SHOTS',
-            value: attributesDoc?.longShots ?? defaultVal,
-            percentage: `${attributesDoc?.longShots ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-          {
-            key: 'penalties',
-            name: 'PENALTIES',
-            value: attributesDoc?.penalties ?? defaultVal,
-            percentage: `${attributesDoc?.penalties ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-        ],
-      },
-      {
-        id: 'physical',
-        title: 'PHYSICAL',
-        score: phyVal,
-        percentage: `${phyVal}%`,
-        color: '#FF2222',
-        subSkills: [
-          {
-            key: 'strength',
-            name: 'STRENGTH',
-            value: attributesDoc?.strength ?? defaultVal,
-            percentage: `${attributesDoc?.strength ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-          {
-            key: 'stamina',
-            name: 'STAMINA',
-            value: attributesDoc?.stamina ?? defaultVal,
-            percentage: `${attributesDoc?.stamina ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-          {
-            key: 'jumping',
-            name: 'JUMPING',
-            value: attributesDoc?.jumping ?? defaultVal,
-            percentage: `${attributesDoc?.jumping ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-        ],
-      },
-      {
-        id: 'defending',
-        title: 'DEFENDING',
-        score: defVal,
-        percentage: `${defVal}%`,
-        color: '#00FF66',
-        subSkills: [
-          {
-            key: 'marking',
-            name: 'MARKING',
-            value: attributesDoc?.defensiveAwareness ?? attributesDoc?.marking ?? defaultVal,
-            percentage: `${attributesDoc?.defensiveAwareness ?? attributesDoc?.marking ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-          {
-            key: 'interception',
-            name: 'INTERCEPTION',
-            value: attributesDoc?.interception ?? attributesDoc?.anticipation ?? defaultVal,
-            percentage: `${attributesDoc?.interception ?? attributesDoc?.anticipation ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-          {
-            key: 'tackle',
-            name: 'TACKLE',
-            value: attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? defaultVal,
-            percentage: `${attributesDoc?.standingTackle ?? attributesDoc?.tackling ?? defaultVal}%`,
-            color: '#00FF66',
-          },
-        ],
-      },
-      {
-        id: 'dribbling',
-        title: 'DRIBBLING',
-        score: driVal,
-        percentage: `${driVal}%`,
-        color: '#FF2222',
-        subSkills: [
-          {
-            key: 'balance',
-            name: 'BALANCE',
-            value: attributesDoc?.balance ?? defaultVal,
-            percentage: `${attributesDoc?.balance ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-          {
-            key: 'agility',
-            name: 'AGILITY',
-            value: attributesDoc?.agility ?? defaultVal,
-            percentage: `${attributesDoc?.agility ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-          {
-            key: 'ballControl',
-            name: 'BALL CONTROL',
-            value: attributesDoc?.ballControl ?? defaultVal,
-            percentage: `${attributesDoc?.ballControl ?? defaultVal}%`,
-            color: '#FF2222',
-          },
-        ],
-      },
-    ];
-
-    // 5. PERFORMANCE TREND (Monthly goals, assists, rating)
+    // 1. PERFORMANCE TREND (100% Real Monthly Aggregation from MatchRecord — Zero Fake Fallbacks)
     const monthNames = [
       'Jan',
       'Feb',
@@ -481,9 +120,13 @@ export class PlayerAnalyticsService {
           const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
           const mShort = monthNames[d.getMonth()];
           const mFull = monthFullNames[d.getMonth()];
-          const g = m.goals ?? m.stats?.goalScored ?? 0;
-          const a = m.assists ?? m.stats?.assists ?? 0;
-          const rawR = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
+          const g = Number(m.goals ?? m.stats?.goalScored ?? 0) || 0;
+          const a = Number(m.assists ?? m.stats?.assists ?? 0) || 0;
+          const rawR = Number(
+            m.coachReview?.status === 'COMPLETED'
+              ? (m.coachReview?.coachRating ?? m.playerRating ?? 0)
+              : (m.playerRating ?? 0),
+          );
           const r = rawR > 10 ? rawR / 10 : rawR;
 
           if (!monthlyMap.has(mKey)) {
@@ -503,38 +146,418 @@ export class PlayerAnalyticsService {
       }
     });
 
-    let performanceTrend: Array<{
+    const sortedMonthKeys = Array.from(monthlyMap.keys()).sort();
+    const performanceTrend: Array<{
       month: string;
       monthFull: string;
       goals: number;
       assists: number;
       rating: number;
-    }>;
+    }> = sortedMonthKeys.slice(-6).map((key) => {
+      const item = monthlyMap.get(key)!;
+      const avgR =
+        item.ratings.length > 0
+          ? Math.round((item.ratings.reduce((acc, v) => acc + v, 0) / item.ratings.length) * 10) /
+            10
+          : 0;
+      return {
+        month: item.month,
+        monthFull: item.monthFull,
+        goals: item.goals,
+        assists: item.assists,
+        rating: avgR,
+      };
+    });
 
-    if (monthlyMap.size >= 2) {
-      const sortedKeys = Array.from(monthlyMap.keys()).sort();
-      performanceTrend = sortedKeys.slice(-6).map((key) => {
-        const item = monthlyMap.get(key)!;
-        const avgR =
-          item.ratings.length > 0
-            ? Math.round((item.ratings.reduce((acc, v) => acc + v, 0) / item.ratings.length) * 10) /
-              10
-            : 8.0;
-        return {
-          month: item.month,
-          monthFull: item.monthFull,
-          goals: item.goals,
-          assists: item.assists,
-          rating: avgR,
-        };
-      });
+    // 2. TOP 4 SUMMARY CARDS (100% Real Data — Zero Fake Fallbacks)
+    const overallRating =
+      profile.overallRating !== undefined && profile.overallRating !== null
+        ? Number(profile.overallRating)
+        : (fifaCardDoc?.overallRating ?? 50);
+
+    const totalGoals = allMatches.reduce(
+      (acc: number, m: any) => acc + (Number(m.goals ?? m.stats?.goalScored ?? 0) || 0),
+      0,
+    );
+
+    const totalAssists = allMatches.reduce(
+      (acc: number, m: any) => acc + (Number(m.assists ?? m.stats?.assists ?? 0) || 0),
+      0,
+    );
+
+    // Real dynamic Improvement calculation:
+    // 1) Month-over-month rating change if >= 2 rated months exist
+    // 2) Latest vs previous rated match if >= 2 rated matches exist
+    // 3) Average of saved monthlyGrowth on potential/mental docs
+    // 4) Otherwise 0%
+    let improvementPct = 0;
+    const ratedMonths = performanceTrend.filter((m) => m.rating > 0);
+    if (ratedMonths.length >= 2) {
+      const prev = ratedMonths[ratedMonths.length - 2].rating;
+      const curr = ratedMonths[ratedMonths.length - 1].rating;
+      if (prev > 0) {
+        improvementPct = Math.round(((curr - prev) / prev) * 100);
+      }
     } else {
-      performanceTrend = [
-        { month: 'Sep', monthFull: 'September', goals: 4, assists: 3, rating: 7.8 },
-        { month: 'Oct', monthFull: 'October', goals: 6, assists: 5, rating: 8.2 },
-        { month: 'Nov', monthFull: 'November', goals: 5, assists: 4, rating: 8.0 },
-      ];
+      const ratedMatchesAsc = [...allMatches]
+        .reverse()
+        .map((m: any) => {
+          const rawR = Number(
+            m.coachReview?.status === 'COMPLETED'
+              ? (m.coachReview?.coachRating ?? m.playerRating ?? 0)
+              : (m.playerRating ?? 0),
+          );
+          return rawR > 10 ? rawR / 10 : rawR;
+        })
+        .filter((r) => r > 0);
+
+      if (ratedMatchesAsc.length >= 2) {
+        const prev = ratedMatchesAsc[ratedMatchesAsc.length - 2];
+        const curr = ratedMatchesAsc[ratedMatchesAsc.length - 1];
+        if (prev > 0) {
+          improvementPct = Math.round(((curr - prev) / prev) * 100);
+        }
+      } else if (potentialDoc?.monthlyGrowth || mentalDoc?.monthlyGrowth) {
+        improvementPct = Math.round(
+          ((potentialDoc?.monthlyGrowth ?? 0) + (mentalDoc?.monthlyGrowth ?? 0)) / 2,
+        );
+      }
     }
+    const improvement = improvementPct > 0 ? `+${improvementPct}%` : `${improvementPct}%`;
+
+    const summary = {
+      overallRating: {
+        value: overallRating,
+        label: 'OVERALL RATING',
+        icon: 'star',
+      },
+      goals: {
+        value: totalGoals,
+        label: 'GOALS',
+        icon: 'target',
+      },
+      assists: {
+        value: totalAssists,
+        label: 'ASSISTS',
+        icon: 'check',
+      },
+      improvement: {
+        value: improvement,
+        label: 'IMPROVEMENT',
+        icon: 'trend',
+      },
+    };
+
+    const rawAttrs = (attributesDoc || {}) as Record<string, any>;
+
+    // 3. SKILLS ANALYSIS CORE SCORES (Synced directly with FifaCardStats & PlayerAttributes)
+    const pacVal =
+      fifaCardDoc?.pac ??
+      Math.round((pickVal(rawAttrs.acceleration) + pickVal(rawAttrs.sprintSpeed)) / 2);
+    const pasVal =
+      fifaCardDoc?.pas ??
+      Math.round(
+        pickVal(rawAttrs.shortPassing) * 0.4 +
+          pickVal(rawAttrs.vision, rawAttrs.shortPassing) * 0.3 +
+          pickVal(rawAttrs.longPassing, rawAttrs.shortPassing) * 0.2 +
+          pickVal(rawAttrs.crossing, rawAttrs.shortPassing) * 0.1,
+      );
+    const shoVal =
+      fifaCardDoc?.sho ??
+      Math.round(
+        pickVal(rawAttrs.finishing, rawAttrs.shooting) * 0.4 +
+          pickVal(rawAttrs.shotPower, rawAttrs.shooting, rawAttrs.finishing) * 0.3 +
+          pickVal(rawAttrs.longShots, rawAttrs.shooting, rawAttrs.finishing) * 0.3,
+      );
+    const phyVal =
+      fifaCardDoc?.phy ??
+      Math.round(
+        pickVal(rawAttrs.strength, rawAttrs.stamina) * 0.5 +
+          pickVal(rawAttrs.stamina, rawAttrs.strength) * 0.3 +
+          pickVal(rawAttrs.jumping, rawAttrs.aerialDuels, rawAttrs.aerialAbility) * 0.2,
+      );
+    const defVal =
+      fifaCardDoc?.def ??
+      Math.round(
+        pickVal(rawAttrs.marking, rawAttrs.oneOnOne, rawAttrs.positioning) * 0.35 +
+          pickVal(rawAttrs.standingTackle, rawAttrs.tackling, rawAttrs.oneOnOne) * 0.35 +
+          pickVal(rawAttrs.interceptions, rawAttrs.interception, rawAttrs.positioning) * 0.3,
+      );
+    const driVal =
+      fifaCardDoc?.dri ??
+      Math.round(
+        pickVal(rawAttrs.dribbling, rawAttrs.ballControl) * 0.5 +
+          pickVal(rawAttrs.ballControl, rawAttrs.dribbling) * 0.3 +
+          pickVal(rawAttrs.agility, rawAttrs.dribbling, rawAttrs.ballControl) * 0.2,
+      );
+
+    // 4. FULL POTENTIAL (Physical & Technical Attributes — Synced with Real Attributes)
+    const potVision = pickVal(potentialDoc?.vision, rawAttrs.vision, pasVal, rawAttrs.shortPassing);
+    const potStrength = pickVal(potentialDoc?.strength, rawAttrs.strength, phyVal);
+    const potPace = pickVal(
+      potentialDoc?.pace,
+      pacVal,
+      rawAttrs.sprintSpeed,
+      rawAttrs.acceleration,
+    );
+    const potStamina = pickVal(potentialDoc?.stamina, rawAttrs.stamina, phyVal);
+    const potShooting = pickVal(
+      potentialDoc?.shooting,
+      shoVal,
+      rawAttrs.shooting,
+      rawAttrs.finishing,
+    );
+    const potPassing = pickVal(potentialDoc?.passing, pasVal, rawAttrs.shortPassing);
+
+    const calculatedPotentialScore = Math.round(
+      (potVision + potStrength + potPace + potStamina + potShooting + potPassing) / 6,
+    );
+    const potentialScore =
+      potentialDoc?.overallPotentialScore !== undefined &&
+      potentialDoc?.overallPotentialScore !== null &&
+      Number(potentialDoc.overallPotentialScore) !== 50
+        ? Number(potentialDoc.overallPotentialScore)
+        : calculatedPotentialScore;
+    const potentialGrowth = potentialDoc?.monthlyGrowth ?? 0;
+
+    const fullPotential = {
+      title: 'FULL POTENTIAL',
+      subtitle: 'Physical & Technical Attributes',
+      overallScore: potentialScore,
+      overallScoreDisplay: `${potentialScore}/100`,
+      scoreColor: getScoreColor(potentialScore),
+      growth: potentialGrowth,
+      growthDisplay: `${potentialGrowth >= 0 ? '↑' : '↓'} ${Math.abs(potentialGrowth)}%`,
+      growthDirection: potentialGrowth >= 0 ? 'up' : 'down',
+      growthText: 'Growth vs last month',
+      radarColor: getScoreColor(potentialScore),
+      radarData: [
+        { attribute: 'Vision', value: potVision, fullMark: 100 },
+        { attribute: 'Strength', value: potStrength, fullMark: 100 },
+        { attribute: 'Pace', value: potPace, fullMark: 100 },
+        { attribute: 'Stamina', value: potStamina, fullMark: 100 },
+        { attribute: 'Shooting', value: potShooting, fullMark: 100 },
+        { attribute: 'Passing', value: potPassing, fullMark: 100 },
+      ],
+      attributes: {
+        vision: potVision,
+        strength: potStrength,
+        pace: potPace,
+        stamina: potStamina,
+        shooting: potShooting,
+        passing: potPassing,
+      },
+    };
+
+    // 5. MENTAL ANALYSIS (Psychological Performance Metrics — Synced with Real Attributes)
+    const mentCreativity = pickVal(
+      mentalDoc?.creativity,
+      rawAttrs.creativity,
+      rawAttrs.vision,
+      rawAttrs.decisions,
+    );
+    const mentLeadership = pickVal(
+      mentalDoc?.leadership,
+      rawAttrs.leadership,
+      rawAttrs.communication,
+      rawAttrs.teamwork,
+      rawAttrs.decisions,
+    );
+    const mentConfidence = pickVal(
+      mentalDoc?.confidence,
+      rawAttrs.composure,
+      rawAttrs.composition,
+      rawAttrs.decisions,
+      rawAttrs.determination,
+    );
+    const mentComposure = pickVal(
+      mentalDoc?.composure,
+      rawAttrs.composure,
+      rawAttrs.composition,
+      rawAttrs.decisions,
+    );
+    const mentMotivation = pickVal(
+      mentalDoc?.motivation,
+      rawAttrs.determination,
+      rawAttrs.workRate,
+      rawAttrs.stamina,
+      rawAttrs.decisions,
+    );
+    const mentFocus = pickVal(
+      mentalDoc?.focus,
+      rawAttrs.concentration,
+      rawAttrs.anticipation,
+      rawAttrs.decisions,
+    );
+
+    const calculatedMentalScore = Math.round(
+      (mentCreativity +
+        mentLeadership +
+        mentConfidence +
+        mentComposure +
+        mentMotivation +
+        mentFocus) /
+        6,
+    );
+    const mentalScore =
+      mentalDoc?.overallMentalScore !== undefined &&
+      mentalDoc?.overallMentalScore !== null &&
+      Number(mentalDoc.overallMentalScore) !== 50
+        ? Number(mentalDoc.overallMentalScore)
+        : calculatedMentalScore;
+    const mentalGrowth = mentalDoc?.monthlyGrowth ?? 0;
+
+    const mentalAnalysis = {
+      title: 'MENTAL ANALYSIS',
+      subtitle: 'Psychological Performance Metrics',
+      overallScore: mentalScore,
+      overallScoreDisplay: `${mentalScore}/100`,
+      scoreColor: getScoreColor(mentalScore),
+      growth: mentalGrowth,
+      growthDisplay: `${mentalGrowth >= 0 ? '↑' : '↓'} ${Math.abs(mentalGrowth)}%`,
+      growthDirection: mentalGrowth >= 0 ? 'up' : 'down',
+      growthText: 'Growth vs last month',
+      radarColor: getScoreColor(mentalScore),
+      radarData: [
+        { attribute: 'Creativity', value: mentCreativity, fullMark: 100 },
+        { attribute: 'Leadership', value: mentLeadership, fullMark: 100 },
+        { attribute: 'Confidence', value: mentConfidence, fullMark: 100 },
+        { attribute: 'Composure', value: mentComposure, fullMark: 100 },
+        { attribute: 'Motivation', value: mentMotivation, fullMark: 100 },
+        { attribute: 'Focus', value: mentFocus, fullMark: 100 },
+      ],
+      attributes: {
+        creativity: mentCreativity,
+        leadership: mentLeadership,
+        confidence: mentConfidence,
+        composure: mentComposure,
+        motivation: mentMotivation,
+        focus: mentFocus,
+      },
+    };
+
+    // 6. SKILLS ANALYSIS CARDS (Dynamic Colors & Consistent Sub-Skills)
+    const subAccel = pickVal(rawAttrs.acceleration, pacVal);
+    const subSprint = pickVal(rawAttrs.sprintSpeed, pacVal);
+    const subVision = pickVal(rawAttrs.vision, pasVal);
+    const subShortPass = pickVal(rawAttrs.shortPassing, pasVal);
+    const subLongPass = pickVal(rawAttrs.longPassing, pasVal);
+    const subFinishing = pickVal(rawAttrs.finishing, shoVal);
+    const subLongShots = pickVal(rawAttrs.longShots, shoVal);
+    const subPenalties = pickVal(rawAttrs.penalties, rawAttrs.finishing, shoVal);
+    const subStrength = pickVal(rawAttrs.strength, phyVal);
+    const subStamina = pickVal(rawAttrs.stamina, phyVal);
+    const subJumping = pickVal(
+      rawAttrs.jumping,
+      rawAttrs.aerialDuels,
+      rawAttrs.aerialAbility,
+      phyVal,
+    );
+    const subMarking = pickVal(
+      rawAttrs.marking,
+      rawAttrs.defensiveAwareness,
+      rawAttrs.oneOnOne,
+      rawAttrs.positioning,
+      defVal,
+    );
+    const subInterception = pickVal(
+      rawAttrs.interceptions,
+      rawAttrs.interception,
+      rawAttrs.anticipation,
+      rawAttrs.positioning,
+      defVal,
+    );
+    const subTackle = pickVal(
+      rawAttrs.standingTackle,
+      rawAttrs.tackling,
+      rawAttrs.oneOnOne,
+      defVal,
+    );
+    const subBalance = pickVal(rawAttrs.balance, rawAttrs.agility, rawAttrs.dribbling, driVal);
+    const subAgility = pickVal(rawAttrs.agility, rawAttrs.dribbling, driVal);
+    const subBallControl = pickVal(rawAttrs.ballControl, driVal);
+
+    const makeSub = (key: string, name: string, value: number) => ({
+      key,
+      name,
+      value,
+      percentage: `${value}%`,
+      color: getScoreColor(value),
+    });
+
+    const skillsAnalysis = [
+      {
+        id: 'pace',
+        title: 'PACE',
+        score: pacVal,
+        percentage: `${pacVal}%`,
+        color: getScoreColor(pacVal),
+        subSkills: [
+          makeSub('acceleration', 'ACCELERATION', subAccel),
+          makeSub('sprintSpeed', 'SPRINT SPEED', subSprint),
+        ],
+      },
+      {
+        id: 'passing',
+        title: 'PASSING',
+        score: pasVal,
+        percentage: `${pasVal}%`,
+        color: getScoreColor(pasVal),
+        subSkills: [
+          makeSub('vision', 'VISION', subVision),
+          makeSub('shortPassing', 'SHORT PASS', subShortPass),
+          makeSub('longPassing', 'LONG PASS', subLongPass),
+        ],
+      },
+      {
+        id: 'shooting',
+        title: 'SHOOTING',
+        score: shoVal,
+        percentage: `${shoVal}%`,
+        color: getScoreColor(shoVal),
+        subSkills: [
+          makeSub('finishing', 'FINISHING', subFinishing),
+          makeSub('longShots', 'LONG SHOTS', subLongShots),
+          makeSub('penalties', 'PENALTIES', subPenalties),
+        ],
+      },
+      {
+        id: 'physical',
+        title: 'PHYSICAL',
+        score: phyVal,
+        percentage: `${phyVal}%`,
+        color: getScoreColor(phyVal),
+        subSkills: [
+          makeSub('strength', 'STRENGTH', subStrength),
+          makeSub('stamina', 'STAMINA', subStamina),
+          makeSub('jumping', 'JUMPING', subJumping),
+        ],
+      },
+      {
+        id: 'defending',
+        title: 'DEFENDING',
+        score: defVal,
+        percentage: `${defVal}%`,
+        color: getScoreColor(defVal),
+        subSkills: [
+          makeSub('marking', 'MARKING', subMarking),
+          makeSub('interception', 'INTERCEPTION', subInterception),
+          makeSub('tackle', 'TACKLE', subTackle),
+        ],
+      },
+      {
+        id: 'dribbling',
+        title: 'DRIBBLING',
+        score: driVal,
+        percentage: `${driVal}%`,
+        color: getScoreColor(driVal),
+        subSkills: [
+          makeSub('balance', 'BALANCE', subBalance),
+          makeSub('agility', 'AGILITY', subAgility),
+          makeSub('ballControl', 'BALL CONTROL', subBallControl),
+        ],
+      },
+    ];
 
     // 6. Optional: Paginated & Filtered Match Records using QueryBuilder
     let matchPagination = null;
@@ -596,9 +619,31 @@ export class PlayerAnalyticsService {
     });
     if (!profile) throw new AppError(404, 'Player profile not found');
 
+    const existing = await PlayerFullPotential.findOne({ playerId: profile._id }).lean();
+    const merged = {
+      vision: payload.vision ?? existing?.vision ?? 50,
+      strength: payload.strength ?? existing?.strength ?? 50,
+      pace: payload.pace ?? existing?.pace ?? 50,
+      stamina: payload.stamina ?? existing?.stamina ?? 50,
+      shooting: payload.shooting ?? existing?.shooting ?? 50,
+      passing: payload.passing ?? existing?.passing ?? 50,
+    };
+    const updateDoc = { ...payload };
+    if (updateDoc.overallPotentialScore === undefined) {
+      updateDoc.overallPotentialScore = Math.round(
+        (Number(merged.vision) +
+          Number(merged.strength) +
+          Number(merged.pace) +
+          Number(merged.stamina) +
+          Number(merged.shooting) +
+          Number(merged.passing)) /
+          6,
+      );
+    }
+
     const updated = await PlayerFullPotential.findOneAndUpdate(
       { playerId: profile._id },
-      { $set: payload },
+      { $set: updateDoc },
       { new: true, upsert: true },
     );
 
@@ -615,9 +660,31 @@ export class PlayerAnalyticsService {
     });
     if (!profile) throw new AppError(404, 'Player profile not found');
 
+    const existing = await PlayerMentalAnalysis.findOne({ playerId: profile._id }).lean();
+    const merged = {
+      creativity: payload.creativity ?? existing?.creativity ?? 50,
+      leadership: payload.leadership ?? existing?.leadership ?? 50,
+      confidence: payload.confidence ?? existing?.confidence ?? 50,
+      composure: payload.composure ?? existing?.composure ?? 50,
+      motivation: payload.motivation ?? existing?.motivation ?? 50,
+      focus: payload.focus ?? existing?.focus ?? 50,
+    };
+    const updateDoc = { ...payload };
+    if (updateDoc.overallMentalScore === undefined) {
+      updateDoc.overallMentalScore = Math.round(
+        (Number(merged.creativity) +
+          Number(merged.leadership) +
+          Number(merged.confidence) +
+          Number(merged.composure) +
+          Number(merged.motivation) +
+          Number(merged.focus)) /
+          6,
+      );
+    }
+
     const updated = await PlayerMentalAnalysis.findOneAndUpdate(
       { playerId: profile._id },
-      { $set: payload },
+      { $set: updateDoc },
       { new: true, upsert: true },
     );
 

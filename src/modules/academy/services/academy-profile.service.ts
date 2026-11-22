@@ -49,17 +49,17 @@ export class AcademyProfileService {
 
     const userPhone = (p.userId as any)?.phone || '';
     const userEmail = (p.userId as any)?.email || '';
-    const contactPhone = p.contactPhone || userPhone || '+55 11 9999-8888';
-    const contactEmail = p.contactEmail || userEmail || 'contact@santosfc.academy';
+    const contactPhone = p.contactPhone || userPhone || '';
+    const contactEmail = p.contactEmail || userEmail || '';
     const nationality =
       p.nationality ||
       p.location ||
-      (p.city && p.country ? `${p.city}, ${p.country}` : p.country || 'São Paulo, Brazil');
+      (p.city && p.country ? `${p.city}, ${p.country}` : p.country || '');
 
-    const league = p.league || 'Premier League';
+    const league = p.league || '';
     const achievements = Array.isArray(p.achievements) ? p.achievements : [];
-    const clubName = p.name || 'Liverpool FC';
-    const country = p.country || 'Brazil';
+    const clubName = p.name || '';
+    const country = p.country || '';
 
     return {
       ...p,
@@ -215,21 +215,17 @@ export class AcademyProfileService {
       if (user) {
         profile = await AcademyProfile.create({
           userId: user._id,
-          name: user.name || 'Santos FC Academy',
-          category: 'Premier League Academy',
-          country: 'Brazil',
-          city: 'São Paulo',
-          location: 'São Paulo, Brazil',
-          nationality: 'São Paulo, Brazil',
-          establishedDate: new Date('2018-01-01'),
-          contactPhone: user.phone || '+55 11 9999-8888',
-          contactEmail: user.email || 'contact@santosfc.academy',
-          description:
-            'Santos FC Academy is committed to developing world-class football talent through excellence in coaching, state-of-the-art facilities, and a holistic approach to player development.',
-          visionAndMission:
-            'To nurture the next generation of football stars by combining technical excellence with character development.',
-          trainingPhilosophy:
-            'Player-centered development focusing on technical skills, tactical awareness, physical conditioning, and mental resilience.',
+          name: user.name || '',
+          category: '',
+          country: (user as any).country || '',
+          city: '',
+          location: (user as any).country || '',
+          nationality: (user as any).country || '',
+          contactPhone: user.phone || '',
+          contactEmail: user.email || '',
+          description: '',
+          visionAndMission: '',
+          trainingPhilosophy: '',
         });
         profile = await AcademyProfile.findById(profile._id).populate(
           'userId',

@@ -206,7 +206,16 @@ export class PlayerCvTransformerService {
 
     // 6. Fast memory aggregation for match metrics
     const matchRecords: any[] = aggregatedProfile.matchRecords || [];
-    const totalMatches = matchRecords.length;
+    // Only finalized matches count towards performance metrics:
+    // - game reports whose evaluation is COMPLETED
+    // - manually logged matches (never sent for review => UNREQUESTED)
+    // Paid-but-unsubmitted drafts (IN_PROGRESS / PENDING / ...) have no stats and must not
+    // appear as played matches with a default rating.
+    const playedMatches: any[] = matchRecords.filter((m) => {
+      const status = m.coachReview?.status;
+      return status === 'COMPLETED' || status === 'UNREQUESTED' || !status;
+    });
+    const totalMatches = playedMatches.length;
     let totalGoals = 0;
     let totalAssists = 0;
     let totalPasses = 0;
@@ -218,7 +227,7 @@ export class PlayerCvTransformerService {
     let sumNormalizedRatings = 0;
 
     for (let i = 0; i < totalMatches; i++) {
-      const m = matchRecords[i];
+      const m = playedMatches[i];
       totalGoals += m.goals || 0;
       totalAssists += m.assists || 0;
       totalPasses += m.passes || 0;
@@ -227,12 +236,12 @@ export class PlayerCvTransformerService {
       if (m.result === 'W') wins++;
       else if (m.result === 'D') draws++;
       else if (m.result === 'L') losses++;
-      const r = m.playerRating ?? 6.0;
+      const r = m.coachReview?.coachRating ?? m.playerRating ?? 0;
       sumNormalizedRatings += r <= 10 ? r * 10 : r;
     }
 
     // Specifically calculate stats for the LAST 4 MATCHES shown in the UI header card
-    const last4 = matchRecords.slice(0, 4);
+    const last4 = playedMatches.slice(0, 4);
     let l4Goals = 0;
     let l4Assists = 0;
     let l4Passes = 0;
@@ -247,17 +256,14 @@ export class PlayerCvTransformerService {
       l4Goals += m.goals || 0;
       l4Assists += m.assists || 0;
       l4Passes += m.passes || 0;
-      l4PassAccSum += m.passAccuracy || (m.passes > 0 ? 90 : 0);
+      l4PassAccSum += m.passAccuracy || 0;
       l4Tackles += m.tackles || 0;
       const res =
         m.result || (m.homeScore > m.awayScore ? 'W' : m.homeScore === m.awayScore ? 'D' : 'L');
       if (res === 'W') l4Wins++;
       else if (res === 'D') l4Draws++;
       else if (res === 'L') l4Losses++;
-      const r =
-        m.coachReview?.status === 'COMPLETED'
-          ? (m.coachReview?.coachRating ?? m.playerRating)
-          : (m.playerRating ?? 6.0);
+      const r = m.coachReview?.coachRating ?? m.playerRating ?? 0;
       const r10 = r > 10 ? r / 10 : r;
       l4RatingSum += r10;
     }
@@ -273,19 +279,21 @@ export class PlayerCvTransformerService {
       )
       .reverse();
 
-    const avgPassAccuracy =
-      totalMatches > 0 ? Math.round(totalPassAccSum / totalMatches) : l4AvgPassAcc;
-    const avgTackles =
-      totalMatches > 0 ? Math.round((totalTackles / totalMatches) * 10) / 10 : l4AvgTackles;
-    const avgMatchRating =
-      totalMatches > 0 ? Math.round((sumNormalizedRatings / totalMatches) * 10) / 100 : l4AvgRating;
+    // The "Game Summary (Last 4 Matches)" header must use the SAME 4 matches for every metric
+    const avgPassAccuracy = l4AvgPassAcc;
+    const avgTackles = l4AvgTackles;
+    const avgMatchRating = l4AvgRating;
     const formGuide = l4FormGuide;
 
-    const recentMatches = matchRecords.slice(0, 4).map((match) => {
-      const r =
-        match.coachReview?.status === 'COMPLETED'
-          ? (match.coachReview?.coachRating ?? match.playerRating)
-          : (match.playerRating ?? 6.0);
+    // Career-wide averages (all finalized matches), exposed separately under careerTotals
+    const careerAvgPassAccuracy = totalMatches > 0 ? Math.round(totalPassAccSum / totalMatches) : 0;
+    const careerAvgTackles =
+      totalMatches > 0 ? Math.round((totalTackles / totalMatches) * 10) / 10 : 0;
+    const careerAvgRating =
+      totalMatches > 0 ? Math.round((sumNormalizedRatings / totalMatches) * 10) / 100 : 0;
+
+    const recentMatches = playedMatches.slice(0, 4).map((match) => {
+      const r = match.coachReview?.coachRating ?? match.playerRating ?? 0;
       const r10 = r > 10 ? Math.round((r / 10) * 10) / 10 : Math.round(r * 10) / 10;
       const r100 = r <= 10 ? Math.round(r * 10) : Math.round(r);
 
@@ -316,7 +324,7 @@ export class PlayerCvTransformerService {
       const awayScore = match.awayScore ?? 0;
       const result =
         match.result || (homeScore > awayScore ? 'W' : homeScore === awayScore ? 'D' : 'L');
-      const passAcc = match.passAccuracy ?? (match.passes > 0 ? 92 : 0);
+      const passAcc = match.passAccuracy ?? 0;
 
       let dateStr = '2024-01-15';
       const rawDate = match.matchDate || match.gameDate;
@@ -1051,9 +1059,10 @@ export class PlayerCvTransformerService {
         totalMatches,
         averageRating: avgMatchRating,
         avgMatchRating,
-        totalGoals: l4Goals > 0 ? l4Goals : totalGoals,
-        totalAssists: l4Assists > 0 ? l4Assists : totalAssists,
-        totalPasses: l4Passes > 0 ? l4Passes : totalPasses,
+        last4Count: l4Count,
+        totalGoals: l4Goals,
+        totalAssists: l4Assists,
+        totalPasses: l4Passes,
         avgPassAccuracy:
           typeof avgPassAccuracy === 'number' ? `${avgPassAccuracy}%` : avgPassAccuracy,
         averagePassAccuracy:
@@ -1064,15 +1073,18 @@ export class PlayerCvTransformerService {
             : parseInt(String(avgPassAccuracy), 10) || 0,
         avgTackles,
         averageTackles: avgTackles,
-        wins: l4Wins > 0 || l4Count > 0 ? l4Wins : wins,
-        draws: l4Draws > 0 || l4Count > 0 ? l4Draws : draws,
-        losses: l4Losses > 0 || l4Count > 0 ? l4Losses : losses,
+        wins: l4Wins,
+        draws: l4Draws,
+        losses: l4Losses,
         formGuide,
         careerTotals: {
           totalMatches,
           totalGoals,
           totalAssists,
           totalPasses,
+          averageRating: careerAvgRating,
+          avgPassAccuracy: careerAvgPassAccuracy,
+          avgTackles: careerAvgTackles,
           wins,
           draws,
           losses,

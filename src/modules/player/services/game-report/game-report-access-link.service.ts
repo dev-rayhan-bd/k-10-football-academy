@@ -238,6 +238,13 @@ export class GameReportAccessLinkService {
       );
     }
 
+    if (report.coachReview?.status === 'REJECTED') {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'This Game Report request was declined. The link can no longer be used for submission.',
+      );
+    }
+
     if (report.coachReview?.paymentStatus !== 'PAID') {
       throw new AppError(
         StatusCodes.PAYMENT_REQUIRED,

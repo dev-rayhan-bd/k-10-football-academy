@@ -4,6 +4,7 @@ import { catchAsync } from '@/utils/catchAsync';
 import { sendResponse } from '@/utils/sendResponse';
 import { AppError } from '@/utils/AppError';
 import { coachService } from './coach.service';
+import { mediaService } from '@/modules/media/media.service';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
 
 // Helper to extract uploaded file by field name
@@ -837,6 +838,20 @@ export const createCoachStripeDashboardLink = catchAsync(async (req: Request, re
     statusCode: StatusCodes.OK,
     success: true,
     message: 'Coach Stripe Express dashboard login link generated successfully',
+    data: result,
+  });
+});
+
+export const getCoachMedia = catchAsync(async (req: Request, res: Response) => {
+  const coachId =
+    req.params.coachId === 'me' || !req.params.coachId
+      ? (req as any).user?.userId || req.params.coachId
+      : req.params.coachId;
+  const result = await mediaService.getUserMedia(coachId, req.query as any);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Coach media fetched successfully',
     data: result,
   });
 });

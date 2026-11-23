@@ -13,6 +13,7 @@ import {
   mapStatsAndEventsToMatchEvents,
   parseTimerInput,
   resolveOrCreatePlayerProfile,
+  deriveMatchSummaryFromEvents,
 } from './game-report.utils';
 import { gameReportPdfService } from './game-report-pdf.service';
 
@@ -129,22 +130,9 @@ export class GameReportSelfService {
       payload.categoryRatings = perfResult.categoryRatings;
     }
 
-    // Direct stats shortcuts
-    if (payload.stats) {
-      if (payload.stats.goalScored !== undefined) payload.goals = payload.stats.goalScored;
-      if (payload.stats.assists !== undefined) payload.assists = payload.stats.assists;
-      if (payload.stats.passAccurate !== undefined) {
-        const acc = Number(payload.stats.passAccurate) || 0;
-        const wrong = Number(payload.stats.wrongPass) || 0;
-        payload.passes = acc + wrong;
-        payload.passAccuracy = payload.passes > 0 ? Math.round((acc / payload.passes) * 100) : 0;
-      }
-      if (payload.stats.yellowCard !== undefined) payload.yellowCards = payload.stats.yellowCard;
-      if (payload.stats.redCard !== undefined) payload.redCards = payload.stats.redCard;
-      if (payload.stats.standTackle !== undefined || payload.stats.slidingTackle !== undefined) {
-        payload.tackles =
-          (Number(payload.stats.standTackle) || 0) + (Number(payload.stats.slidingTackle) || 0);
-      }
+    // Headline summary fields derived from mapped events (legacy + canonical keys)
+    if (payload.events && payload.events.length > 0) {
+      Object.assign(payload, deriveMatchSummaryFromEvents(payload.events, payload.stats || {}));
     }
 
     const record = await MatchRecord.create(payload);
@@ -336,8 +324,7 @@ export class GameReportSelfService {
     matchRecord.categoryScores = perfResult.categoryAdjustedScores as any;
     matchRecord.categoryRatings = perfResult.categoryRatings as any;
 
-    if (stats.goalScored !== undefined) matchRecord.goals = stats.goalScored;
-    if (stats.assists !== undefined) matchRecord.assists = stats.assists;
+    Object.assign(matchRecord, deriveMatchSummaryFromEvents(events, stats));
 
     matchRecord.isProfessionallyVerified = false;
     matchRecord.authorRole = currentUser?.role || 'PARENT';

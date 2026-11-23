@@ -11,7 +11,11 @@ import { notificationService } from '@/modules/notification/notification.service
 import { ParentChild } from '@/modules/parent/parent.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import QueryBuilder from '@/builder/QueryBuilder';
-import { mapStatsAndEventsToMatchEvents, parseTimerInput } from './game-report.utils';
+import {
+  mapStatsAndEventsToMatchEvents,
+  parseTimerInput,
+  deriveMatchSummaryFromEvents,
+} from './game-report.utils';
 import { gameReportPdfService } from './game-report-pdf.service';
 
 export class GameReportCoachService {
@@ -82,20 +86,7 @@ export class GameReportCoachService {
     matchRecord.categoryScores = perfResult.categoryAdjustedScores as any;
     matchRecord.categoryRatings = perfResult.categoryRatings as any;
 
-    if (stats.goalScored !== undefined) matchRecord.goals = stats.goalScored;
-    if (stats.assists !== undefined) matchRecord.assists = stats.assists;
-    if (stats.passAccurate !== undefined) {
-      const acc = Number(stats.passAccurate) || 0;
-      const wrong = Number(stats.wrongPass) || 0;
-      matchRecord.passes = acc + wrong;
-      matchRecord.passAccuracy =
-        matchRecord.passes > 0 ? Math.round((acc / matchRecord.passes) * 100) : 0;
-    }
-    if (stats.yellowCard !== undefined) matchRecord.yellowCards = stats.yellowCard;
-    if (stats.redCard !== undefined) matchRecord.redCards = stats.redCard;
-    if (stats.standTackle !== undefined || stats.slidingTackle !== undefined) {
-      matchRecord.tackles = (Number(stats.standTackle) || 0) + (Number(stats.slidingTackle) || 0);
-    }
+    Object.assign(matchRecord, deriveMatchSummaryFromEvents(events, stats));
 
     if (matchRecord.coachReview) {
       matchRecord.coachReview.status = 'COMPLETED';

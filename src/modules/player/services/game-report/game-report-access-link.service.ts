@@ -13,7 +13,11 @@ import { emailQueue } from '@/jobs/queues/email.queue';
 import { getCoachReportRequestEmailTemplate } from '@/utils/emailTemplates';
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
-import { mapStatsAndEventsToMatchEvents, parseTimerInput } from './game-report.utils';
+import {
+  mapStatsAndEventsToMatchEvents,
+  parseTimerInput,
+  deriveMatchSummaryFromEvents,
+} from './game-report.utils';
 import { gameReportPdfService } from './game-report-pdf.service';
 import { ParentChild, ParentProfile } from '@/modules/parent/parent.model';
 
@@ -301,6 +305,7 @@ export class GameReportAccessLinkService {
     report.interpretation = perfResult.interpretation;
     report.categoryScores = perfResult.categoryAdjustedScores as any;
     report.categoryRatings = perfResult.categoryRatings as any;
+    Object.assign(report, deriveMatchSummaryFromEvents(events, stats));
     report.authorName = resolvedEvaluatorName;
     report.authorRole = 'COACH';
     report.isProfessionallyVerified = true;

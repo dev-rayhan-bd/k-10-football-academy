@@ -56,6 +56,7 @@ import {
   createCoachStripeConnectLink,
   getCoachStripeConnectStatus,
   createCoachStripeDashboardLink,
+  getCoachMedia,
 } from './coach.controller';
 import { getCoachAllGameReports } from '@/modules/player/game-report.controller';
 
@@ -169,6 +170,8 @@ router.post(
 );
 router.get('/me/cv', auth(), getMyCoachCV);
 router.get('/my-cv', auth(), getMyCoachCV);
+router.get('/me/media', auth(), getCoachMedia);
+router.get('/my-media', auth(), getCoachMedia);
 router.get('/me/analytics', auth(), getMyCoachAnalytics);
 router.get('/my-analytics', auth(), getMyCoachAnalytics);
 router.get('/my-profile', auth('COACH', 'SUPER_ADMIN'), getMyCoachProfile);
@@ -301,6 +304,7 @@ router.patch(
 // Backward-compatible formation & testimonial endpoints
 router.get('/:coachId/formations', getTacticalFormations);
 router.get('/:coachId/testimonials', getTestimonials);
+router.get('/:coachId/media', optionalAuth(), getCoachMedia);
 router.post(
   '/:coachId/testimonials',
   auth('COACH', 'SUPER_ADMIN', 'PLAYER', 'PARENT'),

@@ -102,6 +102,45 @@ export function mapStatsAndEventsToMatchEvents(
 }
 
 /**
+ * Derive the headline match summary fields (goals, assists, passes, cards, tackles)
+ * from the mapped MATCH_EVENTS so they stay in sync regardless of whether the client
+ * submitted legacy keys (goalScored, passAccurate...) or canonical event keys (goal, completedPass...).
+ *
+ * `stats` is only consulted for legacy `passAccurate`, which the event mapper routes to `key_pass`.
+ */
+export function deriveMatchSummaryFromEvents(
+  events: Array<{ eventId: string; count: number }> = [],
+  stats: Record<string, any> = {},
+): {
+  goals: number;
+  assists: number;
+  passes: number;
+  passAccuracy: number;
+  yellowCards: number;
+  redCards: number;
+  tackles: number;
+} {
+  const counts: Record<string, number> = {};
+  for (const ev of events) {
+    if (ev?.eventId) counts[ev.eventId] = (counts[ev.eventId] || 0) + (Number(ev.count) || 0);
+  }
+
+  const completedPasses = (counts.completed_pass || 0) + (Number(stats.passAccurate) || 0);
+  const incompletePasses = counts.incomplete_pass || 0;
+  const passes = completedPasses + incompletePasses;
+
+  return {
+    goals: counts.goal || 0,
+    assists: counts.assist || 0,
+    passes,
+    passAccuracy: passes > 0 ? Math.round((completedPasses / passes) * 100) : 0,
+    yellowCards: counts.yellow_card || 0,
+    redCards: counts.red_card || 0,
+    tackles: counts.tackle_won || 0,
+  };
+}
+
+/**
  * Parse timer formatted as min:sec (e.g. "08:08", "76:30") or numeric minutes
  */
 export function parseTimerInput(payload: {

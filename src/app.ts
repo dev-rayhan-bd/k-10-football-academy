@@ -24,7 +24,7 @@ import { sendResponse } from '@/utils/sendResponse';
 const app: Application = express();
 
 /**
- * 1. Trust Proxy Configuration
+ * 1. Trust Proxy Configuration...
  * Essential for accurate IP address detection behind reverse proxies (NGINX, Cloudflare, AWS ALB)
  * Prevents false 429 Rate Limit errors and IP spoofing.
  */

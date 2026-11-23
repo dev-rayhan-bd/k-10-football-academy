@@ -4,7 +4,11 @@ import { UserValidation } from './user.validation';
 import { validateRequest } from '@/middlewares/validateRequest';
 import { auth, optionalAuth } from '@/middlewares/auth.middleware';
 import { upload } from '@/middlewares/multer';
-import { authRateLimiter, searchRateLimiter } from '@/config/rateLimit.config';
+import {
+  authRateLimiter,
+  otpDispatchRateLimiter,
+  searchRateLimiter,
+} from '@/config/rateLimit.config';
 import {
   getNotificationSettings,
   updateNotificationSettings,
@@ -15,7 +19,7 @@ const router = Router();
 // Public Authentication Routes (Protected with strict Auth Rate Limiter to prevent Brute-force attacks)
 router.post(
   '/register',
-  authRateLimiter,
+  otpDispatchRateLimiter,
   upload.single('avatar') as any,
   validateRequest(UserValidation.createUserZodSchema),
   userController.register,
@@ -50,14 +54,14 @@ router.get(
 
 router.post(
   '/resend-otp',
-  authRateLimiter,
+  otpDispatchRateLimiter,
   validateRequest(UserValidation.resendOtpZodSchema),
   userController.resendOtp,
 );
 
 router.post(
   '/forgot-password',
-  authRateLimiter,
+  otpDispatchRateLimiter,
   validateRequest(UserValidation.forgotPasswordZodSchema),
   userController.forgotPassword,
 );

@@ -20,6 +20,7 @@ import { handleStripeGameReportWebhook } from '@/modules/player/game-report.cont
 import { globalErrorHandler } from '@/middlewares/globalErrorHandler';
 import { logger } from '@/utils/logger';
 import { sendResponse } from '@/utils/sendResponse';
+import { env } from '@/config/env';
 
 const app: Application = express();
 
@@ -28,7 +29,7 @@ const app: Application = express();
  * Essential for accurate IP address detection behind reverse proxies (NGINX, Cloudflare, AWS ALB)
  * Prevents false 429 Rate Limit errors and IP spoofing.
  */
-app.set('trust proxy', 1);
+app.set('trust proxy', env.TRUST_PROXY_HOPS);
 
 /**
  * 2. CORS & HTTP Security Headers

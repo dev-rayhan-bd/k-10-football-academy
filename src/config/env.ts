@@ -41,6 +41,12 @@ const envSchema = z.object({
   PUBLIC_API_URL: z.string().optional(),
   SCOUTING_BOARD_SHARE_PLAYER: z.string().optional(),
   SCOUTING_BOARD_SHARE_COACH: z.string().optional(),
+  // Rate limiting (requests per 15 min). Authenticated users are keyed per user, anonymous per IP.
+  RATE_LIMIT_USER_MAX: z.coerce.number().int().positive().default(1500),
+  RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(300),
+  // Number of reverse-proxy hops in front of the app (Nginx = 1, Cloudflare + Nginx = 2).
+  // Must match the real topology, otherwise clients can spoof X-Forwarded-For.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
 });
 
 if (!process.env.SMTP_PASS && process.env.APP_PASSWARD) {

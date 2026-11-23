@@ -51,8 +51,8 @@ export class GameReportQueryService {
     let ratedReportsCount = 0;
 
     allReports.forEach((m) => {
-      const isCompleted =
-        m.coachReview?.status === 'COMPLETED' || m.reportCompletionType === 'SELF';
+      // A report is only completed once its stats were actually submitted (SELF drafts stay IN_PROGRESS)
+      const isCompleted = m.coachReview?.status === 'COMPLETED';
       const isPending = m.coachReview?.status === 'PENDING';
 
       if (isCompleted) {
@@ -70,11 +70,7 @@ export class GameReportQueryService {
     });
 
     const averageRating =
-      ratedReportsCount > 0
-        ? Math.round((ratingSum / ratedReportsCount) * 10) / 10
-        : totalReports > 0
-          ? 7.8
-          : 0.0;
+      ratedReportsCount > 0 ? Math.round((ratingSum / ratedReportsCount) * 10) / 10 : 0;
 
     // Apply Filter Tab: ALL, PAID, PENDING
     const filterStatus = (query.status || query.filter || 'ALL').toUpperCase().trim();
@@ -123,9 +119,8 @@ export class GameReportQueryService {
       const reportTitle = awayTeam.toLowerCase().startsWith('vs') ? awayTeam : `vs ${awayTeam}`;
       const matchTitle = `${homeTeam} vs ${awayTeam}`;
 
-      // Scout / Coach Rating on 10-point scale
-      const isCompleted =
-        m.coachReview?.status === 'COMPLETED' || m.reportCompletionType === 'SELF';
+      // Scout / Coach Rating on 10-point scale (only once stats were submitted)
+      const isCompleted = m.coachReview?.status === 'COMPLETED';
       const rawRating = m.coachReview?.coachRating ?? m.playerRating;
       let rating = 0.0;
       if (isCompleted && rawRating !== undefined && rawRating !== null) {
@@ -355,8 +350,7 @@ export class GameReportQueryService {
         ? 'PARENT'
         : 'SELF';
 
-    const isCompleted =
-      match.coachReview?.status === 'COMPLETED' || match.reportCompletionType === 'SELF';
+    const isCompleted = match.coachReview?.status === 'COMPLETED';
     const rawRating = match.coachReview?.coachRating ?? match.playerRating;
     let rating = 0.0;
     if (isCompleted && rawRating !== undefined && rawRating !== null) {

@@ -3,7 +3,12 @@ import { AppError } from '@/utils/AppError';
 import { UserModel } from '@/modules/user/user.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 import { deleteFromStorage } from '@/utils/fileUpload.utils';
-import { ICoachProfile, ITacticalFormation, ICoachTestimonial } from '../coach.interface';
+import {
+  ICoachProfile,
+  ITacticalFormation,
+  ICoachTestimonial,
+  ALLOWED_COACH_STYLES,
+} from '../coach.interface';
 import { CoachProfile, TacticalFormation, CoachTestimonial } from '../coach.model';
 import { coachCvService, computeCoachProfileCompletion } from './coach-cv.service';
 import { coachCacheService } from './coach-cache.service';
@@ -209,25 +214,21 @@ export class CoachProfileService {
       const winRate = matchesCoached > 0 ? Math.round((totalWins / matchesCoached) * 100) : 0;
 
       const rawCardStats = p.cardStats || {};
-      const tactics = Number(p.coachProfileAnalysis?.tactics || 85);
-      const leadership = Number(p.coachProfileAnalysis?.leadership || 85);
-      const communication = Number(p.coachProfileAnalysis?.communication || 85);
-      const adaptability = Number(p.coachProfileAnalysis?.adaptability || 85);
-      const discipline = Number(p.coachProfileAnalysis?.discipline || 85);
-      const development = Number(p.coachProfileAnalysis?.development || 85);
-      const yearsExp = Number(p.yearsExperience || 0);
+      // Stored values only: the client Excel spec defines no coach card formula (missing = 0)
+      const tactics = Number(p.coachProfileAnalysis?.tactics ?? 0);
+      const leadership = Number(p.coachProfileAnalysis?.leadership ?? 0);
+      const communication = Number(p.coachProfileAnalysis?.communication ?? 0);
+      const adaptability = Number(p.coachProfileAnalysis?.adaptability ?? 0);
+      const discipline = Number(p.coachProfileAnalysis?.discipline ?? 0);
+      const development = Number(p.coachProfileAnalysis?.development ?? 0);
 
-      const att = Number(rawCardStats.att ?? tactics);
-      const tac = Number(rawCardStats.tac ?? tactics);
-      const def = Number(rawCardStats.def ?? discipline);
-      const imp = Number(rawCardStats.imp ?? development);
-      const exp = Number(rawCardStats.exp ?? Math.min(99, Math.max(50, 60 + yearsExp * 2)));
-      const lea = Number(rawCardStats.lea ?? leadership);
-      const calculatedOverall = Math.round((att + tac + def + imp + exp + lea) / 6);
-      const overallScore = Number(
-        rawCardStats.rating ??
-          (p.overallRatingScore > 0 ? p.overallRatingScore : calculatedOverall),
-      );
+      const att = Number(rawCardStats.att ?? 0);
+      const tac = Number(rawCardStats.tac ?? 0);
+      const def = Number(rawCardStats.def ?? 0);
+      const imp = Number(rawCardStats.imp ?? 0);
+      const exp = Number(rawCardStats.exp ?? 0);
+      const lea = Number(rawCardStats.lea ?? 0);
+      const overallScore = Number(rawCardStats.rating ?? p.overallRatingScore ?? 0);
 
       const cleanCoachCardImage =
         p.cardImage && !p.cardImage.includes('da1uxchgo')
@@ -416,7 +417,28 @@ export class CoachProfileService {
       profile.markModified('accomplishments');
     }
     if (payload.coachStyles !== undefined) {
-      profile.coachStyles = parseIfJson(payload.coachStyles);
+      let styles = parseIfJson(payload.coachStyles);
+      if (typeof styles === 'string') {
+        styles = styles
+          .split(',')
+          .map((st: string) => st.trim())
+          .filter(Boolean);
+      }
+      if (!Array.isArray(styles)) {
+        throw new AppError(400, 'coachStyles must be an array of strings');
+      }
+      if (styles.length > 4) {
+        throw new AppError(400, 'Maximum 4 coach styles can be selected');
+      }
+      for (const style of styles) {
+        if (!ALLOWED_COACH_STYLES.includes(style)) {
+          throw new AppError(
+            400,
+            `Invalid coach style: ${style}. Allowed: ${ALLOWED_COACH_STYLES.join(', ')}`,
+          );
+        }
+      }
+      profile.coachStyles = styles;
       profile.markModified('coachStyles');
     }
     if (payload.languages !== undefined) {

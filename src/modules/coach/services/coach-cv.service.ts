@@ -295,14 +295,30 @@ export class CoachCvService {
       {
         $lookup: {
           from: 'matchrecords',
-          let: { cId: '$_id' },
+          let: {
+            cId: '$_id',
+            uId: '$userId',
+            cEmail: { $toLower: { $ifNull: ['$email', { $ifNull: ['$user.email', ''] }] } },
+          },
           pipeline: [
             {
+              // Only reviews assigned to THIS coach (by profile id, user id or invited email)
               $match: {
                 $expr: {
                   $or: [
-                    { $eq: ['$coachReview.coachId', '$$cId'] },
-                    { $eq: ['$coachReview.status', 'PENDING'] },
+                    { $eq: ['$coachReview.coachId', '$cId'] },
+                    { $eq: ['$coachReview.coachId', '$uId'] },
+                    {
+                      $and: [
+                        { $ne: ['$cEmail', ''] },
+                        {
+                          $eq: [
+                            { $toLower: { $ifNull: ['$coachReview.coachEmail', ''] } },
+                            '$cEmail',
+                          ],
+                        },
+                      ],
+                    },
                   ],
                 },
               },
@@ -475,7 +491,7 @@ export class CoachCvService {
       return {
         _id: item?._id,
         formationSlot: slot,
-        formationName: item?.formationName || `FORMATION ${slot}`,
+        formationName: item?.formationName || '',
         positions,
         coachId: doc._id,
       };
@@ -484,12 +500,7 @@ export class CoachCvService {
     // Format assigned player reviews for widget (Screen 7 top right)
     const assignedPlayerReviews = (doc.assignedPlayerReviews || []).map((ar: any) => {
       const player = ar.player || {};
-      const status =
-        ar.coachReview?.status === 'COMPLETED'
-          ? 'COMPLETED'
-          : ar.coachReview?.status === 'PENDING'
-            ? 'REQUESTED'
-            : 'EXPIRED';
+      const status = ar.coachReview?.status || '';
 
       return {
         _id: ar._id,
@@ -499,7 +510,8 @@ export class CoachCvService {
         rating: ar.playerRating || 0,
         status,
         matchDate: ar.matchDate,
-        amount: ar.coachReview?.paymentAmount ? `$${ar.coachReview.paymentAmount}` : '',
+        amount: Number(ar.coachReview?.paymentAmount || 0),
+        paymentStatus: ar.coachReview?.paymentStatus || '',
         action: 'REVIEW',
       };
     });
@@ -517,25 +529,16 @@ export class CoachCvService {
       ? calculateAgeFromDob(doc.dateOfBirth)
       : doc.age || null;
 
-    // Calculate Coach FIFA Manager Card Stats (ATT, TAC, DEF, IMP, EXP, LEA)
+    // Coach card stats: stored values only. The client Excel spec defines no coach card
+    // formula, so nothing is derived or defaulted here (missing = 0).
     const rawCardStats = doc.cardStats || {};
-    const tacticsVal = Number(doc.coachProfileAnalysis?.tactics || 85);
-    const leadershipVal = Number(doc.coachProfileAnalysis?.leadership || 85);
-    const developmentVal = Number(doc.coachProfileAnalysis?.development || 85);
-    const disciplineVal = Number(doc.coachProfileAnalysis?.discipline || 85);
-    const yearsExp = Number(doc.yearsExperience || 0);
-
-    const att = Number(rawCardStats.att ?? tacticsVal);
-    const tac = Number(rawCardStats.tac ?? tacticsVal);
-    const def = Number(rawCardStats.def ?? disciplineVal);
-    const imp = Number(rawCardStats.imp ?? developmentVal);
-    const exp = Number(rawCardStats.exp ?? Math.min(99, Math.max(50, 60 + yearsExp * 2)));
-    const lea = Number(rawCardStats.lea ?? leadershipVal);
-    const calculatedOverall = Math.round((att + tac + def + imp + exp + lea) / 6);
-    const overallScore = Number(
-      rawCardStats.rating ??
-        (doc.overallRatingScore > 0 ? doc.overallRatingScore : calculatedOverall),
-    );
+    const att = Number(rawCardStats.att ?? 0);
+    const tac = Number(rawCardStats.tac ?? 0);
+    const def = Number(rawCardStats.def ?? 0);
+    const imp = Number(rawCardStats.imp ?? 0);
+    const exp = Number(rawCardStats.exp ?? 0);
+    const lea = Number(rawCardStats.lea ?? 0);
+    const overallScore = Number(rawCardStats.rating ?? doc.overallRatingScore ?? 0);
 
     const cleanCoachCardImage =
       doc.cardImage && !doc.cardImage.includes('da1uxchgo')
@@ -640,7 +643,7 @@ export class CoachCvService {
       contact: {
         email: doc.email || user.email || '',
         phone: doc.phone || user.phone || '',
-        location: doc.location || doc.birthCountry || '',
+        location: doc.location || '',
         website: doc.website || '',
       },
 
@@ -656,12 +659,12 @@ export class CoachCvService {
 
       // Transfer Status
       transferStatus: {
-        footballAgentContract: doc.transferStatus?.footballAgentContract || 'No',
+        footballAgentContract: doc.transferStatus?.footballAgentContract || '',
         contractUntil: doc.transferStatus?.contractUntil || null,
         agent: doc.transferStatus?.agent || '',
         agency: doc.transferStatus?.agency || '',
         salary: doc.transferStatus?.salary || '',
-        statusBadge: doc.transferStatus?.statusBadge || doc.status || 'Active',
+        statusBadge: doc.transferStatus?.statusBadge || '',
       },
 
       // Sub-sections

@@ -4,6 +4,23 @@ export type CoachType = 'INDIVIDUAL_COACH' | 'CLUB_COACH';
 export type CoachStatus = 'AVAILABLE' | 'CONTRACTED' | 'ACTIVE' | 'INACTIVE';
 export type CvTier = 'BRONZE' | 'SILVER' | 'GOLD';
 
+export const ALLOWED_COACH_STYLES = [
+  'Tiki-Taka',
+  'Gegenpressing',
+  'Counter-Attack',
+  'Park the Bus',
+  'Motivator',
+  'Disciplinarian',
+  'Holistic',
+  'Player-Centric',
+  'Youth Development',
+  'Set-Piece Specialist',
+  'Defensive Solid',
+  'Attack Minded',
+] as const;
+
+export type CoachStyle = (typeof ALLOWED_COACH_STYLES)[number];
+
 export type CoachingLicenseLevel =
   | 'UEFA Pro License'
   | 'UEFA A License'

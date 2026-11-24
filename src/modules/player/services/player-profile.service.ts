@@ -886,6 +886,12 @@ export class PlayerProfileService {
 
     // Business rule: Only players represented by an agent OR belonging to a professional club can specify market value
     if (!hasAgent && !hasClub) {
+      if (payload.marketValue !== undefined && Number(payload.marketValue) > 0) {
+        throw new AppError(
+          400,
+          'Market value can only be set for players represented by an agent or signed to a club. Set agentStatus to REPRESENTED or add your current club first.',
+        );
+      }
       mv = 0;
     }
 

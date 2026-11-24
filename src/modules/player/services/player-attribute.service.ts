@@ -144,7 +144,16 @@ export class PlayerAttributeService {
     return await PlayerAttributes.create({ playerId: objId });
   }
 
-  async updateAttributes(playerId: string, payload: Record<string, any>) {
+  /**
+   * @param options.cardStats Card-level values the player set on the Player Style bars
+   *   (e.g. `{ dribbling: 94 }` from PATCH /players/me `strengths`). They are stored as manual
+   *   card stats so recalculation shows exactly the saved value instead of re-deriving it.
+   */
+  async updateAttributes(
+    playerId: string,
+    payload: Record<string, any>,
+    options?: { cardStats?: Record<string, any> },
+  ) {
     const profile = await PlayerProfile.findOne({
       $or: [{ _id: playerId }, { userId: playerId }],
     });
@@ -295,6 +304,27 @@ export class PlayerAttributeService {
       fifaUpdates.def = Number(flattenedPayload.defending);
     if (flattenedPayload.physical !== undefined)
       fifaUpdates.phy = Number(flattenedPayload.physical);
+
+    // Manual card stats: keep exactly what the player set (0-100) on the card.
+    const CARD_STAT_ALIASES: Record<string, string> = {
+      pace: 'pac',
+      shooting: 'sho',
+      passing: 'pas',
+      dribbling: 'dri',
+      defending: 'def',
+      physical: 'phy',
+    };
+    for (const [alias, stat] of Object.entries(CARD_STAT_ALIASES)) {
+      const raw = options?.cardStats?.[alias];
+      if (raw === undefined || raw === null || raw === '') continue;
+      const val = Number(raw);
+      if (Number.isNaN(val) || val < 0 || val > 100) {
+        throw new AppError(400, `${alias} must be a number between 0 and 100`);
+      }
+      fifaUpdates[stat] = val;
+      fifaUpdates[`manualStats.${stat}`] = val;
+    }
+
     if (Object.keys(fifaUpdates).length > 0) {
       await FifaCardStats.findOneAndUpdate({ playerId: profile._id }, fifaUpdates, {
         upsert: true,

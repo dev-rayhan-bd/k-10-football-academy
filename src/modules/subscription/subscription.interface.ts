@@ -47,6 +47,10 @@ export interface IUserSubscription {
   status: SubscriptionStatus;
   stripeSessionId?: string;
   stripePaymentIntentId?: string;
+  // Checkout started while a paid subscription is still running. Kept separate so an
+  // abandoned checkout never overwrites the active subscription.
+  pendingPlanId?: Types.ObjectId;
+  pendingStripeSessionId?: string;
   amountPaid?: number;
   startDate?: Date;
   endDate?: Date;

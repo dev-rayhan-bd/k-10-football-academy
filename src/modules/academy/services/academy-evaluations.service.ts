@@ -3,9 +3,10 @@ import { AppError } from '@/utils/AppError';
 import { IPlayerEvaluation } from '../academy.interface';
 import { AcademyProfile, PlayerEvaluation, AcademyCoach } from '../academy.model';
 import { NotificationService } from '@/modules/notification/notification.service';
-import { PlayerProfile, PlayerAttributes } from '@/modules/player/player.model';
+import { PlayerProfile } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
+import { playerStatsService } from '@/modules/player/services/player-stats.service';
 
 const notificationService = new NotificationService();
 
@@ -720,9 +721,35 @@ export class AcademyEvaluationsService {
       throw new AppError(403, 'Only the assigned coach can submit this player evaluation');
     }
 
-    const overallRating =
-      payload.overallRating ||
-      Math.round((payload.technicalScore + payload.physicalScore + payload.mentalScore) / 3);
+    const toScore = (val: unknown): number | null => {
+      if (val === undefined || val === null || val === '') return null;
+      const n = Number(val);
+      return Number.isFinite(n) ? n : null;
+    };
+    const technicalScore = toScore(payload.technicalScore);
+    const physicalScore = toScore(payload.physicalScore);
+    const mentalScore = toScore(payload.mentalScore);
+    if (technicalScore === null && physicalScore === null && mentalScore === null) {
+      throw new AppError(
+        400,
+        'Evaluation requires at least one score (technicalScore, physicalScore or mentalScore).',
+      );
+    }
+
+    const player = await PlayerProfile.findById(evaluation.playerId);
+    if (!player) {
+      throw new AppError(404, 'Player profile not found');
+    }
+    const previousOverall = player.overallRating;
+
+    // Coach-updated attributes, then the SAME recalculation a player profile edit triggers.
+    const recalculated = await playerStatsService.applyEvaluatorAttributes(player._id, {
+      stamina: physicalScore,
+      strength: physicalScore,
+      ballControl: technicalScore,
+      dribbling: technicalScore,
+    });
+    const overallRating = recalculated?.overallRating ?? previousOverall ?? 0;
 
     // Calculate improvementDelta compared to the previous evaluation (if any)
     const previousEvaluation = await PlayerEvaluation.findOne({
@@ -742,51 +769,38 @@ export class AcademyEvaluationsService {
     evaluation.evaluationDate = now;
     evaluation.overallRating = overallRating;
     evaluation.improvementDelta = improvementDelta;
-    evaluation.technicalScore = payload.technicalScore;
-    evaluation.physicalScore = payload.physicalScore;
-    evaluation.mentalScore = payload.mentalScore;
+    evaluation.technicalScore = technicalScore ?? undefined;
+    evaluation.physicalScore = physicalScore ?? undefined;
+    evaluation.mentalScore = mentalScore ?? undefined;
     evaluation.status = 'EVALUATED';
     evaluation.nextEvaluationDue = nextDue;
     evaluation.expiresAt = nextDue;
     evaluation.coachFeedback = payload.coachFeedback;
     await evaluation.save();
 
-    // Also update Player attributes & mental analysis
-    await PlayerAttributes.findOneAndUpdate(
-      { playerId: evaluation.playerId },
+    // overallRating was set by recalculatePlayerStats; only record the evaluation cycle.
+    await PlayerProfile.updateOne(
+      { _id: player._id },
       {
-        stamina: payload.physicalScore,
-        strength: payload.physicalScore,
-        ballControl: payload.technicalScore,
-        dribbling: payload.technicalScore,
+        $set: {
+          'playerEvaluation.lastEvaluationDate': now,
+          'playerEvaluation.nextEvaluationDue': nextDue,
+          'playerEvaluation.overallRating': overallRating,
+          'playerEvaluation.evaluationCycle': '3_MONTHS',
+        },
       },
-      { upsert: true },
     );
+    await playerCacheService.invalidatePlayerCache(player._id, player.userId);
 
-    // Update PlayerProfile with evaluation data and next due date
-    const player = await PlayerProfile.findById(evaluation.playerId);
-    if (player) {
-      player.overallRating = overallRating;
-      player.playerEvaluation = {
-        ...(player.playerEvaluation || {}),
-        lastEvaluationDate: now,
-        nextEvaluationDue: nextDue,
-        overallRating,
-        evaluationCycle: '3_MONTHS',
-      };
-      await player.save();
-      await playerCacheService.invalidatePlayerCache(player._id, player.userId);
-
-      if (player.userId) {
-        await notificationService.createNotification({
-          recipientId: player.userId,
-          recipientRole: 'PLAYER',
-          title: 'Player Evaluation Completed',
-          message: `Coach ${coach.fullName} has completed your official 3-month evaluation. Rating: ${overallRating}/100.`,
-          type: 'PLAYER_EVALUATION_COMPLETED',
-          data: { evaluationId: evaluation._id, overallRating },
-        });
-      }
+    if (player.userId) {
+      await notificationService.createNotification({
+        recipientId: player.userId,
+        recipientRole: 'PLAYER',
+        title: 'Player Evaluation Completed',
+        message: `Coach ${coach.fullName} has completed your official 3-month evaluation. Rating: ${overallRating}/100.`,
+        type: 'PLAYER_EVALUATION_COMPLETED',
+        data: { evaluationId: evaluation._id, overallRating },
+      });
     }
 
     return evaluation;

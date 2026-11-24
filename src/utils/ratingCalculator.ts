@@ -623,10 +623,9 @@ export const normalizePositionKey = (pos: string): PositionKey => {
     return 'CDM';
   }
 
-  // 7. Wingers
+  // 7. Wingers (RW/LW as whole tokens only: "FORWARD" contains the substring "RW")
   if (
-    clean.includes('RW') ||
-    clean.includes('LW') ||
+    /\b(RW|LW)\b/.test(clean) ||
     clean.includes('RIGHT WING') ||
     clean.includes('LEFT WING') ||
     clean.includes('WINGER') ||

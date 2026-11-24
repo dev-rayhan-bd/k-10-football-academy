@@ -4,12 +4,7 @@ import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { CoachProfile } from '../coach.model';
 import { AcademyFinanceTransaction } from '@/modules/academy/academy.model';
 import { ParentChild } from '@/modules/parent/parent.model';
-import {
-  PlayerProfile,
-  PlayerAttributes,
-  MatchRecord,
-  PlayerMentalAnalysis,
-} from '@/modules/player/player.model';
+import { PlayerProfile, MatchRecord, PlayerMentalAnalysis } from '@/modules/player/player.model';
 import { playerStatsService } from '@/modules/player/services/player-stats.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { NotificationService } from '@/modules/notification/notification.service';
@@ -181,11 +176,8 @@ export class CoachCvValidationService {
     }
 
     if (Object.keys(allowedSkillsToUpdate).length > 0) {
-      await PlayerAttributes.findOneAndUpdate(
-        { playerId: player._id },
-        { $set: allowedSkillsToUpdate },
-        { upsert: true, new: true },
-      );
+      // Same path as coach evaluations: save coach skills + run the shared recalculation.
+      await playerStatsService.applyEvaluatorAttributes(player._id, allowedSkillsToUpdate);
     }
 
     if (Object.keys(mentalToUpdate).length > 0) {

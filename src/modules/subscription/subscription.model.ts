@@ -66,6 +66,8 @@ const UserSubscriptionSchema = new Schema<IUserSubscriptionDocument>(
     },
     stripeSessionId: { type: String },
     stripePaymentIntentId: { type: String },
+    pendingPlanId: { type: Schema.Types.ObjectId, ref: 'MembershipPlan' },
+    pendingStripeSessionId: { type: String },
     amountPaid: { type: Number, default: 0 },
     startDate: { type: Date, default: Date.now },
     endDate: { type: Date },

@@ -134,7 +134,136 @@ export const computePlayerCardTier = (params: {
   };
 };
 
+export const POSITION_CARD_STAT_KEYS: Record<
+  PositionKey,
+  { pac: string[]; sho: string[]; pas: string[]; dri: string[]; def: string[]; phy: string[] }
+> = {
+  GK: {
+    pac: ['reflexes', 'shotStopping'],
+    sho: ['handling', 'crossClaiming'],
+    pas: ['distribution', 'footwork'],
+    dri: ['reflexes', 'oneOnOne'],
+    def: ['footwork', 'aerialAbility'],
+    phy: ['positioning', 'decisions', 'composure'],
+  },
+  CB: {
+    pac: [],
+    sho: [],
+    pas: ['shortPassing'],
+    dri: ['ballControl'],
+    def: ['positioning', 'marking', 'tackling', 'interceptions', 'defensiveAwareness'],
+    phy: ['strength', 'aerialDuels'],
+  },
+  'RB-LB': {
+    pac: ['acceleration', 'sprintSpeed'],
+    sho: [],
+    pas: ['crossing', 'shortPassing'],
+    dri: ['ballControl'],
+    def: ['positioning', 'oneOnOne', 'tackling', 'interceptions'],
+    phy: ['stamina'],
+  },
+  'RWB-LWB': {
+    pac: ['acceleration', 'sprintSpeed'],
+    sho: [],
+    pas: ['crossing', 'shortPassing'],
+    dri: ['dribbling', 'ballControl'],
+    def: ['oneOnOne', 'positioning'],
+    phy: ['stamina'],
+  },
+  CDM: {
+    pac: [],
+    sho: [],
+    pas: ['shortPassing', 'longPassing', 'vision'],
+    dri: ['ballControl'],
+    def: ['positioning', 'interceptions', 'tackling', 'defensiveAwareness'],
+    phy: ['stamina'],
+  },
+  CM: {
+    pac: [],
+    sho: [],
+    pas: ['shortPassing', 'longPassing', 'vision'],
+    dri: ['firstTouch', 'ballControl'],
+    def: ['interceptions'],
+    phy: ['stamina'],
+  },
+  CAM: {
+    pac: [],
+    sho: ['finishing'],
+    pas: ['shortPassing', 'throughPassing', 'vision', 'creativity'],
+    dri: ['firstTouch', 'ballControl', 'dribbling'],
+    def: [],
+    phy: [],
+  },
+  'RW-LW': {
+    pac: ['acceleration', 'sprintSpeed'],
+    sho: ['finishing'],
+    pas: ['crossing', 'chanceCreation'],
+    dri: ['dribbling', 'ballControl', 'agility', 'firstTouch', 'oneOnOneAttacking'],
+    def: [],
+    phy: [],
+  },
+  CF: {
+    pac: [],
+    sho: ['finishing', 'shooting'],
+    pas: ['shortPassing', 'linkUpPlay'],
+    dri: ['firstTouch', 'ballControl', 'dribbling'],
+    def: [],
+    phy: ['strength'],
+  },
+  ST: {
+    pac: ['acceleration'],
+    sho: ['finishing', 'shotAccuracy', 'oneOnOneFinishing'],
+    pas: [],
+    dri: ['firstTouch'],
+    def: [],
+    phy: ['strength', 'aerialAbility'],
+  },
+};
+
+type CardStatKey = 'pac' | 'sho' | 'pas' | 'dri' | 'def' | 'phy';
+
+/** Generic attributes averaged into a card stat when they hold a real (non-50) value. */
+export const CARD_STAT_FALLBACK_KEYS = (isGK: boolean): Record<CardStatKey, string[]> => ({
+  pac: isGK ? ['reflexes', 'shotStopping'] : ['acceleration', 'sprintSpeed'],
+  sho: isGK ? ['handling', 'crossClaiming'] : ['finishing', 'shotPower', 'longShots'],
+  pas: isGK ? ['distribution', 'footwork'] : ['shortPassing', 'vision', 'longPassing', 'crossing'],
+  dri: isGK ? ['reflexes', 'oneOnOne'] : ['dribbling', 'ballControl', 'agility'],
+  def: isGK ? ['footwork', 'aerialAbility'] : ['marking', 'standingTackle', 'interceptions'],
+  phy: isGK ? ['positioning', 'decisions'] : ['strength', 'stamina', 'jumping'],
+});
+
 export class PlayerStatsService {
+  /**
+   * Attribute update made by an evaluator (coach / academy coach). Saves only the scores that
+   * were actually provided, then runs the SAME recalculation used when a player edits their own
+   * attributes (Excel position formula -> overallRating, FIFA card stats, card tier).
+   *
+   * Manual card values the player set on the Player Style bars are cleared so the card reflects
+   * the evaluator's attributes instead of staying pinned to the player's own numbers.
+   */
+  async applyEvaluatorAttributes(
+    profileId: Types.ObjectId | string,
+    attributes: Record<string, number | null | undefined>,
+  ) {
+    const toSet: Record<string, number> = {};
+    for (const [key, val] of Object.entries(attributes)) {
+      if (typeof val === 'number' && Number.isFinite(val)) {
+        toSet[key] = Math.max(0, Math.min(100, Math.round(val)));
+      }
+    }
+
+    if (Object.keys(toSet).length > 0) {
+      await PlayerAttributes.findOneAndUpdate(
+        { playerId: profileId },
+        { $set: toSet },
+        { upsert: true, setDefaultsOnInsert: true },
+      );
+    }
+    await FifaCardStats.updateOne({ playerId: profileId }, { $unset: { manualStats: '' } });
+
+    return this.recalculatePlayerStats(profileId);
+  }
+
   async recalculatePlayerStats(
     profileId: Types.ObjectId | string,
     options?: { preserveMarketValue?: boolean },
@@ -267,92 +396,6 @@ export class PlayerStatsService {
         >)
       : null;
 
-    const POSITION_CARD_STAT_KEYS: Record<
-      PositionKey,
-      { pac: string[]; sho: string[]; pas: string[]; dri: string[]; def: string[]; phy: string[] }
-    > = {
-      GK: {
-        pac: ['reflexes', 'shotStopping'],
-        sho: ['handling', 'crossClaiming'],
-        pas: ['distribution', 'footwork'],
-        dri: ['reflexes', 'oneOnOne'],
-        def: ['footwork', 'aerialAbility'],
-        phy: ['positioning', 'decisions', 'composure'],
-      },
-      CB: {
-        pac: [],
-        sho: [],
-        pas: ['shortPassing'],
-        dri: ['ballControl'],
-        def: ['positioning', 'marking', 'tackling', 'interceptions', 'defensiveAwareness'],
-        phy: ['strength', 'aerialDuels'],
-      },
-      'RB-LB': {
-        pac: ['acceleration', 'sprintSpeed'],
-        sho: [],
-        pas: ['crossing', 'shortPassing'],
-        dri: ['ballControl'],
-        def: ['positioning', 'oneOnOne', 'tackling', 'interceptions'],
-        phy: ['stamina'],
-      },
-      'RWB-LWB': {
-        pac: ['acceleration', 'sprintSpeed'],
-        sho: [],
-        pas: ['crossing', 'shortPassing'],
-        dri: ['dribbling', 'ballControl'],
-        def: ['oneOnOne', 'positioning'],
-        phy: ['stamina'],
-      },
-      CDM: {
-        pac: [],
-        sho: [],
-        pas: ['shortPassing', 'longPassing', 'vision'],
-        dri: ['ballControl'],
-        def: ['positioning', 'interceptions', 'tackling', 'defensiveAwareness'],
-        phy: ['stamina'],
-      },
-      CM: {
-        pac: [],
-        sho: [],
-        pas: ['shortPassing', 'longPassing', 'vision'],
-        dri: ['firstTouch', 'ballControl'],
-        def: ['interceptions'],
-        phy: ['stamina'],
-      },
-      CAM: {
-        pac: [],
-        sho: ['finishing'],
-        pas: ['shortPassing', 'throughPassing', 'vision', 'creativity'],
-        dri: ['firstTouch', 'ballControl', 'dribbling'],
-        def: [],
-        phy: [],
-      },
-      'RW-LW': {
-        pac: ['acceleration', 'sprintSpeed'],
-        sho: ['finishing'],
-        pas: ['crossing', 'chanceCreation'],
-        dri: ['dribbling', 'ballControl', 'agility', 'firstTouch', 'oneOnOneAttacking'],
-        def: [],
-        phy: [],
-      },
-      CF: {
-        pac: [],
-        sho: ['finishing', 'shooting'],
-        pas: ['shortPassing', 'linkUpPlay'],
-        dri: ['firstTouch', 'ballControl', 'dribbling'],
-        def: [],
-        phy: ['strength'],
-      },
-      ST: {
-        pac: ['acceleration'],
-        sho: ['finishing', 'shotAccuracy', 'oneOnOneFinishing'],
-        pas: [],
-        dri: ['firstTouch'],
-        def: [],
-        phy: ['strength', 'aerialAbility'],
-      },
-    };
-
     const computeCardCategoryStat = (primaryKeys: string[], fallbackKeys: string[]): number => {
       if (!attrMap) return profile.overallRating || 50;
       const activeVals: number[] = [];
@@ -387,30 +430,18 @@ export class PlayerStatsService {
     const posCardKeys = POSITION_CARD_STAT_KEYS[normPos];
     const isGK = normPos === 'GK';
 
-    const pacVal = computeCardCategoryStat(
-      posCardKeys.pac,
-      isGK ? ['reflexes', 'shotStopping'] : ['acceleration', 'sprintSpeed'],
-    );
-    const shoVal = computeCardCategoryStat(
-      posCardKeys.sho,
-      isGK ? ['handling', 'crossClaiming'] : ['finishing', 'shotPower', 'longShots'],
-    );
-    const pasVal = computeCardCategoryStat(
-      posCardKeys.pas,
-      isGK ? ['distribution', 'footwork'] : ['shortPassing', 'vision', 'longPassing', 'crossing'],
-    );
-    const driVal = computeCardCategoryStat(
-      posCardKeys.dri,
-      isGK ? ['reflexes', 'oneOnOne'] : ['dribbling', 'ballControl', 'agility'],
-    );
-    const defVal = computeCardCategoryStat(
-      posCardKeys.def,
-      isGK ? ['footwork', 'aerialAbility'] : ['marking', 'standingTackle', 'interceptions'],
-    );
-    const phyVal = computeCardCategoryStat(
-      posCardKeys.phy,
-      isGK ? ['positioning', 'decisions'] : ['strength', 'stamina', 'jumping'],
-    );
+    // Values the player set explicitly on the card win over the attribute-derived average.
+    const existingCard = await FifaCardStats.findOne({ playerId: profile._id })
+      .select('manualStats')
+      .lean();
+    const manual = existingCard?.manualStats || {};
+    const fb = CARD_STAT_FALLBACK_KEYS(isGK);
+    const pacVal = manual.pac ?? computeCardCategoryStat(posCardKeys.pac, fb.pac);
+    const shoVal = manual.sho ?? computeCardCategoryStat(posCardKeys.sho, fb.sho);
+    const pasVal = manual.pas ?? computeCardCategoryStat(posCardKeys.pas, fb.pas);
+    const driVal = manual.dri ?? computeCardCategoryStat(posCardKeys.dri, fb.dri);
+    const defVal = manual.def ?? computeCardCategoryStat(posCardKeys.def, fb.def);
+    const phyVal = manual.phy ?? computeCardCategoryStat(posCardKeys.phy, fb.phy);
 
     await FifaCardStats.findOneAndUpdate(
       { playerId: profile._id },

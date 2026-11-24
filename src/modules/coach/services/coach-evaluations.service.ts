@@ -2,7 +2,8 @@ import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
 import { UserModel } from '@/modules/user/user.model';
 import { CoachProfile } from '../coach.model';
-import { PlayerProfile, PlayerAttributes } from '@/modules/player/player.model';
+import { PlayerProfile } from '@/modules/player/player.model';
+import { playerStatsService } from '@/modules/player/services/player-stats.service';
 import { PlayerEvaluation, AcademyProfile } from '@/modules/academy/academy.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { NotificationService } from '@/modules/notification/notification.service';
@@ -358,7 +359,7 @@ export class CoachEvaluationsService {
       'K10 Football Academy';
     const academyLogo = (evaluation?.academyId as any)?.logo || '';
 
-    const overallRating = evaluation?.overallRating || player?.overallRating || 85;
+    const overallRating = evaluation?.overallRating ?? player?.overallRating ?? 0;
 
     return {
       reportTitle: 'Player Development Programme Progress Report',
@@ -371,9 +372,9 @@ export class CoachEvaluationsService {
       overallRating,
       grade: overallRating >= 90 ? 'EXCELLENT' : overallRating >= 75 ? 'GOOD' : 'NEEDS_IMPROVEMENT',
       categoryScores: {
-        technical: evaluation?.technicalScore || 80,
-        physical: evaluation?.physicalScore || 75,
-        mental: evaluation?.mentalScore || 80,
+        technical: evaluation?.technicalScore ?? 0,
+        physical: evaluation?.physicalScore ?? 0,
+        mental: evaluation?.mentalScore ?? 0,
       },
       player: {
         id: player?._id,
@@ -474,25 +475,34 @@ export class CoachEvaluationsService {
       }
     }
 
-    const gradeToScore = (val: any): number => {
-      if (typeof val === 'number') return val;
+    // Unrecognised / empty grades return null and are skipped: no fabricated scores.
+    const gradeToScore = (val: any): number | null => {
+      if (typeof val === 'number') return Number.isFinite(val) ? val : null;
       if (typeof val === 'string') {
         const upper = val.toUpperCase().trim();
+        if (!upper) return null;
         if (upper.includes('EXCELLENT')) return 95;
         if (upper.includes('GOOD')) return 80;
         if (upper.includes('IMPROVEMENT')) return 65;
         const parsed = Number(val);
         if (!isNaN(parsed)) return parsed;
       }
-      return 75;
+      return null;
     };
 
-    const calcCategoryAvg = (catObj?: Record<string, any>): number => {
-      if (!catObj || typeof catObj !== 'object') return 0;
-      const values = Object.values(catObj);
-      if (values.length === 0) return 0;
-      const total = values.reduce((sum: number, v: any) => sum + gradeToScore(v), 0);
-      return Math.round(total / values.length);
+    const calcCategoryAvg = (catObj?: Record<string, any>): number | null => {
+      if (!catObj || typeof catObj !== 'object') return null;
+      const scores = Object.values(catObj)
+        .map(gradeToScore)
+        .filter((v): v is number => v !== null);
+      if (scores.length === 0) return null;
+      return Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length);
+    };
+
+    const explicitScore = (val: any): number | null => {
+      if (val === undefined || val === null || val === '') return null;
+      const n = Number(val);
+      return Number.isFinite(n) ? n : null;
     };
 
     const techniques =
@@ -517,12 +527,26 @@ export class CoachEvaluationsService {
           : evaluation.physical
         : {});
 
-    const technicalScore = payload.technicalScore || calcCategoryAvg(techniques) || 75;
-    const mentalScore = payload.mentalScore || calcCategoryAvg(characteristics) || 75;
-    const physicalScore = payload.physicalScore || calcCategoryAvg(physical) || 75;
+    const technicalScore = explicitScore(payload.technicalScore) ?? calcCategoryAvg(techniques);
+    const mentalScore = explicitScore(payload.mentalScore) ?? calcCategoryAvg(characteristics);
+    const physicalScore = explicitScore(payload.physicalScore) ?? calcCategoryAvg(physical);
 
-    const overallRating =
-      payload.overallRating || Math.round((technicalScore + mentalScore + physicalScore) / 3);
+    if (technicalScore === null && mentalScore === null && physicalScore === null) {
+      throw new AppError(
+        400,
+        'Evaluation requires at least one score (technicalScore, mentalScore, physicalScore, or graded techniques / characteristics / physical).',
+      );
+    }
+
+    // Coach-updated attributes, then the SAME recalculation a player profile edit triggers
+    // (Excel position formula). Scores that were not provided leave attributes untouched.
+    const recalculated = await playerStatsService.applyEvaluatorAttributes(player._id, {
+      stamina: physicalScore,
+      strength: physicalScore,
+      ballControl: technicalScore,
+      dribbling: technicalScore,
+    });
+    const overallRating = recalculated?.overallRating ?? player.overallRating ?? 0;
 
     // Calculate improvementDelta compared to the previous evaluation (if any)
     const previousEvaluation = await PlayerEvaluation.findOne({
@@ -544,9 +568,9 @@ export class CoachEvaluationsService {
     evaluation.evaluationDate = now;
     evaluation.overallRating = overallRating;
     evaluation.improvementDelta = improvementDelta;
-    evaluation.technicalScore = technicalScore;
-    evaluation.mentalScore = mentalScore;
-    evaluation.physicalScore = physicalScore;
+    evaluation.technicalScore = technicalScore ?? undefined;
+    evaluation.mentalScore = mentalScore ?? undefined;
+    evaluation.physicalScore = physicalScore ?? undefined;
     evaluation.techniques = techniques;
     evaluation.characteristics = characteristics;
     evaluation.physical = physical;
@@ -557,29 +581,20 @@ export class CoachEvaluationsService {
     evaluation.notes = payload.notes || payload.coachFeedback || evaluation.notes;
     await evaluation.save();
 
-    // Update player profile
-    player.overallRating = overallRating;
-    player.playerEvaluation = {
-      ...(player.playerEvaluation || {}),
-      lastEvaluationDate: now,
-      nextEvaluationDue: nextDue,
-      overallRating,
-      evaluationCycle: '3_MONTHS',
-    };
-    await player.save();
-    await playerCacheService.invalidatePlayerCache(player._id, player.userId);
-
-    // Update player attributes
-    await PlayerAttributes.findOneAndUpdate(
-      { playerId: player._id },
+    // overallRating on the profile was already set by recalculatePlayerStats; only record
+    // the evaluation cycle here (updateOne so the recalculated fields are not overwritten).
+    await PlayerProfile.updateOne(
+      { _id: player._id },
       {
-        stamina: physicalScore,
-        strength: physicalScore,
-        ballControl: technicalScore,
-        dribbling: technicalScore,
+        $set: {
+          'playerEvaluation.lastEvaluationDate': now,
+          'playerEvaluation.nextEvaluationDue': nextDue,
+          'playerEvaluation.overallRating': overallRating,
+          'playerEvaluation.evaluationCycle': '3_MONTHS',
+        },
       },
-      { upsert: true },
     );
+    await playerCacheService.invalidatePlayerCache(player._id, player.userId);
 
     // Notify player
     if (player.userId) {

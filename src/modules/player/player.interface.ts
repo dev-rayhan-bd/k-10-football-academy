@@ -281,6 +281,7 @@ export interface IFifaCardStats {
   dri: number;
   def: number;
   phy: number;
+  manualStats?: Partial<Record<'pac' | 'sho' | 'pas' | 'dri' | 'def' | 'phy', number>>;
   cardImage?: string;
   cardPhoto?: string;
 }

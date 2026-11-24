@@ -948,7 +948,9 @@ export class PlayerProfileService {
         attrsToUpdate = { ...(attrsToUpdate || {}), ...strengthsObj };
       }
       if (attrsToUpdate) {
-        await playerAttributeService.updateAttributes(profile._id.toString(), attrsToUpdate);
+        await playerAttributeService.updateAttributes(profile._id.toString(), attrsToUpdate, {
+          cardStats: strengthsObj && typeof strengthsObj === 'object' ? strengthsObj : undefined,
+        });
       } else {
         const attributeKeys = [
           'ballControl',

@@ -329,6 +329,22 @@ const FifaCardStatsSchema = new Schema<IFifaCardStatsDocument>({
   dri: { type: Number, default: 50 },
   def: { type: Number, default: 50 },
   phy: { type: Number, default: 50 },
+  // Card stats the player set explicitly (Player Style bars). recalculatePlayerStats keeps these
+  // instead of re-deriving them from attributes, so a saved value is exactly what is shown.
+  manualStats: {
+    type: new Schema(
+      {
+        pac: { type: Number, min: 0, max: 100 },
+        sho: { type: Number, min: 0, max: 100 },
+        pas: { type: Number, min: 0, max: 100 },
+        dri: { type: Number, min: 0, max: 100 },
+        def: { type: Number, min: 0, max: 100 },
+        phy: { type: Number, min: 0, max: 100 },
+      },
+      { _id: false },
+    ),
+    default: undefined,
+  },
   cardImage: { type: String },
   cardPhoto: { type: String },
 });

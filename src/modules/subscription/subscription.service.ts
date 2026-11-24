@@ -87,16 +87,30 @@ export class SubscriptionService {
       },
     });
 
-    await UserSubscription.findOneAndUpdate(
-      { userId },
-      {
-        userId,
-        planId,
-        status: 'PENDING_PAYMENT',
-        stripeSessionId: session.id,
-      },
-      { upsert: true, new: true },
-    );
+    // Never downgrade a running paid subscription to PENDING_PAYMENT just because a new
+    // checkout was opened: if the user abandons it they would lose access they paid for.
+    // The pending checkout is tracked separately and only applied by the paid webhook.
+    const existingSub = await UserSubscription.findOne({ userId }).select('status endDate').lean();
+    if (existingSub && this.isRunning(existingSub)) {
+      await UserSubscription.updateOne(
+        { _id: existingSub._id },
+        { $set: { pendingPlanId: plan._id, pendingStripeSessionId: session.id } },
+      );
+    } else {
+      await UserSubscription.findOneAndUpdate(
+        { userId },
+        {
+          $set: {
+            userId,
+            planId,
+            status: 'PENDING_PAYMENT',
+            stripeSessionId: session.id,
+          },
+          $unset: { pendingPlanId: '', pendingStripeSessionId: '' },
+        },
+        { upsert: true, new: true },
+      );
+    }
 
     return {
       checkoutUrl: session.url,
@@ -112,13 +126,56 @@ export class SubscriptionService {
     };
   }
 
+  /** A subscription that is ACTIVE and whose paid period has not ended yet. */
+  private isRunning(sub: {
+    status?: string;
+    endDate?: Date | null;
+    nextBillingDate?: Date | null;
+  }) {
+    if (sub.status !== 'ACTIVE') return false;
+    const end = sub.endDate || sub.nextBillingDate;
+    return !end || new Date(end).getTime() > Date.now();
+  }
+
   async handleSubscriptionStripeWebhook(sessionObject: any) {
     const userId = sessionObject?.metadata?.userId;
     const planId = sessionObject?.metadata?.planId;
     if (!userId || !planId) return null;
 
+    // Only a paid checkout may activate access. Stripe also sends checkout.session.expired /
+    // async_payment_failed events carrying the same metadata, which must be ignored.
+    if (sessionObject.payment_status !== 'paid') {
+      // Abandoned checkout: drop the pending marker, keep the running subscription untouched.
+      if (sessionObject.id) {
+        await UserSubscription.updateOne(
+          { userId, pendingStripeSessionId: sessionObject.id },
+          { $unset: { pendingPlanId: '', pendingStripeSessionId: '' } },
+        );
+      }
+      return null;
+    }
+
+    // Check if an existing subscription exists for this user to preserve in history
+    const existingSub = await UserSubscription.findOne({ userId });
+
+    // Idempotency: the webhook and GET verify-payment can both deliver the same session.
+    if (
+      existingSub &&
+      ((existingSub.stripeSessionId === sessionObject.id && existingSub.status === 'ACTIVE') ||
+        (existingSub.history || []).some((h: any) => h.stripeSessionId === sessionObject.id))
+    ) {
+      return existingSub.populate('planId');
+    }
+
     const plan = await MembershipPlan.findById(planId);
-    const nextBillingDate = new Date();
+
+    // Renewing while still active: the new period starts when the current paid period ends,
+    // so the remaining days the user already paid for are not lost.
+    const currentEnd =
+      existingSub && this.isRunning(existingSub)
+        ? existingSub.endDate || existingSub.nextBillingDate
+        : null;
+    const nextBillingDate = currentEnd ? new Date(currentEnd) : new Date();
     if (plan?.billingCycle === 'YEARLY') {
       nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
     } else {
@@ -129,8 +186,6 @@ export class SubscriptionService {
       ? sessionObject.amount_total / 100
       : plan?.price || 0;
 
-    // Check if an existing subscription exists for this user to preserve in history
-    const existingSub = await UserSubscription.findOne({ userId });
     let historyPush: any = null;
     if (existingSub && existingSub.status === 'ACTIVE') {
       historyPush = {
@@ -167,7 +222,10 @@ export class SubscriptionService {
       duration: plan?.billingCycle,
     };
 
-    const updateOps: any = { $set: updatePayload };
+    const updateOps: any = {
+      $set: updatePayload,
+      $unset: { pendingPlanId: '', pendingStripeSessionId: '' },
+    };
     if (historyPush) {
       updateOps.$push = { history: historyPush };
     }
@@ -184,7 +242,7 @@ export class SubscriptionService {
         recipientId: user._id,
         recipientRole: user.role,
         title: 'Subscription Activated!',
-        message: `Your payment of $${plan?.price || 0} was successful. Full access to your ${user.role.toLowerCase()} dashboard and scouting tools has been unlocked!`,
+        message: `Your payment of $${amountPaid} was successful. Full access to your ${user.role.toLowerCase()} dashboard and scouting tools has been unlocked!`,
         type: 'SUBSCRIPTION',
         data: { subscriptionId: subscription._id, planId, status: 'ACTIVE' },
       });
@@ -237,7 +295,8 @@ export class SubscriptionService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Stripe checkout session not found');
     }
 
-    if (session.payment_status === 'paid' || session.status === 'complete') {
+    // `status: 'complete'` alone is not enough: async payment methods complete unpaid.
+    if (session.payment_status === 'paid') {
       const subscription = await this.handleSubscriptionStripeWebhook(session);
       return {
         success: true,
@@ -337,6 +396,13 @@ export class SubscriptionService {
           currentDoc.stripeSessionId ||
           currentDoc.stripePaymentIntentId ||
           (currentDoc.isAdminGrant ? 'Admin Grant' : 'Stripe Payment'),
+        // A renewal/upgrade checkout opened while this subscription is running (not yet paid).
+        pendingCheckout: currentDoc.pendingStripeSessionId
+          ? {
+              planId: currentDoc.pendingPlanId ? currentDoc.pendingPlanId.toString() : null,
+              sessionId: currentDoc.pendingStripeSessionId,
+            }
+          : null,
       };
     }
 

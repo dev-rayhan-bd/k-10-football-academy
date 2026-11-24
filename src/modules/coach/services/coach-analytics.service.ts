@@ -6,11 +6,11 @@ import {
   ICoachTournamentStats,
   ICoachTrophyDetail,
 } from '../coach.interface';
-import { CoachProfile, TacticalFormation, CoachTestimonial } from '../coach.model';
+import { CoachProfile, TacticalFormation } from '../coach.model';
 import { computeCoachProfileCompletion } from './coach-cv.service';
 import { Media } from '@/modules/media/media.model';
 import { MatchRecord } from '@/modules/player/player.model';
-import { ClubFavourite, ClubProfile } from '@/modules/club/club.model';
+import { ClubFavourite } from '@/modules/club/club.model';
 
 export class CoachAnalyticsService {
   async getCoachAnalytics(coachIdentifier: string): Promise<ICoachAnalyticsResponse> {
@@ -25,12 +25,6 @@ export class CoachAnalyticsService {
     if (!profile) {
       throw new AppError(404, 'Coach profile not found');
     }
-
-    // Fetch linked formations and testimonials in parallel for real aggregation
-    const [formations, testimonials] = await Promise.all([
-      TacticalFormation.find({ coachId: profile._id }).lean(),
-      CoachTestimonial.find({ coachId: profile._id }).lean(),
-    ]);
 
     // Real media counts and formations for accurate tier and completion calculation
     const [picturesCount, videosCount, formationCount] = await Promise.all([
@@ -56,116 +50,17 @@ export class CoachAnalyticsService {
       );
     }
 
-    // 1. Radar Profile Analysis (Calculated directly from Coach DB records)
-    let coachProfileAnalysis: ICoachProfileAnalysis | null;
-    if (profile.coachProfileAnalysis && Object.keys(profile.coachProfileAnalysis).length > 0) {
-      const raw = profile.coachProfileAnalysis;
-      const tactics = Number(raw.tactics ?? 0);
-      const leadership = Number(raw.leadership ?? 0);
-      const communication = Number(raw.communication ?? 0);
-      const adaptability = Number(raw.adaptability ?? 0);
-      const discipline = Number(raw.discipline ?? 0);
-      const development = Number(raw.development ?? 0);
-      const overall =
-        raw.overall !== undefined
-          ? Number(raw.overall)
-          : Math.round(
-              (tactics + leadership + communication + adaptability + discipline + development) / 6,
-            );
-
-      coachProfileAnalysis = {
-        tactics,
-        leadership,
-        communication,
-        adaptability,
-        discipline,
-        development,
-        overall,
-      };
-    } else {
-      // Aggregate from real DB fields (no mock numbers)
-      const baseRating = Number(profile.overallRatingScore || 0);
-      const totalMatches = Number(profile.matchesCoached || 0);
-      const wins = Number(profile.totalWins || 0);
-      const cleanSheets = Number(profile.cleanSheets || 0);
-      const winRatio = totalMatches > 0 ? wins / totalMatches : 0;
-      const cleanSheetRatio = totalMatches > 0 ? cleanSheets / totalMatches : 0;
-
-      const formationsCount = (formations || []).length;
-      const coursesCount = Array.isArray(profile.courses) ? profile.courses.length : 0;
-      const languagesCount = Array.isArray(profile.languages) ? profile.languages.length : 0;
-      const clubsCount = Array.isArray(profile.clubHistory) ? profile.clubHistory.length : 0;
-      const yearsExp = Number(profile.yearsExperience || 0);
-      const avgRating =
-        testimonials.length > 0
-          ? testimonials.reduce((acc: number, t: any) => acc + Number(t.rating || 0), 0) /
-            testimonials.length
-          : 0;
-
-      if (baseRating === 0 && totalMatches === 0 && yearsExp === 0 && formationsCount === 0) {
-        coachProfileAnalysis = {
-          tactics: 0,
-          leadership: 0,
-          communication: 0,
-          adaptability: 0,
-          discipline: 0,
-          development: 0,
-          overall: 0,
-        };
-      } else {
-        const effectiveBase = baseRating > 0 ? baseRating : Math.min(75, 50 + yearsExp * 2);
-        const tactics = Math.min(
-          99,
-          Math.max(0, Math.round(effectiveBase + (formationsCount >= 2 ? 3 : 0))),
-        );
-        const leadership = Math.min(
-          99,
-          Math.max(
-            0,
-            Math.round(
-              effectiveBase + Math.min(5, Math.floor(yearsExp / 3)) + (winRatio > 0.6 ? 2 : 0),
-            ),
-          ),
-        );
-        const communication = Math.min(
-          99,
-          Math.max(
-            0,
-            Math.round(effectiveBase + Math.min(4, languagesCount * 2) + (avgRating >= 4 ? 2 : 0)),
-          ),
-        );
-        const adaptability = Math.min(
-          99,
-          Math.max(0, Math.round(effectiveBase + Math.min(4, clubsCount * 2))),
-        );
-        const discipline = Math.min(
-          99,
-          Math.max(0, Math.round(effectiveBase + Math.min(5, Math.round(cleanSheetRatio * 10)))),
-        );
-        const development = Math.min(
-          99,
-          Math.max(
-            0,
-            Math.round(
-              effectiveBase + Math.min(4, coursesCount) + (profile.youthYearsExperience ? 2 : 0),
-            ),
-          ),
-        );
-        const overall = Math.round(
-          (tactics + leadership + communication + adaptability + discipline + development) / 6,
-        );
-
-        coachProfileAnalysis = {
-          tactics,
-          leadership,
-          communication,
-          adaptability,
-          discipline,
-          development,
-          overall,
-        };
-      }
-    }
+    // 1. Radar Profile Analysis: stored values only (no derived/invented scores).
+    const rawAnalysis = profile.coachProfileAnalysis || {};
+    const coachProfileAnalysis: ICoachProfileAnalysis | null = {
+      tactics: Number(rawAnalysis.tactics ?? 0),
+      leadership: Number(rawAnalysis.leadership ?? 0),
+      communication: Number(rawAnalysis.communication ?? 0),
+      adaptability: Number(rawAnalysis.adaptability ?? 0),
+      discipline: Number(rawAnalysis.discipline ?? 0),
+      development: Number(rawAnalysis.development ?? 0),
+      overall: Number(rawAnalysis.overall ?? 0),
+    };
 
     // 2. Tournament Stats (Pie Chart & Percentages - aggregated from real match records)
     let tournamentStats: ICoachTournamentStats | null;
@@ -211,14 +106,9 @@ export class CoachAnalyticsService {
       const champion = Array.isArray(profile.majorTrophies)
         ? profile.majorTrophies.reduce((acc: number, t: any) => acc + Number(t.count || 0), 0)
         : 0;
-      const runnerUp = Array.isArray(profile.cupsPlayed)
-        ? Math.max(0, profile.cupsPlayed.length - champion)
-        : 0;
-
-      const totalMatches =
-        Number(profile.matchesCoached) ||
-        win + loss + draw + runnerUp + champion ||
-        win + loss + draw;
+      // Runner-up finishes are not recorded anywhere, so they are not guessed.
+      const runnerUp = 0;
+      const totalMatches = Number(profile.matchesCoached) || win + loss + draw;
 
       const percentages =
         totalMatches > 0
@@ -252,8 +142,8 @@ export class CoachAnalyticsService {
     const majorTrophies: Array<{ name: string; value: number }> =
       Array.isArray(profile.majorTrophies) && profile.majorTrophies.length > 0
         ? profile.majorTrophies.map((t: any) => ({
-            name: (t.title || 'TROPHY').toUpperCase(),
-            value: Number(t.count || 1),
+            name: String(t.title || '').toUpperCase(),
+            value: Number(t.count ?? 0),
           }))
         : [];
 
@@ -262,32 +152,17 @@ export class CoachAnalyticsService {
     if (Array.isArray(profile.trophiesTable) && profile.trophiesTable.length > 0) {
       trophiesTable = profile.trophiesTable;
     } else if (Array.isArray(profile.majorTrophies) && profile.majorTrophies.length > 0) {
-      const trophiesCount = profile.majorTrophies.length;
-      trophiesTable = profile.majorTrophies.map((t: any) => {
-        const champCount = Number(t.count || 1);
-        const matches =
-          Number(profile.matchesCoached || 0) > 0
-            ? Math.max(champCount, Math.round(Number(profile.matchesCoached) / trophiesCount))
-            : champCount;
-        const wins =
-          Number(profile.totalWins || 0) > 0
-            ? Math.max(champCount, Math.round(Number(profile.totalWins) / trophiesCount))
-            : champCount;
-        const losses =
-          Number(profile.losses || 0) > 0 ? Math.round(Number(profile.losses) / trophiesCount) : 0;
-        const draws = Math.max(0, matches - wins - losses);
-
-        return {
-          _id: t._id,
-          trophyName: (t.title || 'Tournament').toUpperCase(),
-          number: matches,
-          win: wins,
-          loss: losses,
-          draw: draws,
-          runnerUp: 0,
-          champion: champCount,
-        };
-      });
+      // Per-tournament win/loss/draw is not recorded; only the stored title count is real.
+      trophiesTable = profile.majorTrophies.map((t: any) => ({
+        _id: t._id,
+        trophyName: String(t.title || '').toUpperCase(),
+        number: Number(t.count ?? 0),
+        win: 0,
+        loss: 0,
+        draw: 0,
+        runnerUp: 0,
+        champion: Number(t.count ?? 0),
+      }));
     }
 
     // 5. Sidebar data: Pending Game Reports, Clubs Interested, Quick Stats
@@ -312,8 +187,8 @@ export class CoachAnalyticsService {
       return {
         id: m._id,
         playerId: p._id || m.playerId,
-        playerName: p.fullName || 'Player',
-        playerPosition: p.position || 'Player',
+        playerName: p.fullName || '',
+        playerPosition: p.position || '',
         playerAvatar: p.profileImage || p.avatar || null,
         matchDate: m.matchDate || m.createdAt,
         action: 'CREATE',
@@ -331,7 +206,7 @@ export class CoachAnalyticsService {
       .limit(6)
       .lean();
 
-    let clubsInterested = (clubFavourites || [])
+    const clubsInterested = (clubFavourites || [])
       .map((fav: any) => fav.clubId)
       .filter((c: any) => c && c.name)
       .map((c: any) => ({
@@ -342,18 +217,6 @@ export class CoachAnalyticsService {
         country: c.country,
         league: c.league,
       }));
-
-    if (clubsInterested.length === 0) {
-      const fallbackClubs = await ClubProfile.find().limit(3).lean();
-      clubsInterested = (fallbackClubs || []).map((c: any) => ({
-        clubId: c._id,
-        name: c.name,
-        logo: c.logo || null,
-        action: 'Viewed your profile',
-        country: c.country,
-        league: c.league,
-      }));
-    }
 
     const matchesCoached = Number(profile.matchesCoached || 0);
     const totalWins = Number(profile.totalWins || 0);

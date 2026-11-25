@@ -83,7 +83,7 @@ export const sendMessage = catchAsync(async (req: Request, res: Response) => {
 export const getMessages = catchAsync(async (req: Request, res: Response) => {
   const currentUserId = (req as any).user?.userId || (req as any).user?.id;
   const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 100;
+  const limit = Number(req.query.limit) || 50;
 
   const result = await chatService.getMessages(
     req.params.conversationId,
@@ -96,6 +96,22 @@ export const getMessages = catchAsync(async (req: Request, res: Response) => {
     statusCode: StatusCodes.OK,
     success: true,
     message: 'Messages fetched successfully',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
+export const markConversationAsUnread = catchAsync(async (req: Request, res: Response) => {
+  const currentUserId = (req as any).user?.userId || (req as any).user?.id;
+  const result = await chatService.markConversationAsUnread(
+    req.params.conversationId,
+    currentUserId,
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Conversation marked as unread',
     data: result,
   });
 });

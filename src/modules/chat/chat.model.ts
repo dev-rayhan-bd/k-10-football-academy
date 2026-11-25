@@ -31,7 +31,10 @@ const ConversationParticipantSchema = new Schema<IConversationParticipantDocumen
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     role: { type: String },
     unreadCount: { type: Number, default: 0 },
+    // When this user last read the conversation (per-user, so group reads don't affect others)
     lastReadAt: { type: Date },
+    // User explicitly marked the conversation as unread (cleared when they read it again)
+    markedUnread: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

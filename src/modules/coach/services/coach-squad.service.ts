@@ -17,16 +17,15 @@ export class CoachSquadService {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Number(query.limit) || 10);
 
-    // Determine target academy / club
-    const targetAcademyId = (query.academyId as string) || coach.academyId;
-    const targetClub = (query.clubName as string) || coach.currentClub;
-
-    // Resolve coach's teams
-    const coachTeams = await Team.find({
-      $or: [{ coachIds: coach._id }, ...(coach.academyId ? [{ academyId: coach.academyId }] : [])],
-    }).lean();
+    // Resolve ONLY the teams this coach is actually assigned to (Team.coachIds).
+    // Removing the coach from a team must remove that team's players from this list,
+    // so we never widen the scope to the whole academy or a free-text club name.
+    const coachTeams = await Team.find({ coachIds: coach._id })
+      .populate('academyId', 'name logo')
+      .lean();
     const coachTeamIds = coachTeams.map((t) => t._id);
     const teamPlayerIds = coachTeams.flatMap((t) => t.playerIds || []);
+    const primaryAcademy: any = coachTeams.find((t: any) => t.academyId)?.academyId || null;
 
     // Filter condition for players
     const playerFilter: any = {};
@@ -35,25 +34,8 @@ export class CoachSquadService {
 
     // If not searching for a specific email globally, scope to coach's academy/club/teams
     if (!hasExplicitEmail && !isGlobalScope) {
-      const orScopes: any[] = [];
-      if (teamPlayerIds.length > 0) {
-        orScopes.push({ _id: { $in: teamPlayerIds } });
-      }
-      if (targetAcademyId) {
-        orScopes.push({ academyId: targetAcademyId });
-      }
-      if (targetClub) {
-        orScopes.push({ currentClub: targetClub });
-      }
-      if (orScopes.length > 0) {
-        playerFilter.$or = orScopes;
-      } else {
-        // If coach is independent or unverified, look for players supervised by this coach
-        playerFilter.$or = [
-          { verifyingCoachId: coach.userId },
-          { 'coachVerification.coachName': coach.fullName },
-        ];
-      }
+      // Squad = players on the coach's assigned teams. No teams → empty squad.
+      playerFilter._id = { $in: teamPlayerIds };
     }
 
     // 1. Direct Email Filter (?email=...)
@@ -102,7 +84,6 @@ export class CoachSquadService {
     endOfDay.setHours(23, 59, 59, 999);
 
     const sessionOr: any[] = [{ coachId: coach._id }];
-    if (coach.academyId) sessionOr.push({ academyId: coach.academyId });
     if (coachTeamIds.length > 0) sessionOr.push({ teamId: { $in: coachTeamIds } });
 
     const availableSessions = await TrainingSession.find({
@@ -202,9 +183,9 @@ export class CoachSquadService {
             injured: 0,
           },
           academy: {
-            id: coach.academyId || null,
-            name: coach.currentClub || '',
-            logo: coach.clubLogo || '',
+            id: primaryAcademy?._id || null,
+            name: primaryAcademy?.name || '',
+            logo: primaryAcademy?.logo || '',
           },
           sessionInfo,
           players: [],
@@ -331,9 +312,9 @@ export class CoachSquadService {
           injured: injuredCount,
         },
         academy: {
-          id: coach.academyId || null,
-          name: coach.currentClub || '',
-          logo: coach.clubLogo || '',
+          id: primaryAcademy?._id || null,
+          name: primaryAcademy?.name || '',
+          logo: primaryAcademy?.logo || '',
         },
         sessionInfo,
         players: paginatedPlayers,

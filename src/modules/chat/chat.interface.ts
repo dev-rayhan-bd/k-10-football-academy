@@ -22,6 +22,7 @@ export interface IConversationParticipant {
   role?: string;
   unreadCount?: number;
   lastReadAt?: Date;
+  markedUnread?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }

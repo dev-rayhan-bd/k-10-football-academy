@@ -5,7 +5,28 @@ import { Conversation, ConversationParticipant, Message } from './chat.model';
 import { UserModel } from '@/modules/user/user.model';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
 
-import { emitToConversation, emitToUser, isUserOnline } from '@/socket';
+import { emitToUser, isUserOnline } from '@/socket';
+
+/**
+ * Emit an event once to every participant's personal room (`user:<id>`).
+ * Every connected socket joins its user room, so this reaches all devices exactly once.
+ * (Emitting to the conversation room as well would deliver duplicates.)
+ */
+const emitToParticipants = async (
+  conversationId: string | Types.ObjectId,
+  event: string,
+  payload: unknown,
+  excludeUserId?: string,
+) => {
+  const participants = await ConversationParticipant.find({ conversationId }).select('userId');
+  participants.forEach((p) => {
+    const pid = p.userId.toString();
+    if (excludeUserId && pid === excludeUserId.toString()) return;
+    emitToUser(pid, event, payload);
+  });
+};
+
+const isHttpUrl = (value: string) => /^https?:\/\/\S+$/i.test(value);
 
 const formatRelativeTime = (date?: Date | null): string => {
   if (!date) return '';
@@ -164,23 +185,24 @@ export class ChatService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Target user profile not found');
     }
 
-    // Find all individual conversations where current user is a participant
-    const myParticipants = await ConversationParticipant.find({ userId: currentUserId });
-    const myConversationIds = myParticipants.map((p) => p.conversationId);
+    // Only look inside my 1-on-1 conversations. (Matching any shared conversation could pick a
+    // group the two users share, miss the real 1-on-1 and create a duplicate.)
+    const myParticipants = await ConversationParticipant.find({ userId: currentUserId }).select(
+      'conversationId',
+    );
+    const myIndividualConvIds = (
+      await Conversation.find({
+        _id: { $in: myParticipants.map((p) => p.conversationId) },
+        type: { $ne: 'GROUP' },
+      }).select('_id')
+    ).map((c) => c._id);
 
-    // Look for a 1-on-1 conversation that also includes targetUserId
     const match = await ConversationParticipant.findOne({
-      conversationId: { $in: myConversationIds },
+      conversationId: { $in: myIndividualConvIds },
       userId: targetUserId,
     });
 
-    let conversation;
-    if (match) {
-      conversation = await Conversation.findOne({
-        _id: match.conversationId,
-        type: { $ne: 'GROUP' },
-      });
-    }
+    let conversation = match ? await Conversation.findById(match.conversationId) : null;
 
     if (!conversation) {
       conversation = await Conversation.create({
@@ -237,7 +259,9 @@ export class ChatService {
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
 
-    const myParticipants = await ConversationParticipant.find({ userId }).select('conversationId');
+    const myParticipants = await ConversationParticipant.find({ userId })
+      .select('conversationId lastReadAt markedUnread')
+      .lean();
     if (!myParticipants.length) {
       return {
         meta: { page, limit, total: 0, totalPages: 1 },
@@ -267,13 +291,20 @@ export class ChatService {
       if (p.userId) participantMap.get(key)!.push(p.userId);
     });
 
-    // Compute unread message count for current user per conversation
+    // Unread count per conversation FOR THIS USER: messages from others after my lastReadAt.
+    // Conversations read before lastReadAt existed fall back to the message isRead flag.
+    const markedUnreadSet = new Set(
+      myParticipants.filter((p) => p.markedUnread).map((p) => p.conversationId.toString()),
+    );
     const unreadAgg = await Message.aggregate([
       {
         $match: {
-          conversationId: { $in: convIds },
           senderId: { $ne: new Types.ObjectId(userId) },
-          isRead: false,
+          $or: myParticipants.map((p) =>
+            p.lastReadAt
+              ? { conversationId: p.conversationId, createdAt: { $gt: p.lastReadAt } }
+              : { conversationId: p.conversationId, isRead: false },
+          ),
         },
       },
       {
@@ -330,8 +361,11 @@ export class ChatService {
           : undefined,
         lastMessage: conv.lastMessage || '',
         lastMessageTime: conv.lastMessageTime || conv.updatedAt,
+        lastSenderId: conv.lastSenderId || null,
         time: formatRelativeTime(conv.lastMessageTime || conv.updatedAt),
         unreadCount,
+        markedUnread: markedUnreadSet.has(conv._id.toString()),
+        isUnread: unreadCount > 0 || markedUnreadSet.has(conv._id.toString()),
         createdAt: conv.createdAt,
         updatedAt: conv.updatedAt,
       };
@@ -416,6 +450,21 @@ export class ChatService {
       );
     }
 
+    // Socket messages bypass the REST Zod schema, so validate the uploaded link here too
+    if (imageUrl && !isHttpUrl(imageUrl)) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        'imageUrl must be the http(s) URL returned by POST /chats/upload-attachment',
+      );
+    }
+    if (attachmentsJson) {
+      try {
+        JSON.parse(attachmentsJson);
+      } catch {
+        throw new AppError(StatusCodes.BAD_REQUEST, 'attachmentsJson must be a valid JSON string');
+      }
+    }
+
     // Check that sender is a participant
     const isParticipant = await ConversationParticipant.findOne({
       conversationId,
@@ -461,11 +510,18 @@ export class ChatService {
           ? '📷 Sent an image'
           : '📎 Sent an attachment';
 
+    const sentAt = message.createdAt || new Date();
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: previewText,
-      lastMessageTime: new Date(),
+      lastMessageTime: sentAt,
       lastSenderId: new Types.ObjectId(senderId),
     });
+
+    // The sender has obviously seen the conversation up to their own message
+    await ConversationParticipant.updateOne(
+      { conversationId, userId: senderId },
+      { $set: { lastReadAt: sentAt, markedUnread: false } },
+    );
 
     const senderObj = message.senderId as any;
     const formattedMessage = {
@@ -492,20 +548,16 @@ export class ChatService {
       createdAt: message.createdAt,
     };
 
-    // Emit Real-Time Socket Events
-
-    // 1. Emit new_message to all participants in this conversation room
-    emitToConversation(conversationId.toString(), 'new_message', formattedMessage);
-
-    // 2. Emit new_message and conversation_updated directly to ALL participants (works for 1-on-1 and Group chats)
-    const allParticipants = await ConversationParticipant.find({ conversationId });
+    // Real-time events: exactly once per participant via their personal room (all their devices).
+    const allParticipants = await ConversationParticipant.find({ conversationId }).select('userId');
     allParticipants.forEach((p) => {
       const isSender = p.userId.toString() === senderId.toString();
       emitToUser(p.userId.toString(), 'new_message', formattedMessage);
       emitToUser(p.userId.toString(), 'conversation_updated', {
         conversationId,
         lastMessage: previewText,
-        lastMessageTime: new Date(),
+        lastMessageTime: sentAt,
+        lastSenderId: senderId,
         senderId,
         senderName: senderObj?.name || senderObj?.fullName || 'User',
         senderAvatar: senderObj?.avatar || '',
@@ -533,34 +585,30 @@ export class ChatService {
       throw new AppError(StatusCodes.FORBIDDEN, 'You are not a participant in this conversation');
     }
 
-    const skip = (Math.max(1, page) - 1) * limit;
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+    const skip = (safePage - 1) * safeLimit;
 
-    const messages = await Message.find({ conversationId })
-      .populate('senderId', '_id name fullName email role avatar')
-      .sort({ createdAt: 1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Page 1 = the NEWEST messages. Older history is loaded with page 2, 3, ...
+    // Each page is returned oldest -> newest so it can be rendered top to bottom.
+    const [total, newestFirst] = await Promise.all([
+      Message.countDocuments({ conversationId }),
+      Message.find({ conversationId })
+        .populate('senderId', '_id name fullName email role avatar')
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .lean(),
+    ]);
+    const messages = newestFirst.reverse();
 
-    // Automatically mark all unread messages sent by the other party as read
-    const unreadMessageIds = messages
-      .filter((m: any) => {
-        const sId = m.senderId?._id?.toString() || m.senderId?.toString();
-        return sId !== currentUserId.toString() && !m.isRead;
-      })
-      .map((m: any) => m._id);
-
-    if (unreadMessageIds.length > 0) {
-      await Message.updateMany({ _id: { $in: unreadMessageIds } }, { $set: { isRead: true } });
-
-      emitToConversation(conversationId, 'messages_read', {
-        conversationId,
-        readerId: currentUserId,
-        messageIds: unreadMessageIds,
-      });
+    // Opening the latest page means the user has read the conversation
+    const markedReadNow = safePage === 1;
+    if (markedReadNow) {
+      await this.markMessagesAsRead(conversationId, currentUserId);
     }
 
-    return messages.map((msg: any) => {
+    const data = messages.map((msg: any) => {
       const s = msg.senderId || {};
       const sId = s._id ? s._id.toString() : (msg.senderId || '').toString();
       const isMe = sId === currentUserId.toString();
@@ -580,9 +628,7 @@ export class ChatService {
         text: msg.text || '',
         imageUrl: msg.imageUrl || null,
         attachmentsJson: msg.attachmentsJson || null,
-        isRead: unreadMessageIds.some((id) => id.toString() === msg._id.toString())
-          ? true
-          : msg.isRead,
+        isRead: !isMe && markedReadNow ? true : msg.isRead,
         isMe,
         time: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], {
           hour: '2-digit',
@@ -591,6 +637,17 @@ export class ChatService {
         createdAt: msg.createdAt,
       };
     });
+
+    return {
+      meta: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit) || 1,
+        hasMore: skip + messages.length < total,
+      },
+      data,
+    };
   }
 
   /**
@@ -601,36 +658,73 @@ export class ChatService {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Valid conversation ID is required');
     }
 
+    const participant = await ConversationParticipant.findOne({
+      conversationId,
+      userId: currentUserId,
+    });
+    if (!participant) {
+      throw new AppError(StatusCodes.FORBIDDEN, 'You are not a participant in this conversation');
+    }
+
+    const readAt = new Date();
     const result = await Message.updateMany(
       {
         conversationId,
         senderId: { $ne: new Types.ObjectId(currentUserId) },
         isRead: false,
       },
-      {
-        $set: { isRead: true },
-      },
+      { $set: { isRead: true } },
     );
 
-    const participants = await ConversationParticipant.find({ conversationId });
+    // Per-user read position + clear a manual "mark as unread"
+    participant.lastReadAt = readAt;
+    participant.markedUnread = false;
+    await participant.save();
 
-    const readPayload = {
+    // Read receipt to every participant (sender sees ticks, reader's other devices clear the badge)
+    await emitToParticipants(conversationId, 'messages_read', {
       conversationId,
       readerId: currentUserId,
+      readAt,
       modifiedCount: result.modifiedCount,
-    };
-
-    emitToConversation(conversationId, 'messages_read', readPayload);
-
-    // Also emit directly to every participant's personal room so both sender and receiver get real-time read receipt
-    participants.forEach((p) => {
-      emitToUser(p.userId.toString(), 'messages_read', readPayload);
     });
 
     return {
       success: true,
+      conversationId,
       modifiedCount: result.modifiedCount,
+      unreadCount: 0,
+      markedUnread: false,
     };
+  }
+
+  /**
+   * Mark a conversation as unread for the current user only (like "Mark as unread" in WhatsApp).
+   * Does not touch message read receipts seen by the other participants.
+   */
+  async markConversationAsUnread(conversationId: string, currentUserId: string) {
+    if (!conversationId || !Types.ObjectId.isValid(conversationId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Valid conversation ID is required');
+    }
+
+    const participant = await ConversationParticipant.findOne({
+      conversationId,
+      userId: currentUserId,
+    });
+    if (!participant) {
+      throw new AppError(StatusCodes.FORBIDDEN, 'You are not a participant in this conversation');
+    }
+
+    participant.markedUnread = true;
+    await participant.save();
+
+    // Sync the badge across this user's own devices
+    emitToUser(currentUserId.toString(), 'conversation_unread', {
+      conversationId,
+      markedUnread: true,
+    });
+
+    return { success: true, conversationId, markedUnread: true, isUnread: true };
   }
 
   /**

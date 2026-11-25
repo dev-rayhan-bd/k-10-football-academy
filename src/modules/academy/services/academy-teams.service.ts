@@ -1004,6 +1004,14 @@ export class AcademyTeamsService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Team not found');
     }
 
+    const isAssigned = (team.coachIds || []).some((id) => id.toString() === coachId);
+    if (!isAssigned) {
+      throw new AppError(
+        StatusCodes.NOT_FOUND,
+        'This coach is not assigned to this team (use the coach profile ID)',
+      );
+    }
+
     team.coachIds = (team.coachIds || []).filter((id) => id.toString() !== coachId);
     team.coachesCount = team.coachIds.length;
     team.totalMembers = (team.coachesCount || 0) + (team.playersCount || 0);

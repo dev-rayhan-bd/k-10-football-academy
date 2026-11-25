@@ -14,6 +14,7 @@ import {
   sendMessage,
   getMessages,
   markMessagesAsRead,
+  markConversationAsUnread,
   uploadChatAttachment,
   getContacts,
 } from './chat.controller';
@@ -59,6 +60,12 @@ router.patch(
   auth(),
   validateRequest(markReadZodSchema),
   markMessagesAsRead,
+);
+router.patch(
+  '/messages/:conversationId/unread',
+  auth(),
+  validateRequest(markReadZodSchema),
+  markConversationAsUnread,
 );
 
 export const ChatRoutes = router;

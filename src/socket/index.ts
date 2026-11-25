@@ -199,23 +199,12 @@ export const initSocket = (server: HttpServer): SocketIOServer => {
           },
         };
 
-        logger.info(`⌨️  User typing in ${conversationId}: ${user.name}`);
-
-        // Always emit to calling socket so single-client testing (Postman) receives live event
-        socket.emit('user_typing', typingPayload);
-
-        // Broadcast to conversation room
-        io?.to(`conversation:${conversationId}`).emit('user_typing', typingPayload);
-
-        // Also emit directly to other participant's personal room
-        const otherParticipant = await ConversationParticipant.findOne({
+        // Once to every OTHER participant (1-on-1 and group), never back to the typer
+        const others = await ConversationParticipant.find({
           conversationId,
           userId: { $ne: user._id },
-        });
-
-        if (otherParticipant) {
-          emitToUser(otherParticipant.userId.toString(), 'user_typing', typingPayload);
-        }
+        }).select('userId');
+        others.forEach((p) => emitToUser(p.userId.toString(), 'user_typing', typingPayload));
       }
     });
 
@@ -228,18 +217,11 @@ export const initSocket = (server: HttpServer): SocketIOServer => {
           userId: user._id,
         };
 
-        socket.emit('user_stop_typing', stopPayload);
-
-        io?.to(`conversation:${conversationId}`).emit('user_stop_typing', stopPayload);
-
-        const otherParticipant = await ConversationParticipant.findOne({
+        const others = await ConversationParticipant.find({
           conversationId,
           userId: { $ne: user._id },
-        });
-
-        if (otherParticipant) {
-          emitToUser(otherParticipant.userId.toString(), 'user_stop_typing', stopPayload);
-        }
+        }).select('userId');
+        others.forEach((p) => emitToUser(p.userId.toString(), 'user_stop_typing', stopPayload));
       }
     });
 

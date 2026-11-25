@@ -298,7 +298,11 @@ export class CoachCvService {
           let: {
             cId: '$_id',
             uId: '$userId',
-            cEmail: { $toLower: { $ifNull: ['$email', { $ifNull: ['$user.email', ''] }] } },
+            // Profile contact email and login email (either may be used when inviting a coach)
+            cEmails: [
+              { $toLower: { $ifNull: ['$email', ''] } },
+              { $toLower: { $ifNull: ['$user.email', ''] } },
+            ],
           },
           pipeline: [
             {
@@ -306,15 +310,15 @@ export class CoachCvService {
               $match: {
                 $expr: {
                   $or: [
-                    { $eq: ['$coachReview.coachId', '$cId'] },
-                    { $eq: ['$coachReview.coachId', '$uId'] },
+                    { $eq: ['$coachReview.coachId', '$$cId'] },
+                    { $eq: ['$coachReview.coachId', '$$uId'] },
                     {
                       $and: [
-                        { $ne: ['$cEmail', ''] },
+                        { $ne: [{ $ifNull: ['$coachReview.coachEmail', ''] }, ''] },
                         {
-                          $eq: [
+                          $in: [
                             { $toLower: { $ifNull: ['$coachReview.coachEmail', ''] } },
-                            '$cEmail',
+                            '$$cEmails',
                           ],
                         },
                       ],

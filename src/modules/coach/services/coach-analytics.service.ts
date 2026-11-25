@@ -12,6 +12,8 @@ import { Media } from '@/modules/media/media.model';
 import { MatchRecord } from '@/modules/player/player.model';
 import { ClubFavourite } from '@/modules/club/club.model';
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class CoachAnalyticsService {
   async getCoachAnalytics(coachIdentifier: string): Promise<ICoachAnalyticsResponse> {
     let profile: any = null;
@@ -19,12 +21,15 @@ export class CoachAnalyticsService {
       const objId = new Types.ObjectId(coachIdentifier);
       profile = await CoachProfile.findOne({
         $or: [{ _id: objId }, { userId: objId }],
-      });
+      }).populate('userId', 'email avatar');
     }
 
     if (!profile) {
       throw new AppError(404, 'Coach profile not found');
     }
+
+    const coachUser: any = profile.userId || {};
+    const coachUserId = (coachUser._id || profile.userId)?.toString();
 
     // Real media counts and formations for accurate tier and completion calculation
     const [picturesCount, videosCount, formationCount] = await Promise.all([
@@ -35,7 +40,7 @@ export class CoachAnalyticsService {
 
     const { completionPercentage, autoTier } = computeCoachProfileCompletion(
       profile,
-      (profile.userId as any)?.avatar,
+      coachUser.avatar,
       picturesCount,
       videosCount,
       formationCount > 0,
@@ -62,92 +67,64 @@ export class CoachAnalyticsService {
       overall: Number(rawAnalysis.overall ?? 0),
     };
 
-    // 2. Tournament Stats (Pie Chart & Percentages - aggregated from real match records)
-    let tournamentStats: ICoachTournamentStats | null;
+    // 2. Tournament Stats (pie chart). Stored values when present, else the coach's own totals.
+    let win: number;
+    let loss: number;
+    let draw: number;
+    let runnerUp: number;
+    let champion: number;
+    let totalMatches: number;
+
     if (profile.tournamentStats && Object.keys(profile.tournamentStats).length > 0) {
       const raw = profile.tournamentStats;
-      const win = Number(raw.win ?? 0);
-      const loss = Number(raw.loss ?? 0);
-      const draw = Number(raw.draw ?? 0);
-      const runnerUp = Number(raw.runnerUp ?? 0);
-      const champion = Number(raw.champion ?? 0);
-      const totalMatches = win + loss + draw + runnerUp + champion;
-
-      const percentages =
-        totalMatches > 0
-          ? {
-              win: Math.round((win / totalMatches) * 100),
-              loss: Math.round((loss / totalMatches) * 100),
-              draw: Math.round((draw / totalMatches) * 100),
-              runnerUp: Math.round((runnerUp / totalMatches) * 100),
-              champion: Math.round((champion / totalMatches) * 100),
-            }
-          : {
-              win: 0,
-              loss: 0,
-              draw: 0,
-              runnerUp: 0,
-              champion: 0,
-            };
-
-      tournamentStats = {
-        win,
-        loss,
-        draw,
-        runnerUp,
-        champion,
-        totalMatches,
-        percentages,
-      };
+      win = Number(raw.win ?? 0);
+      loss = Number(raw.loss ?? 0);
+      draw = Number(raw.draw ?? 0);
+      runnerUp = Number(raw.runnerUp ?? 0);
+      champion = Number(raw.champion ?? 0);
+      totalMatches = win + loss + draw + runnerUp + champion;
     } else {
-      const win = Number(profile.totalWins || 0);
-      const loss = Number(profile.losses || 0);
-      const draw = Number(profile.draws || 0);
-      const champion = Array.isArray(profile.majorTrophies)
-        ? profile.majorTrophies.reduce((acc: number, t: any) => acc + Number(t.count || 0), 0)
+      win = Number(profile.totalWins || 0);
+      loss = Number(profile.losses || 0);
+      draw = Number(profile.draws || 0);
+      champion = Array.isArray(profile.majorTrophies)
+        ? profile.majorTrophies.reduce((acc: number, t: any) => acc + Number(t.count ?? 0), 0)
         : 0;
       // Runner-up finishes are not recorded anywhere, so they are not guessed.
-      const runnerUp = 0;
-      const totalMatches = Number(profile.matchesCoached) || win + loss + draw;
-
-      const percentages =
-        totalMatches > 0
-          ? {
-              win: Math.round((win / totalMatches) * 100),
-              loss: Math.round((loss / totalMatches) * 100),
-              draw: Math.round((draw / totalMatches) * 100),
-              runnerUp: Math.min(100, Math.round((runnerUp / totalMatches) * 100)),
-              champion: Math.min(100, Math.round((champion / totalMatches) * 100)),
-            }
-          : {
-              win: 0,
-              loss: 0,
-              draw: 0,
-              runnerUp: 0,
-              champion: 0,
-            };
-
-      tournamentStats = {
-        win,
-        loss,
-        draw,
-        runnerUp,
-        champion,
-        totalMatches: totalMatches || 0,
-        percentages,
-      };
+      runnerUp = 0;
+      totalMatches = Number(profile.matchesCoached || 0) || win + loss + draw;
     }
 
-    // 3. Major Trophies (Bar Chart) - Strictly from DB
-    const majorTrophies: Array<{ name: string; value: number }> =
-      Array.isArray(profile.majorTrophies) && profile.majorTrophies.length > 0
-        ? profile.majorTrophies.map((t: any) => ({
-            name: String(t.title || '').toUpperCase(),
-            value: Number(t.count ?? 0),
-          }))
-        : [];
+    // All slices share one denominator so the percentages add up to ~100.
+    const sliceTotal = win + loss + draw + runnerUp + champion;
+    const pct = (v: number) => (sliceTotal > 0 ? Math.round((v / sliceTotal) * 100) : 0);
+    const tournamentStats: ICoachTournamentStats | null = {
+      win,
+      loss,
+      draw,
+      runnerUp,
+      champion,
+      totalMatches,
+      percentages: {
+        win: pct(win),
+        loss: pct(loss),
+        draw: pct(draw),
+        runnerUp: pct(runnerUp),
+        champion: pct(champion),
+      },
+    };
 
-    // 4. Trophies Table - Aggregated directly from DB majorTrophies and match history
+    // 3. Major Trophies (Bar Chart) - Strictly from DB
+    const majorTrophies: Array<{ name: string; value: number }> = Array.isArray(
+      profile.majorTrophies,
+    )
+      ? profile.majorTrophies.map((t: any) => ({
+          name: String(t.title || '').toUpperCase(),
+          value: Number(t.count ?? 0),
+        }))
+      : [];
+
+    // 4. Trophies Table - stored table, else stored trophy counts only
     let trophiesTable: ICoachTrophyDetail[] = [];
     if (Array.isArray(profile.trophiesTable) && profile.trophiesTable.length > 0) {
       trophiesTable = profile.trophiesTable;
@@ -165,17 +142,30 @@ export class CoachAnalyticsService {
       }));
     }
 
-    // 5. Sidebar data: Pending Game Reports, Clubs Interested, Quick Stats
-    const coachUserId = profile.userId?.toString();
-    const coachEmail = (profile.email || (profile.userId as any)?.email || '').toLowerCase().trim();
+    // 5. Pending Game Reports addressed to this coach (by profile id, user id, or either email)
+    const coachEmails = Array.from(
+      new Set(
+        [coachUser.email, profile.email]
+          .map((e: any) =>
+            String(e || '')
+              .toLowerCase()
+              .trim(),
+          )
+          .filter(Boolean),
+      ),
+    );
 
     const pendingMatches = await MatchRecord.find({
       $or: [
         { 'coachReview.coachId': profile._id },
         ...(coachUserId ? [{ 'coachReview.coachId': coachUserId }] : []),
-        ...(coachEmail ? [{ 'coachReview.coachEmail': coachEmail }] : []),
+        ...coachEmails.map((e) => ({
+          'coachReview.coachEmail': { $regex: `^${escapeRegex(e)}$`, $options: 'i' },
+        })),
       ],
-      'coachReview.status': { $in: ['PENDING', 'REQUESTED'] },
+      'coachReview.status': 'PENDING',
+      // Only paid reports can be evaluated (same rule as the coach Game Reports list)
+      'coachReview.paymentStatus': 'PAID',
     })
       .populate('playerId', 'fullName position profileImage avatar country')
       .sort({ createdAt: -1 })
@@ -190,34 +180,42 @@ export class CoachAnalyticsService {
         playerName: p.fullName || '',
         playerPosition: p.position || '',
         playerAvatar: p.profileImage || p.avatar || null,
-        matchDate: m.matchDate || m.createdAt,
+        matchDate: m.matchDate || null,
+        requestedAt: m.createdAt,
         action: 'CREATE',
       };
     });
 
+    // 6. Clubs Interested: a favourite is the only recorded signal (profile views are not tracked)
     const clubFavourites = await ClubFavourite.find({
-      $or: [
-        { targetCoachId: profile._id, targetType: 'COACH' },
-        ...(coachUserId ? [{ targetCoachId: coachUserId, targetType: 'COACH' }] : []),
-      ],
+      targetType: 'COACH',
+      targetCoachId: { $in: [profile._id, ...(coachUserId ? [coachUserId] : [])] },
     })
       .populate('clubId', 'name logo country league')
       .sort({ createdAt: -1 })
       .limit(6)
       .lean();
 
+    const seenClubs = new Set<string>();
     const clubsInterested = (clubFavourites || [])
-      .map((fav: any) => fav.clubId)
-      .filter((c: any) => c && c.name)
-      .map((c: any) => ({
-        clubId: c._id,
-        name: c.name,
-        logo: c.logo || null,
-        action: 'Viewed your profile',
-        country: c.country,
-        league: c.league,
+      .filter((fav: any) => fav.clubId && fav.clubId.name)
+      .filter((fav: any) => {
+        const key = fav.clubId._id.toString();
+        if (seenClubs.has(key)) return false;
+        seenClubs.add(key);
+        return true;
+      })
+      .map((fav: any) => ({
+        clubId: fav.clubId._id,
+        name: fav.clubId.name,
+        logo: fav.clubId.logo || null,
+        action: 'Added you to favourites',
+        country: fav.clubId.country,
+        league: fav.clubId.league,
+        favouritedAt: fav.createdAt,
       }));
 
+    // 7. Quick Stats (stored values)
     const matchesCoached = Number(profile.matchesCoached || 0);
     const totalWins = Number(profile.totalWins || 0);
     const losses = Number(profile.losses || 0);

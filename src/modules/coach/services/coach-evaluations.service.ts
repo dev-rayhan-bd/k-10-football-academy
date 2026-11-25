@@ -1,535 +1,411 @@
 import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
+import QueryBuilder from '@/builder/QueryBuilder';
 import { UserModel } from '@/modules/user/user.model';
 import { CoachProfile } from '../coach.model';
 import { PlayerProfile } from '@/modules/player/player.model';
 import { playerStatsService } from '@/modules/player/services/player-stats.service';
-import { PlayerEvaluation, AcademyProfile } from '@/modules/academy/academy.model';
+import { PlayerEvaluation, Team } from '@/modules/academy/academy.model';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { NotificationService } from '@/modules/notification/notification.service';
+import {
+  EVALUATION_CYCLE_KEY,
+  EVALUATION_CYCLE_LABEL,
+  addEvaluationCycle,
+  assertCanViewEvaluation,
+  effectiveEvaluationStatus,
+  getCoachTeamPlayerIds,
+  gradeToScore,
+  mapToObject,
+  scoreToGrade,
+} from '@/modules/academy/services/evaluation-rules';
 
 const notificationService = new NotificationService();
 
+const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+type CoachListStatus = 'PENDING' | 'EVALUATED' | 'EXPIRED';
+const toCoachStatus = (ev: any): CoachListStatus => {
+  const s = effectiveEvaluationStatus(ev);
+  return s === 'NEED_EVALUATION' ? 'PENDING' : s;
+};
+
+const ALLOWED_GRADES = ['EXCELLENT', 'GOOD', 'IMPROVEMENT'];
+
+/** Validates graded sections: each value must be a client grade (or a 0-100 number). */
+const normalizeGrades = (section: unknown, name: string): Record<string, string> | undefined => {
+  if (section === undefined || section === null) return undefined;
+  if (typeof section !== 'object' || Array.isArray(section)) {
+    throw new AppError(400, `${name} must be an object of { skill: grade }`);
+  }
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(section as Record<string, unknown>)) {
+    if (raw === undefined || raw === null || raw === '') continue;
+    if (typeof raw === 'number') {
+      if (raw < 0 || raw > 100) throw new AppError(400, `${name}.${key} must be 0-100`);
+      out[key] = String(raw);
+      continue;
+    }
+    const grade = String(raw).toUpperCase().trim();
+    if (!ALLOWED_GRADES.includes(grade)) {
+      throw new AppError(
+        400,
+        `Invalid grade "${raw}" for ${name}.${key}. Allowed: ${ALLOWED_GRADES.join(', ')}`,
+      );
+    }
+    out[key] = grade;
+  }
+  return out;
+};
+
 export class CoachEvaluationsService {
+  /**
+   * Coach evaluation list. Scope = players the academy requested from this coach, players this
+   * coach evaluated before, and players on the coach's assigned teams. Never the whole academy.
+   */
   async getPlayerEvaluationsDashboard(userId: string, query: Record<string, unknown> = {}) {
     const coach = await CoachProfile.findOne({ userId });
     if (!coach) {
       throw new AppError(404, 'Coach profile not found');
     }
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Number(query.limit) || 10);
-    const statusFilter = ((query.status as string) || 'PENDING').toUpperCase();
+    const [coachEvals, { playerIds: teamPlayerIds }] = await Promise.all([
+      PlayerEvaluation.find({ coachId: coach._id }).sort({ createdAt: -1 }).lean(),
+      getCoachTeamPlayerIds(coach._id),
+    ]);
 
-    const targetAcademyId = (query.academyId as string) || coach.academyId;
-    const targetClub = (query.clubName as string) || coach.currentClub;
-
-    // Filter candidate players for this coach
-    const playerFilter: any = {};
-    if (targetAcademyId) {
-      playerFilter.$or = [{ academyId: targetAcademyId }];
-      if (targetClub) {
-        playerFilter.$or.push({ currentClub: targetClub });
-      }
-    } else if (targetClub) {
-      playerFilter.currentClub = targetClub;
-    } else {
-      playerFilter.$or = [
-        { verifyingCoachId: coach.userId },
-        { 'coachVerification.coachName': coach.fullName },
-      ];
+    // Latest record (request or evaluation) and latest SUBMITTED evaluation per player
+    const latestMap = new Map<string, any>();
+    const lastEvaluatedMap = new Map<string, any>();
+    for (const ev of coachEvals) {
+      const pid = String(ev.playerId);
+      if (!latestMap.has(pid)) latestMap.set(pid, ev);
+      if (ev.status === 'EVALUATED' && !lastEvaluatedMap.has(pid)) lastEvaluatedMap.set(pid, ev);
     }
 
-    // Include players who already have evaluation records under this coach
-    const evaluatedPlayerIds = await PlayerEvaluation.find({ coachId: coach._id }).distinct(
-      'playerId',
+    const allIds = new Set<string>([...latestMap.keys(), ...teamPlayerIds]);
+    const statusById = new Map<string, CoachListStatus>();
+    const counts = { PENDING: 0, EVALUATED: 0, EXPIRED: 0 };
+    allIds.forEach((pid) => {
+      const st = toCoachStatus(latestMap.get(pid));
+      statusById.set(pid, st);
+      counts[st]++;
+    });
+
+    // Resolve custom params into the base filter, strip them from the QueryBuilder query
+    const listQuery: Record<string, unknown> = { ...query };
+    const statusParam = String(listQuery.status || 'PENDING')
+      .toUpperCase()
+      .trim();
+    if (!['ALL', 'PENDING', 'EVALUATED', 'EXPIRED'].includes(statusParam)) {
+      throw new AppError(400, 'Invalid status. Allowed: ALL, PENDING, EVALUATED, EXPIRED');
+    }
+    const idsForStatus = Array.from(allIds).filter(
+      (pid) => statusParam === 'ALL' || statusById.get(pid) === statusParam,
     );
-    if (evaluatedPlayerIds.length > 0) {
-      if (playerFilter.$or) {
-        playerFilter.$or.push({ _id: { $in: evaluatedPlayerIds } });
-      } else {
-        playerFilter.$or = [{ ...playerFilter }, { _id: { $in: evaluatedPlayerIds } }];
-      }
-    }
-
-    // Direct email search
-    if (query.email && typeof query.email === 'string') {
-      const emailRegex = new RegExp(String(query.email).trim(), 'i');
+    const andParts: Record<string, unknown>[] = [
+      { _id: { $in: idsForStatus.map((id) => new Types.ObjectId(id)) } },
+    ];
+    if (typeof listQuery.email === 'string' && listQuery.email.trim()) {
+      const emailRegex = new RegExp(escapeRegex(listQuery.email.trim()), 'i');
       const matchedUserIds = await UserModel.find({ email: emailRegex }).distinct('_id');
-      playerFilter.userId = { $in: matchedUserIds };
-      delete playerFilter.$or;
-      delete playerFilter.currentClub;
+      andParts.push({ userId: { $in: matchedUserIds } });
     }
+    ['status', 'email', 'academyId', 'clubName', 'fields'].forEach((k) => delete listQuery[k]);
 
-    // Search term filter (?searchTerm=...)
-    if (query.searchTerm && typeof query.searchTerm === 'string') {
-      const term = query.searchTerm.trim();
-      const searchRegex = new RegExp(term, 'i');
-      const matchedUserIds = await UserModel.find({
-        $or: [{ email: searchRegex }, { name: searchRegex }],
-      }).distinct('_id');
+    const playerQuery = new QueryBuilder(PlayerProfile.find({ $and: andParts }), listQuery)
+      .search(['fullName', 'position', 'currentClub', 'country'])
+      .filter()
+      .sort()
+      .paginate();
+    const [players, meta] = await Promise.all([
+      playerQuery.modelQuery.populate('userId', 'email name avatar').lean(),
+      playerQuery.countTotal(),
+    ]);
 
-      const orClauses: any[] = [
-        { fullName: searchRegex },
-        { position: searchRegex },
-        { currentClub: searchRegex },
-        { country: searchRegex },
-      ];
-
-      if (matchedUserIds.length > 0) {
-        orClauses.push({ userId: { $in: matchedUserIds } });
-      }
-
-      playerFilter.$and = playerFilter.$and || [];
-      playerFilter.$and.push({ $or: orClauses });
-    }
-
-    const allMatchingPlayers = await PlayerProfile.find(playerFilter)
-      .populate('userId', 'email name avatar')
-      .lean();
-
-    const allPlayerIds = allMatchingPlayers.map((p) => p._id);
-    const existingEvaluations = await PlayerEvaluation.find({
-      coachId: coach._id,
-      playerId: { $in: allPlayerIds },
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Map each evaluation by playerId
-    const evalMap = new Map<string, any>();
-    for (const ev of existingEvaluations) {
-      const pid = ev.playerId.toString();
-      if (!evalMap.has(pid)) {
-        evalMap.set(pid, ev);
-      }
-    }
-
-    let pendingCount = 0;
-    let evaluatedCount = 0;
-    let expiredCount = 0;
-    const now = new Date();
-
-    const mappedPlayers = allMatchingPlayers.map((p) => {
-      const latestEval = evalMap.get(p._id.toString());
-      const hasEvaluation =
-        !!latestEval && (latestEval.status === 'EVALUATED' || !!latestEval.evaluationDate);
-
-      let isEvaluated = false;
-      let isExpired = false;
-      let isPending = false;
-      let status: 'EVALUATED' | 'PENDING' | 'EXPIRED';
-
-      if (hasEvaluation) {
-        const dueDate = latestEval.nextEvaluationDue || latestEval.expiresAt;
-        if (dueDate && new Date(dueDate).getTime() < now.getTime()) {
-          isExpired = true;
-          status = 'EXPIRED';
-          expiredCount++;
-        } else {
-          isEvaluated = true;
-          status = 'EVALUATED';
-          evaluatedCount++;
-        }
-      } else {
-        isPending = true;
-        status = 'PENDING';
-        pendingCount++;
-      }
-
-      let lastEvaluatedStr = 'Pending Review';
-      if (latestEval && latestEval.evaluationDate) {
-        try {
-          lastEvaluatedStr = new Date(latestEval.evaluationDate).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          });
-        } catch {
-          lastEvaluatedStr = 'Pending Review';
-        }
-      }
-
-      const rating = latestEval?.overallRating || p.overallRating || 0;
-
+    const rows = (players as any[]).map((p) => {
+      const pid = String(p._id);
+      const latest = latestMap.get(pid);
+      const lastEvaluated = lastEvaluatedMap.get(pid);
+      const status = statusById.get(pid) || 'PENDING';
+      const rating = lastEvaluated?.overallRating ?? p.overallRating ?? 0;
       return {
         _id: p._id,
-        evaluationId: latestEval ? latestEval._id : null,
-        name: p.fullName,
+        evaluationId: latest?._id || null,
+        name: p.fullName || '',
         avatar: p.profileImage || (p.userId as any)?.avatar || '',
-        position: p.position || 'N/A',
+        position: p.position || '',
         rating,
-        academy: p.currentClub || coach.currentClub || 'N/A',
-        lastEvaluated: lastEvaluatedStr,
-        lastEvaluationDate: latestEval?.evaluationDate || null,
-        status,
-        isEvaluated,
-        isPending,
-        isExpired,
-        nextEvaluationDue: latestEval?.nextEvaluationDue || latestEval?.expiresAt || null,
         overallRating: rating,
+        academy: p.currentClub || '',
+        lastEvaluationDate: lastEvaluated?.evaluationDate || null,
+        nextEvaluationDue: lastEvaluated?.nextEvaluationDue || null,
+        status,
+        isEvaluated: status === 'EVALUATED',
+        isPending: status === 'PENDING',
+        isExpired: status === 'EXPIRED',
+        requestedByAcademy: Boolean(latest && latest.status === 'NEED_EVALUATION'),
+        canSubmit: status !== 'EVALUATED',
       };
     });
 
-    // Filter by tab / status
-    let filteredList = mappedPlayers;
-    if (statusFilter === 'EVALUATED') {
-      filteredList = mappedPlayers.filter((p) => p.status === 'EVALUATED');
-    } else if (statusFilter === 'PENDING') {
-      filteredList = mappedPlayers.filter((p) => p.status === 'PENDING');
-    } else if (statusFilter === 'EXPIRED') {
-      filteredList = mappedPlayers.filter((p) => p.status === 'EXPIRED');
-    }
-
-    const totalCount = filteredList.length;
-    const totalPage = Math.ceil(totalCount / limit) || 1;
-    const skip = (page - 1) * limit;
-    const paginatedPlayers = filteredList.slice(skip, skip + limit);
-
     return {
-      meta: {
-        page,
-        limit,
-        total: totalCount,
-        totalPage,
-      },
+      meta,
       data: {
         summary: {
-          total: mappedPlayers.length,
-          pendingCount,
-          evaluatedCount,
-          expiredCount,
-          overdueCount: expiredCount,
+          total: allIds.size,
+          pendingCount: counts.PENDING,
+          evaluatedCount: counts.EVALUATED,
+          expiredCount: counts.EXPIRED,
+          overdueCount: counts.EXPIRED,
         },
-        players: paginatedPlayers,
+        players: rows,
       },
     };
   }
 
-  async getPlayerEvaluationDetails(userId: string, targetId: string) {
-    const coach = userId ? await CoachProfile.findOne({ userId }) : null;
-
-    let evaluation: any = null;
-    let player: any = null;
-
-    if (Types.ObjectId.isValid(targetId)) {
-      evaluation = await PlayerEvaluation.findById(targetId).populate('playerId').lean();
-      if (evaluation && evaluation.playerId) {
-        player = evaluation.playerId;
-      }
+  /** Resolve an evaluation id OR a player id into { evaluation, player }. */
+  private async resolveTarget(
+    targetId: string,
+    opts: { coachProfileId?: Types.ObjectId; submittedOnly?: boolean },
+  ) {
+    if (!targetId || !Types.ObjectId.isValid(targetId)) {
+      throw new AppError(400, 'Invalid evaluation or player ID');
     }
+    let evaluation: any = await PlayerEvaluation.findById(targetId)
+      .populate('coachId')
+      .populate('academyId')
+      .lean();
+    let player: any;
 
-    if (!player && Types.ObjectId.isValid(targetId)) {
+    if (evaluation) {
+      player = await PlayerProfile.findById(evaluation.playerId).lean();
+    } else {
       player = await PlayerProfile.findById(targetId).lean();
       if (player) {
-        const query: any = { playerId: player._id };
-        if (coach) query.coachId = coach._id;
-        evaluation = await PlayerEvaluation.findOne(query).sort({ createdAt: -1 }).lean();
-      }
-    }
-
-    if (!player) {
-      throw new AppError(404, 'Player or evaluation record not found');
-    }
-
-    const techniques = evaluation?.techniques
-      ? evaluation.techniques instanceof Map
-        ? Object.fromEntries(evaluation.techniques)
-        : evaluation.techniques
-      : {};
-    const characteristics = evaluation?.characteristics
-      ? evaluation.characteristics instanceof Map
-        ? Object.fromEntries(evaluation.characteristics)
-        : evaluation.characteristics
-      : {};
-    const physical = evaluation?.physical
-      ? evaluation.physical instanceof Map
-        ? Object.fromEntries(evaluation.physical)
-        : evaluation.physical
-      : {};
-
-    return {
-      player: {
-        _id: player._id,
-        name: player.fullName,
-        age: player.age || null,
-        avatar: player.profileImage || '',
-        position: player.position || '',
-        centre: player.currentClub || coach?.currentClub || 'N/A',
-        rating: evaluation?.overallRating || player.overallRating || 0,
-      },
-      evaluation: {
-        _id: evaluation?._id || null,
-        date: evaluation?.evaluationDate || new Date(),
-        status: evaluation?.status || 'PENDING',
-        overallRating: evaluation?.overallRating || player.overallRating || 0,
-        technicalScore: evaluation?.technicalScore || 0,
-        physicalScore: evaluation?.physicalScore || 0,
-        mentalScore: evaluation?.mentalScore || 0,
-        techniques,
-        characteristics,
-        physical,
-        notes: evaluation?.notes || evaluation?.coachFeedback || '',
-        nextEvaluationDue: evaluation?.nextEvaluationDue || null,
-      },
-    };
-  }
-
-  async getPlayerEvaluationProgressPdfData(userId?: string, targetId?: string) {
-    let coach = userId ? await CoachProfile.findOne({ userId }) : null;
-    let evaluation: any = null;
-    let player: any = null;
-
-    if (targetId && Types.ObjectId.isValid(targetId)) {
-      evaluation = await PlayerEvaluation.findById(targetId)
-        .populate('playerId')
-        .populate('coachId')
-        .populate('academyId')
-        .lean();
-      if (evaluation && evaluation.playerId) {
-        player = evaluation.playerId;
-        if (!coach && evaluation.coachId) {
-          coach = evaluation.coachId;
-        }
-      }
-    }
-
-    if (!player && targetId && Types.ObjectId.isValid(targetId)) {
-      player = await PlayerProfile.findById(targetId).lean();
-      if (player) {
-        evaluation = await PlayerEvaluation.findOne({
-          playerId: player._id,
-        })
+        const filter: Record<string, unknown> = { playerId: player._id };
+        if (opts.coachProfileId) filter.coachId = opts.coachProfileId;
+        if (opts.submittedOnly) filter.status = { $in: ['EVALUATED', 'EXPIRED', 'OVERDUE'] };
+        evaluation = await PlayerEvaluation.findOne(filter)
           .sort({ evaluationDate: -1, createdAt: -1 })
           .populate('coachId')
           .populate('academyId')
           .lean();
-        if (evaluation && evaluation.coachId && !coach) {
-          coach = evaluation.coachId;
-        }
       }
     }
+    if (!player) {
+      throw new AppError(404, 'Player or evaluation record not found');
+    }
+    return { evaluation, player };
+  }
 
-    if (!player && !evaluation) {
-      throw new AppError(404, 'Evaluation progress report not found');
+  async getPlayerEvaluationDetails(user: { userId?: string; role?: string }, targetId: string) {
+    const coach =
+      user?.role === 'COACH' ? await CoachProfile.findOne({ userId: user.userId }) : null;
+    const { evaluation, player } = await this.resolveTarget(targetId, {
+      coachProfileId: coach?._id,
+    });
+    await assertCanViewEvaluation(user, evaluation, player);
+
+    const status = evaluation ? effectiveEvaluationStatus(evaluation) : null;
+    const submitted = status === 'EVALUATED' || status === 'EXPIRED';
+
+    return {
+      player: {
+        _id: player._id,
+        name: player.fullName || '',
+        age: player.age ?? null,
+        avatar: player.profileImage || '',
+        position: player.position || '',
+        centre: player.currentClub || '',
+        rating: (submitted ? evaluation?.overallRating : null) ?? player.overallRating ?? 0,
+      },
+      evaluation: {
+        _id: evaluation?._id || null,
+        date: submitted ? evaluation?.evaluationDate || null : null,
+        status: status || 'NEED_EVALUATION',
+        overallRating: submitted ? (evaluation?.overallRating ?? null) : null,
+        technicalScore: evaluation?.technicalScore ?? null,
+        physicalScore: evaluation?.physicalScore ?? null,
+        mentalScore: evaluation?.mentalScore ?? null,
+        techniques: mapToObject(evaluation?.techniques),
+        characteristics: mapToObject(evaluation?.characteristics),
+        physical: mapToObject(evaluation?.physical),
+        notes: evaluation?.notes || '',
+        coachFeedback: evaluation?.coachFeedback || '',
+        nextEvaluationDue: submitted ? evaluation?.nextEvaluationDue || null : null,
+        requestedAt: evaluation?.createdAt || null,
+      },
+    };
+  }
+
+  /** Data for the downloadable progress report. Only SUBMITTED evaluations have a report. */
+  async getPlayerEvaluationProgressPdfData(
+    user: { userId?: string; role?: string } | undefined,
+    targetId: string,
+  ) {
+    const { evaluation, player } = await this.resolveTarget(targetId, { submittedOnly: true });
+    await assertCanViewEvaluation(user, evaluation, player);
+
+    if (!evaluation || !['EVALUATED', 'EXPIRED', 'OVERDUE'].includes(evaluation.status)) {
+      throw new AppError(404, 'No submitted evaluation report found for this player');
     }
 
-    const techniques = evaluation?.techniques
-      ? evaluation.techniques instanceof Map
-        ? Object.fromEntries(evaluation.techniques)
-        : evaluation.techniques
-      : {};
-    const characteristics = evaluation?.characteristics
-      ? evaluation.characteristics instanceof Map
-        ? Object.fromEntries(evaluation.characteristics)
-        : evaluation.characteristics
-      : {};
-    const physical = evaluation?.physical
-      ? evaluation.physical instanceof Map
-        ? Object.fromEntries(evaluation.physical)
-        : evaluation.physical
-      : {};
-
-    const evalDate = evaluation?.evaluationDate || evaluation?.createdAt || new Date();
-    const formattedDate = new Date(evalDate).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-
-    const nextDue = evaluation?.nextEvaluationDue
-      ? new Date(evaluation.nextEvaluationDue).toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : new Date(new Date(evalDate).getTime() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString(
-          'en-GB',
-          {
+    const coach = evaluation.coachId as any;
+    const academy = evaluation.academyId as any;
+    const status = effectiveEvaluationStatus(evaluation);
+    const overallRating = evaluation.overallRating ?? null;
+    const fmt = (d?: Date | string | null) =>
+      d
+        ? new Date(d).toLocaleDateString('en-GB', {
             day: 'numeric',
             month: 'long',
             year: 'numeric',
-          },
-        );
-
-    const academyName =
-      (evaluation?.academyId as any)?.name ||
-      player?.academy ||
-      coach?.currentClub ||
-      'K10 Football Academy';
-    const academyLogo = (evaluation?.academyId as any)?.logo || '';
-
-    const overallRating = evaluation?.overallRating ?? player?.overallRating ?? 0;
+          })
+        : '';
+    const evalDate = evaluation.evaluationDate || null;
+    const nextDue =
+      evaluation.nextEvaluationDue || (evalDate ? addEvaluationCycle(new Date(evalDate)) : null);
 
     return {
       reportTitle: 'Player Development Programme Progress Report',
-      evaluationId: evaluation?._id || targetId,
+      evaluationId: evaluation._id,
       evaluationDate: evalDate,
-      formattedDate,
-      cycle: '3-Month Progress Evaluation',
-      status: evaluation?.status || 'COMPLETED',
+      formattedDate: fmt(evalDate),
+      cycle: EVALUATION_CYCLE_LABEL,
+      status,
       nextEvaluationDue: nextDue,
+      formattedNextEvaluationDue: fmt(nextDue),
       overallRating,
-      grade: overallRating >= 90 ? 'EXCELLENT' : overallRating >= 75 ? 'GOOD' : 'NEEDS_IMPROVEMENT',
+      grade: scoreToGrade(overallRating),
       categoryScores: {
-        technical: evaluation?.technicalScore ?? 0,
-        physical: evaluation?.physicalScore ?? 0,
-        mental: evaluation?.mentalScore ?? 0,
+        technical: evaluation.technicalScore ?? null,
+        physical: evaluation.physicalScore ?? null,
+        mental: evaluation.mentalScore ?? null,
       },
+      improvementDelta: evaluation.improvementDelta ?? 0,
       player: {
-        id: player?._id,
-        name: player?.fullName || 'Player',
-        position: player?.position || 'Forward',
-        age: player?.age || null,
-        avatar: player?.profileImage || '',
-        academy: academyName,
-        currentClub: player?.currentClub || academyName,
+        id: player._id,
+        name: player.fullName || '',
+        position: player.position || '',
+        age: player.age ?? null,
+        avatar: player.profileImage || '',
+        academy: academy?.name || '',
+        currentClub: player.currentClub || '',
       },
       coach: {
-        id: coach?._id,
-        name: coach?.fullName || 'Assigned Coach',
-        club: coach?.currentClub || academyName,
+        id: coach?._id || null,
+        name: coach?.fullName || '',
+        club: coach?.currentClub || '',
         avatar: coach?.profileImage || '',
-        license:
-          (coach as any)?.coachingLicenseLevel ||
-          (coach as any)?.licenseNumber ||
-          (coach as any)?.title ||
-          'UEFA Certified',
+        license: coach?.coachingLicenseLevel || coach?.licenseStatus || '',
       },
       academy: {
-        name: academyName,
-        logo: academyLogo,
+        id: academy?._id || null,
+        name: academy?.name || '',
+        logo: academy?.logo || '',
       },
       breakdown: {
-        techniques,
-        characteristics,
-        physical,
+        techniques: mapToObject(evaluation.techniques),
+        characteristics: mapToObject(evaluation.characteristics),
+        physical: mapToObject(evaluation.physical),
       },
-      coachFeedback:
-        evaluation?.coachFeedback || evaluation?.notes || 'Player is performing consistently well.',
-      notes: evaluation?.notes || '',
-      downloadUrl: `/api/v1/coaches/me/player-evaluations/${evaluation?._id || targetId}/pdf?download=true`,
+      coachFeedback: evaluation.coachFeedback || '',
+      notes: evaluation.notes || '',
       isOfficial: true,
       generatedAt: new Date(),
     };
   }
 
-  async submitPlayerEvaluation(userOrUserId: any, targetId: string, payload: any) {
-    const userId = typeof userOrUserId === 'string' ? userOrUserId : userOrUserId?.userId;
-    const userRole = typeof userOrUserId === 'object' ? userOrUserId?.role : undefined;
-
-    const coach = await CoachProfile.findOne({ userId });
-    let academy = null;
-
-    if (!coach && (userRole === 'ACADEMY' || userRole === 'SUPER_ADMIN')) {
-      academy = await AcademyProfile.findOne({ userId });
+  /**
+   * Coach submits an evaluation.
+   * targetId = an open evaluation request id (assigned to this coach), OR a player id:
+   *   - uses the coach's open request for that player if there is one,
+   *   - otherwise the player must be on one of the coach's assigned teams.
+   */
+  async submitPlayerEvaluation(
+    user: { userId?: string; role?: string },
+    targetId: string,
+    payload: any,
+  ) {
+    const coach = await CoachProfile.findOne({ userId: user?.userId });
+    if (!coach) {
+      throw new AppError(403, 'Only coaches can submit player evaluations');
+    }
+    if (!targetId || !Types.ObjectId.isValid(targetId)) {
+      throw new AppError(400, 'Invalid evaluation or player ID');
     }
 
-    if (!coach && !academy) {
-      // Check if user is academy user
-      academy = await AcademyProfile.findOne({ userId });
-      if (!academy) {
-        throw new AppError(404, 'Coach or Academy profile not found');
+    let evaluation: any = await PlayerEvaluation.findById(targetId);
+    let player: any;
+
+    if (evaluation) {
+      if (String(evaluation.coachId) !== String(coach._id)) {
+        throw new AppError(403, 'Only the assigned coach can submit this player evaluation');
       }
-    }
-
-    let evaluation: any = null;
-    let playerId = targetId || payload.playerId;
-
-    if (targetId && Types.ObjectId.isValid(targetId)) {
-      evaluation = await PlayerEvaluation.findById(targetId);
-      if (evaluation) {
-        playerId = evaluation.playerId.toString();
+      if (evaluation.status !== 'NEED_EVALUATION') {
+        throw new AppError(
+          409,
+          'This evaluation has already been submitted. To re-evaluate, submit using the player ID.',
+        );
       }
-    }
+      player = await PlayerProfile.findById(evaluation.playerId);
+      if (!player) throw new AppError(404, 'Player not found');
+    } else {
+      player = await PlayerProfile.findById(targetId);
+      if (!player) throw new AppError(404, 'Player or evaluation request not found');
 
-    if (!evaluation && payload.evaluationId && Types.ObjectId.isValid(payload.evaluationId)) {
-      evaluation = await PlayerEvaluation.findById(payload.evaluationId);
-      if (evaluation) {
-        playerId = evaluation.playerId.toString();
-      }
-    }
+      evaluation = await PlayerEvaluation.findOne({
+        playerId: player._id,
+        coachId: coach._id,
+        status: 'NEED_EVALUATION',
+      }).sort({ createdAt: -1 });
 
-    const player = await PlayerProfile.findById(playerId);
-    if (!player) {
-      throw new AppError(404, 'Player not found');
-    }
-
-    if (!evaluation) {
-      const evalFilter: any = { playerId: player._id };
-      if (coach) {
-        evalFilter.coachId = coach._id;
-      } else if (academy) {
-        evalFilter.academyId = academy._id;
-      }
-      evalFilter.status = { $in: ['NEED_EVALUATION', 'PENDING'] };
-
-      evaluation = await PlayerEvaluation.findOne(evalFilter);
       if (!evaluation) {
+        const team = await Team.findOne({ coachIds: coach._id, playerIds: player._id })
+          .select('academyId')
+          .lean();
+        if (!team) {
+          throw new AppError(
+            403,
+            'You can only evaluate players on your assigned teams or players the academy requested from you.',
+          );
+        }
         evaluation = new PlayerEvaluation({
           playerId: player._id,
-          coachId: coach ? coach._id : player.verifyingCoachId || new Types.ObjectId(),
-          academyId: academy ? academy._id : coach?.academyId || player.academyId,
+          coachId: coach._id,
+          academyId: (team as any).academyId,
           status: 'NEED_EVALUATION',
         });
       }
     }
 
-    // Unrecognised / empty grades return null and are skipped: no fabricated scores.
-    const gradeToScore = (val: any): number | null => {
-      if (typeof val === 'number') return Number.isFinite(val) ? val : null;
-      if (typeof val === 'string') {
-        const upper = val.toUpperCase().trim();
-        if (!upper) return null;
-        if (upper.includes('EXCELLENT')) return 95;
-        if (upper.includes('GOOD')) return 80;
-        if (upper.includes('IMPROVEMENT')) return 65;
-        const parsed = Number(val);
-        if (!isNaN(parsed)) return parsed;
-      }
-      return null;
-    };
-
-    const calcCategoryAvg = (catObj?: Record<string, any>): number | null => {
-      if (!catObj || typeof catObj !== 'object') return null;
-      const scores = Object.values(catObj)
-        .map(gradeToScore)
-        .filter((v): v is number => v !== null);
-      if (scores.length === 0) return null;
-      return Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length);
-    };
+    // Graded sections (client grades only), falling back to what the request already holds
+    const techniques =
+      normalizeGrades(payload.techniques, 'techniques') ?? mapToObject(evaluation.techniques);
+    const characteristics =
+      normalizeGrades(payload.characteristics, 'characteristics') ??
+      mapToObject(evaluation.characteristics);
+    const physical =
+      normalizeGrades(payload.physical, 'physical') ?? mapToObject(evaluation.physical);
 
     const explicitScore = (val: any): number | null => {
       if (val === undefined || val === null || val === '') return null;
       const n = Number(val);
       return Number.isFinite(n) ? n : null;
     };
+    const categoryAvg = (obj: Record<string, any>): number | null => {
+      const scores = Object.values(obj || {})
+        .map(gradeToScore)
+        .filter((v): v is number => v !== null);
+      return scores.length
+        ? Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length)
+        : null;
+    };
 
-    const techniques =
-      payload.techniques ||
-      (evaluation.techniques
-        ? evaluation.techniques instanceof Map
-          ? Object.fromEntries(evaluation.techniques)
-          : evaluation.techniques
-        : {});
-    const characteristics =
-      payload.characteristics ||
-      (evaluation.characteristics
-        ? evaluation.characteristics instanceof Map
-          ? Object.fromEntries(evaluation.characteristics)
-          : evaluation.characteristics
-        : {});
-    const physical =
-      payload.physical ||
-      (evaluation.physical
-        ? evaluation.physical instanceof Map
-          ? Object.fromEntries(evaluation.physical)
-          : evaluation.physical
-        : {});
-
-    const technicalScore = explicitScore(payload.technicalScore) ?? calcCategoryAvg(techniques);
-    const mentalScore = explicitScore(payload.mentalScore) ?? calcCategoryAvg(characteristics);
-    const physicalScore = explicitScore(payload.physicalScore) ?? calcCategoryAvg(physical);
+    const technicalScore = explicitScore(payload.technicalScore) ?? categoryAvg(techniques);
+    const mentalScore = explicitScore(payload.mentalScore) ?? categoryAvg(characteristics);
+    const physicalScore = explicitScore(payload.physicalScore) ?? categoryAvg(physical);
 
     if (technicalScore === null && mentalScore === null && physicalScore === null) {
       throw new AppError(
@@ -538,32 +414,32 @@ export class CoachEvaluationsService {
       );
     }
 
-    // Coach-updated attributes, then the SAME recalculation a player profile edit triggers
-    // (Excel position formula). Scores that were not provided leave attributes untouched.
+    const ratingBefore = player.overallRating;
+
+    // Coach-updated attributes, then the SAME Excel recalculation a profile edit triggers.
     const recalculated = await playerStatsService.applyEvaluatorAttributes(player._id, {
       stamina: physicalScore,
       strength: physicalScore,
       ballControl: technicalScore,
       dribbling: technicalScore,
     });
-    const overallRating = recalculated?.overallRating ?? player.overallRating ?? 0;
+    const overallRating = recalculated?.overallRating ?? ratingBefore ?? 0;
 
-    // Calculate improvementDelta compared to the previous evaluation (if any)
     const previousEvaluation = await PlayerEvaluation.findOne({
       playerId: player._id,
       _id: { $ne: evaluation._id },
-      status: 'EVALUATED',
+      status: { $in: ['EVALUATED', 'EXPIRED', 'OVERDUE'] },
     }).sort({ evaluationDate: -1, createdAt: -1 });
 
     const improvementDelta =
-      previousEvaluation?.overallRating !== undefined
+      typeof previousEvaluation?.overallRating === 'number'
         ? overallRating - previousEvaluation.overallRating
-        : player.overallRating
-          ? overallRating - player.overallRating
+        : typeof ratingBefore === 'number'
+          ? overallRating - ratingBefore
           : 0;
 
     const now = new Date();
-    const nextDue = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 3-month cycle (90 days)
+    const nextDue = addEvaluationCycle(now);
 
     evaluation.evaluationDate = now;
     evaluation.overallRating = overallRating;
@@ -577,12 +453,10 @@ export class CoachEvaluationsService {
     evaluation.status = 'EVALUATED';
     evaluation.nextEvaluationDue = nextDue;
     evaluation.expiresAt = nextDue;
-    evaluation.coachFeedback = payload.coachFeedback || payload.notes || evaluation.coachFeedback;
-    evaluation.notes = payload.notes || payload.coachFeedback || evaluation.notes;
+    evaluation.coachFeedback = payload.coachFeedback ?? evaluation.coachFeedback;
+    evaluation.notes = payload.notes ?? evaluation.notes;
     await evaluation.save();
 
-    // overallRating on the profile was already set by recalculatePlayerStats; only record
-    // the evaluation cycle here (updateOne so the recalculated fields are not overwritten).
     await PlayerProfile.updateOne(
       { _id: player._id },
       {
@@ -590,22 +464,30 @@ export class CoachEvaluationsService {
           'playerEvaluation.lastEvaluationDate': now,
           'playerEvaluation.nextEvaluationDue': nextDue,
           'playerEvaluation.overallRating': overallRating,
-          'playerEvaluation.evaluationCycle': '3_MONTHS',
+          'playerEvaluation.evaluationCycle': EVALUATION_CYCLE_KEY,
         },
       },
     );
     await playerCacheService.invalidatePlayerCache(player._id, player.userId);
 
-    // Notify player
     if (player.userId) {
-      const evaluatorName = coach?.fullName || academy?.name || 'Academy Staff';
       await notificationService.createNotification({
         recipientId: player.userId,
         recipientRole: 'PLAYER',
-        title: 'Player Development Report Completed',
-        message: `${evaluatorName} has completed your Player Development Programme progress evaluation. Overall Rating: ${overallRating}/100.`,
+        title: 'Player Evaluation Completed',
+        message: `Coach ${coach.fullName || ''} has completed your 4-month progress evaluation. Overall Rating: ${overallRating}/100.`,
         type: 'PLAYER_EVALUATION_COMPLETED',
         data: { evaluationId: evaluation._id, overallRating },
+      });
+    }
+    if (evaluation.requestedByManagerId) {
+      await notificationService.createNotification({
+        recipientId: evaluation.requestedByManagerId,
+        recipientRole: 'ACADEMY',
+        title: 'Requested Player Evaluation Submitted',
+        message: `Coach ${coach.fullName || ''} submitted the evaluation for ${player.fullName || 'the player'}. Overall Rating: ${overallRating}/100.`,
+        type: 'PLAYER_EVALUATION_COMPLETED',
+        data: { evaluationId: evaluation._id, playerId: player._id, overallRating },
       });
     }
 
@@ -613,7 +495,7 @@ export class CoachEvaluationsService {
       evaluation,
       player: {
         _id: player._id,
-        name: player.fullName,
+        name: player.fullName || '',
         overallRating,
       },
     };

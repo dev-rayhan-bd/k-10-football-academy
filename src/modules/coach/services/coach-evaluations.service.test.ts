@@ -7,6 +7,7 @@ jest.mock('@/modules/academy/academy.model', () => ({
   PlayerEvaluation: Object.assign(jest.fn(), { findById: jest.fn(), findOne: jest.fn() }),
   AcademyProfile: { findOne: jest.fn() },
   AcademyCoach: {},
+  Team: { findOne: jest.fn(), find: jest.fn() },
 }));
 jest.mock('@/modules/player/player.model', () => ({
   PlayerProfile: { findById: jest.fn(), updateOne: jest.fn() },
@@ -24,20 +25,21 @@ jest.mock('@/modules/notification/notification.service', () => ({
 }));
 
 import { CoachProfile } from '@/modules/coach/coach.model';
-import { PlayerEvaluation } from '@/modules/academy/academy.model';
+import { PlayerEvaluation, Team } from '@/modules/academy/academy.model';
 import { PlayerProfile, PlayerAttributes, FifaCardStats } from '@/modules/player/player.model';
 import { playerStatsService } from '@/modules/player/services/player-stats.service';
 import { coachEvaluationsService } from './coach-evaluations.service';
-import { academyEvaluationsService } from '@/modules/academy/services/academy-evaluations.service';
 
 const playerId = new Types.ObjectId();
 const coachId = new Types.ObjectId();
 
-const makeEvaluation = () => ({
+const makeEvaluation = (overrides: Record<string, unknown> = {}) => ({
   _id: new Types.ObjectId(),
   playerId,
   coachId,
+  status: 'NEED_EVALUATION',
   save: jest.fn().mockResolvedValue(undefined),
+  ...overrides,
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -127,7 +129,7 @@ describe('Coach evaluation uses the same recalculation as a player profile edit'
     await coachEvaluationsService.submitPlayerEvaluation(
       { userId: 'u1', role: 'COACH' },
       evaluation._id.toString(),
-      { techniques: { dribbling: 'Good', unknownGrade: 'n/a' } }, // 'n/a' skipped, avg 80
+      { techniques: { dribbling: 'Good', firstTouch: '' } }, // empty grade skipped, avg 80
     );
 
     expect(apply).toHaveBeenCalledWith(playerId, {
@@ -154,29 +156,73 @@ describe('Coach evaluation uses the same recalculation as a player profile edit'
     expect(evaluation.save).not.toHaveBeenCalled();
   });
 
-  it('academy module (assigned coach): same shared recalculation', async () => {
+  it('sets the next evaluation 4 months ahead', async () => {
     const evaluation = makeEvaluation();
     (PlayerEvaluation.findById as jest.Mock).mockResolvedValue(evaluation);
-    (PlayerEvaluation.findOne as jest.Mock).mockReturnValue({
-      sort: jest.fn().mockResolvedValue(null),
-    });
-    const apply = jest
+    jest
       .spyOn(playerStatsService, 'applyEvaluatorAttributes')
-      .mockResolvedValue({ overallRating: 77 } as any);
+      .mockResolvedValue({ overallRating: 70 } as any);
 
-    const result: any = await academyEvaluationsService.submitPlayerEvaluation(
+    await coachEvaluationsService.submitPlayerEvaluation(
+      { userId: 'u1', role: 'COACH' },
       evaluation._id.toString(),
-      'u1',
-      { technicalScore: 90, physicalScore: 70 } as any,
+      { technicalScore: 70 },
     );
+    const due = (evaluation as any).nextEvaluationDue as Date;
+    const expected = new Date((evaluation as any).evaluationDate);
+    expected.setMonth(expected.getMonth() + 4);
+    expect(due.getTime()).toBe(expected.getTime());
+  });
 
-    expect(apply).toHaveBeenCalledWith(playerId, {
-      stamina: 70,
-      strength: 70,
-      ballControl: 90,
-      dribbling: 90,
+  it('rejects a grade that is not a client grade', async () => {
+    const evaluation = makeEvaluation();
+    (PlayerEvaluation.findById as jest.Mock).mockResolvedValue(evaluation);
+    await expect(
+      coachEvaluationsService.submitPlayerEvaluation(
+        { userId: 'u1', role: 'COACH' },
+        evaluation._id.toString(),
+        { techniques: { dribbling: 'n/a' } },
+      ),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('rejects an evaluation request assigned to another coach', async () => {
+    const evaluation = makeEvaluation({ coachId: new Types.ObjectId() });
+    (PlayerEvaluation.findById as jest.Mock).mockResolvedValue(evaluation);
+    await expect(
+      coachEvaluationsService.submitPlayerEvaluation(
+        { userId: 'u1', role: 'COACH' },
+        evaluation._id.toString(),
+        { technicalScore: 80 },
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('rejects re-submitting an already submitted evaluation', async () => {
+    const evaluation = makeEvaluation({ status: 'EVALUATED' });
+    (PlayerEvaluation.findById as jest.Mock).mockResolvedValue(evaluation);
+    await expect(
+      coachEvaluationsService.submitPlayerEvaluation(
+        { userId: 'u1', role: 'COACH' },
+        evaluation._id.toString(),
+        { technicalScore: 80 },
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('rejects a player id that is not on the coach team and has no open request', async () => {
+    (PlayerEvaluation.findById as jest.Mock).mockResolvedValue(null);
+    (Team.findOne as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
     });
-    expect(result.overallRating).toBe(77); // not (90 + 70) / 2
-    expect(result.mentalScore).toBeUndefined();
+    const apply = jest.spyOn(playerStatsService, 'applyEvaluatorAttributes');
+    await expect(
+      coachEvaluationsService.submitPlayerEvaluation(
+        { userId: 'u1', role: 'COACH' },
+        playerId.toString(),
+        { technicalScore: 80 },
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(apply).not.toHaveBeenCalled();
   });
 });

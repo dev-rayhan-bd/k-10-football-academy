@@ -257,63 +257,46 @@ export class AcademyService {
     return await academyEvaluationsService.createPlayerEvaluation(academyId, payload);
   }
 
-  async getPlayerEvaluations(academyId: string, playerId?: string) {
-    return await academyEvaluationsService.getPlayerEvaluations(academyId, playerId);
+  async getPlayerEvaluations(
+    user: { userId?: string; role?: string },
+    query: { academyId?: string; playerId?: string },
+  ) {
+    return await academyEvaluationsService.getPlayerEvaluations(user, query);
   }
 
   async getAcademyPlayerEvaluationDashboard(
-    academyIdentifier: string,
+    user: { userId?: string; role?: string },
+    academyIdParam: string | undefined,
     query: Record<string, unknown> = {},
   ) {
     return await academyEvaluationsService.getAcademyPlayerEvaluationDashboard(
-      academyIdentifier,
+      user,
+      academyIdParam,
       query,
     );
   }
 
-  async getAcademyPlayerEvaluationDetails(targetId: string, _academyIdentifier?: string) {
-    return await academyEvaluationsService.getAcademyPlayerEvaluationDetails(
-      targetId,
-      _academyIdentifier,
-    );
+  async getAcademyPlayerEvaluationDetails(
+    user: { userId?: string; role?: string },
+    targetId: string,
+  ) {
+    return await academyEvaluationsService.getAcademyPlayerEvaluationDetails(user, targetId);
   }
 
-  async getEvaluationDashboard(academyIdentifier: string) {
-    return await academyEvaluationsService.getEvaluationDashboard(academyIdentifier);
+  async getEvaluationDashboard(user: { userId?: string; role?: string }, academyIdParam?: string) {
+    return await academyEvaluationsService.getEvaluationDashboard(user, academyIdParam);
   }
 
   async requestPlayerEvaluation(
-    academyIdentifier: string,
-    managerUserId: string,
+    user: { userId?: string; role?: string },
+    academyIdParam: string | undefined,
     payload: { playerId: string; coachId: string; notes?: string },
   ) {
-    return await academyEvaluationsService.requestPlayerEvaluation(
-      academyIdentifier,
-      managerUserId,
-      payload,
-    );
+    return await academyEvaluationsService.requestPlayerEvaluation(user, academyIdParam, payload);
   }
 
-  async sendEvaluationReminder(evaluationId: string, _managerUserId?: string) {
-    return await academyEvaluationsService.sendEvaluationReminder(evaluationId, _managerUserId);
-  }
-
-  async submitPlayerEvaluation(
-    evaluationId: string,
-    coachUserId: string,
-    payload: {
-      technicalScore: number;
-      physicalScore: number;
-      mentalScore: number;
-      overallRating?: number;
-      coachFeedback?: string;
-    },
-  ) {
-    return await academyEvaluationsService.submitPlayerEvaluation(
-      evaluationId,
-      coachUserId,
-      payload,
-    );
+  async sendEvaluationReminder(user: { userId?: string; role?: string }, evaluationId: string) {
+    return await academyEvaluationsService.sendEvaluationReminder(user, evaluationId);
   }
 
   // --- AcademyCoachesService Delegates ---

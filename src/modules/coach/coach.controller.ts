@@ -716,9 +716,8 @@ export const getPlayerEvaluationsDashboard = catchAsync(async (req: Request, res
 });
 
 export const getPlayerEvaluationDetails = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId;
   const { id } = req.params;
-  const result = await coachService.getPlayerEvaluationDetails(userId, id);
+  const result = await coachService.getPlayerEvaluationDetails((req as any).user, id);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -740,10 +739,10 @@ export const submitPlayerEvaluation = catchAsync(async (req: Request, res: Respo
 });
 
 export const getPlayerEvaluationPdfData = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.userId;
-  const { id, evaluationId } = req.params;
-  const targetId = id || evaluationId;
-  const result = await coachService.getPlayerEvaluationProgressPdfData(userId, targetId);
+  const result = await coachService.getPlayerEvaluationProgressPdfData(
+    (req as any).user,
+    req.params.id,
+  );
   sendResponse(res, {
     statusCode: 200,
     success: true,

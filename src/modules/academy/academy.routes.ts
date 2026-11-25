@@ -70,7 +70,6 @@ import {
   getEvaluationDashboard,
   requestPlayerEvaluation,
   sendEvaluationReminder,
-  submitPlayerEvaluation,
   getPlayerEvaluations,
   inviteCoach,
   requestCoachAffiliation,
@@ -279,17 +278,16 @@ router.get(
   auth('ACADEMY', 'SUPER_ADMIN'),
   getEvaluationDashboard,
 );
-router.get('/evaluations', auth(), getPlayerEvaluations);
+router.get(
+  '/evaluations',
+  auth('ACADEMY', 'COACH', 'PLAYER', 'SUPER_ADMIN', 'ADMIN'),
+  getPlayerEvaluations,
+);
 router.post('/evaluations/request', auth('ACADEMY', 'SUPER_ADMIN'), requestPlayerEvaluation);
 router.post(
   '/evaluations/:evaluationId/remind',
   auth('ACADEMY', 'SUPER_ADMIN'),
   sendEvaluationReminder,
-);
-router.post(
-  '/evaluations/:evaluationId/submit',
-  auth('ACADEMY', 'COACH', 'SUPER_ADMIN'),
-  submitPlayerEvaluation,
 );
 
 // ==========================================
@@ -1379,22 +1377,12 @@ router.post(
 // ==========================================
 router.get(
   '/player-evaluations/dashboard',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  auth('ACADEMY', 'SUPER_ADMIN'),
   getAcademyPlayerEvaluationDashboard,
 );
 router.get(
   '/:academyId/player-evaluations/dashboard',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
-  getAcademyPlayerEvaluationDashboard,
-);
-router.get(
-  '/player-evaluations',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
-  getAcademyPlayerEvaluationDashboard,
-);
-router.get(
-  '/:academyId/player-evaluations',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH'),
+  auth('ACADEMY', 'SUPER_ADMIN'),
   getAcademyPlayerEvaluationDashboard,
 );
 
@@ -1403,19 +1391,9 @@ router.get(
   auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
   getAcademyPlayerEvaluationPdfData,
 );
-router.get(
-  '/:academyId/player-evaluations/:id/pdf',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
-  getAcademyPlayerEvaluationPdfData,
-);
 
 router.get(
   '/player-evaluations/:id',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
-  getAcademyPlayerEvaluationDetails,
-);
-router.get(
-  '/:academyId/player-evaluations/:id',
   auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER'),
   getAcademyPlayerEvaluationDetails,
 );

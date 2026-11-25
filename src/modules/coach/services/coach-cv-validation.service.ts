@@ -1,4 +1,9 @@
+import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
+import QueryBuilder from '@/builder/QueryBuilder';
+import { CV_VALIDATION_FEE } from '@/modules/player/services/player-cv-validation-request.service';
+
+const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 import { UserModel } from '@/modules/user/user.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { CoachProfile } from '../coach.model';
@@ -64,28 +69,36 @@ export class CoachCvValidationService {
     const coachClub = coach.currentClub || 'Official Academy';
 
     // 2. Check Player existence
+    if (!Types.ObjectId.isValid(playerId)) {
+      throw new AppError(400, 'Invalid player ID');
+    }
     const player = await PlayerProfile.findById(playerId);
     if (!player) {
       throw new AppError(404, 'Player profile not found');
     }
 
-    // 3. Strict Supervision Check: Coaches cannot validate players from other teams or clubs
-    const isSameAcademy =
-      player.academyId &&
-      coach.academyId &&
-      player.academyId.toString() === coach.academyId.toString();
-
-    const playerClub = player.currentClub || player.academy;
-    const isSameClub =
-      playerClub && coachClub && playerClub.trim().toLowerCase() === coachClub.trim().toLowerCase();
-
+    // 3. Only the coach the player requested (and paid for) may validate.
     const isDirectlyAssigned =
-      player.verifyingCoachId && player.verifyingCoachId.toString() === coach.userId.toString();
-
-    if (!isSameAcademy && !isSameClub && !isDirectlyAssigned) {
+      player.coachVerification?.coachId &&
+      player.coachVerification.coachId.toString() === coach.userId.toString();
+    if (!isDirectlyAssigned) {
       throw new AppError(
         403,
-        `Coaches are not permitted to validate CVs belonging to players from other teams or clubs. You can only validate players currently registered with your approved academy (${coachClub}).`,
+        'This player has not requested CV validation from you. Only the coach selected in the player’s validation request can validate this CV.',
+      );
+    }
+
+    const paymentStatus = player.coachVerification?.validationPaymentStatus;
+    if (paymentStatus === 'USED') {
+      throw new AppError(
+        409,
+        'This CV is already validated for the latest payment. The player must submit and pay a new validation request for re-validation.',
+      );
+    }
+    if (paymentStatus !== 'PAID') {
+      throw new AppError(
+        402,
+        'Payment Required: The player has not paid the CV validation fee yet. You can validate once the payment is completed.',
       );
     }
 
@@ -202,11 +215,16 @@ export class CoachCvValidationService {
       player.coachVerification?.certificateId ||
       `K10-CV-${player._id.toString().slice(-6).toUpperCase()}-${Date.now().toString().slice(-4)}`;
 
+    const paymentRef = player.coachVerification?.transactionId;
+    const paidFee = CV_VALIDATION_FEE;
+
     player.isVerifiedByCoach = true;
     player.verifyingCoachId = coach.userId;
     player.verifyingCoachLicense = coach.licenseStatus || 'UEFA Certified Coach';
     player.coachVerification = {
       isVerified: true,
+      coachId: coach.userId,
+      verifiedByCoachId: coach.userId,
       coachName: coach.fullName || 'Official Coach',
       licenseNumber: coach.licenseStatus || 'UEFA Licence',
       clubManaged: coachClub,
@@ -215,9 +233,12 @@ export class CoachCvValidationService {
       officialSealUrl:
         'https://res.cloudinary.com/k10-football/image/upload/v1/seals/k10-official-seal.png',
       certificateId: certId,
-      validationPaymentStatus: 'PAID',
-      validationFee: 24.0,
-      transactionId: player.coachVerification?.transactionId || undefined,
+      // The payment is now consumed; a re-validation needs a new paid request
+      validationPaymentStatus: 'USED',
+      validationFee: paidFee,
+      transactionId: paymentRef,
+      requestedAt: player.coachVerification?.requestedAt,
+      paidAt: player.coachVerification?.paidAt,
     };
     if (coach.academyId && !player.academyId) {
       player.academyId = coach.academyId;
@@ -225,21 +246,24 @@ export class CoachCvValidationService {
 
     await player.save({ validateModifiedOnly: true });
 
-    // 5b. Record 3-way commission split in AcademyFinanceTransaction:
-    // Total: $24.00 -> Authorised Coach: $12.00 (50%), Academy Admin: $6.00 (25%), K10 Platform: $6.00 (25%)
+    // 5b. Record 3-way commission split (50% coach / 25% academy / 25% platform) for THIS payment.
+    // Keyed by the Stripe session id so each paid validation is its own transaction.
     const targetAcademyId = coach.academyId || player.academyId;
     if (targetAcademyId) {
       await AcademyFinanceTransaction.findOneAndUpdate(
-        { playerId: player._id, transactionType: 'CV Validation' },
+        paymentRef
+          ? { paymentReference: paymentRef }
+          : { playerId: player._id, transactionType: 'CV Validation', paymentReference: null },
         {
           academyId: targetAcademyId,
           playerId: player._id,
-          coachId: coach._id || coach.userId,
+          coachId: coach._id,
+          paymentReference: paymentRef,
           transactionType: 'CV Validation',
-          cost: 24.0,
-          commissionAcademy: 6.0, // 25% share
-          commissionCoach: 12.0, // 50% share
-          commissionPlatform: 6.0, // 25% share
+          cost: paidFee,
+          commissionAcademy: paidFee * 0.25,
+          commissionCoach: paidFee * 0.5,
+          commissionPlatform: paidFee * 0.25,
           payoutStatus: 'PENDING_TRANSFER',
           payoutStatusAcademy: 'PENDING',
           payoutStatusCoach: 'PENDING',
@@ -311,173 +335,168 @@ export class CoachCvValidationService {
       throw new AppError(404, 'Coach profile not found');
     }
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Number(query.limit) || 10);
-
-    const targetAcademyId = (query.academyId as string) || coach.academyId;
-    const targetClub = (query.clubName as string) || coach.currentClub;
-
-    // Filter players under coach's academy/club or verified by coach
-    const playerFilter: any = {};
-    if (targetAcademyId) {
-      playerFilter.$or = [{ academyId: targetAcademyId }];
-      if (targetClub) {
-        playerFilter.$or.push({ currentClub: targetClub });
-      }
-    } else if (targetClub) {
-      playerFilter.currentClub = targetClub;
-    } else {
-      playerFilter.$or = [
-        { verifyingCoachId: coach.userId },
-        { 'coachVerification.coachName': coach.fullName },
-      ];
-    }
-
-    // Direct email search
-    if (query.email && typeof query.email === 'string') {
-      const emailRegex = new RegExp(String(query.email).trim(), 'i');
-      const matchedUserIds = await UserModel.find({ email: emailRegex }).distinct('_id');
-      playerFilter.userId = { $in: matchedUserIds };
-      delete playerFilter.$or;
-      delete playerFilter.currentClub;
-    }
-
-    // Search term filter (?searchTerm=...)
-    if (query.searchTerm && typeof query.searchTerm === 'string') {
-      const term = query.searchTerm.trim();
-      const searchRegex = new RegExp(term, 'i');
-      const matchedUserIds = await UserModel.find({
-        $or: [{ email: searchRegex }, { name: searchRegex }],
-      }).distinct('_id');
-
-      const orClauses: any[] = [
-        { fullName: searchRegex },
-        { position: searchRegex },
-        { currentClub: searchRegex },
-        { country: searchRegex },
-      ];
-
-      if (matchedUserIds.length > 0) {
-        orClauses.push({ userId: { $in: matchedUserIds } });
-      }
-
-      playerFilter.$and = playerFilter.$and || [];
-      playerFilter.$and.push({ $or: orClauses });
-    }
-
-    const allMatchingPlayers = await PlayerProfile.find(playerFilter)
-      .populate('userId', 'email name avatar')
-      .lean();
-
+    const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 
-    let pendingCount = 0;
-    let verifiedCount = 0;
-    let updatedThisMonthCount = 0;
-    let expiredCount = 0;
+    // A player is in this coach's list ONLY when:
+    //  - the player requested THIS coach (coachVerification.coachId, set by requestCvValidation), or
+    //  - THIS coach validated the CV (verifyingCoachId, set by validatePlayerCV).
+    // Never the whole academy / club, never CVs verified by another coach.
+    const me = coach.userId;
+    const scope = {
+      $or: [{ 'coachVerification.coachId': me }, { verifyingCoachId: me }],
+    };
 
-    const playerIds = allMatchingPlayers.map((p) => p._id);
-
-    // Aggregate match stats (goals, assists)
-    const matchStatsAgg = await MatchRecord.aggregate([
-      { $match: { playerId: { $in: playerIds } } },
-      {
-        $group: {
-          _id: '$playerId',
-          matches: { $sum: 1 },
-          goals: {
-            $sum: {
-              $ifNull: ['$goals', { $ifNull: ['$stats.goalScored', 0] }],
-            },
-          },
-          assists: {
-            $sum: {
-              $ifNull: ['$assists', { $ifNull: ['$stats.assists', 0] }],
-            },
-          },
-        },
+    // Payment states: UNPAID = checkout created, PAID = paid & waiting for coach, USED = validated
+    const pendingFilter = {
+      'coachVerification.coachId': me,
+      'coachVerification.validationPaymentStatus': 'PAID',
+    };
+    const verifiedByMe = {
+      verifyingCoachId: me,
+      $or: [{ isVerifiedByCoach: true }, { 'coachVerification.isVerified': true }],
+    };
+    const statusFilters: Record<string, Record<string, unknown>> = {
+      PENDING: pendingFilter,
+      AWAITING_PAYMENT: {
+        'coachVerification.coachId': me,
+        'coachVerification.validationPaymentStatus': 'UNPAID',
+        $nor: [verifiedByMe],
       },
+      VERIFIED: {
+        $and: [
+          verifiedByMe,
+          {
+            $or: [
+              { 'coachVerification.verifiedAt': { $gte: oneYearAgo } },
+              { 'coachVerification.verifiedAt': { $exists: false } },
+              { 'coachVerification.verifiedAt': null },
+            ],
+          },
+        ],
+        $nor: [pendingFilter],
+      },
+      EXPIRED: {
+        $and: [verifiedByMe, { 'coachVerification.verifiedAt': { $lt: oneYearAgo } }],
+        $nor: [pendingFilter],
+      },
+    };
+    const inScope = (extra: Record<string, unknown>) => ({ $and: [scope, extra] });
+
+    // Summary counts (always over the coach's full scope, independent of tab/search)
+    const [pendingValidations, verifiedCvs, expiredStatus, awaitingPayment, updatedThisMonth] =
+      await Promise.all([
+        PlayerProfile.countDocuments(inScope(statusFilters.PENDING)),
+        PlayerProfile.countDocuments(inScope(statusFilters.VERIFIED)),
+        PlayerProfile.countDocuments(inScope(statusFilters.EXPIRED)),
+        PlayerProfile.countDocuments(inScope(statusFilters.AWAITING_PAYMENT)),
+        PlayerProfile.countDocuments({
+          ...verifiedByMe,
+          'coachVerification.verifiedAt': { $gte: startOfMonth },
+        }),
+      ]);
+
+    // Resolve custom params into the base filter and strip them from the query.
+    // Everything is wrapped in $and so QueryBuilder.search()'s $or cannot overwrite the scope.
+    const listQuery: Record<string, unknown> = { ...query };
+    const andParts: Record<string, unknown>[] = [scope];
+    const statusParam =
+      typeof listQuery.status === 'string' ? listQuery.status.toUpperCase().trim() : '';
+    if (statusParam && statusParam !== 'ALL') {
+      if (!statusFilters[statusParam]) {
+        throw new AppError(
+          400,
+          `Invalid status. Allowed: ALL, ${Object.keys(statusFilters).join(', ')}`,
+        );
+      }
+      andParts.push(statusFilters[statusParam]);
+    }
+    if (typeof listQuery.email === 'string' && listQuery.email.trim()) {
+      const emailRegex = new RegExp(escapeRegex(listQuery.email.trim()), 'i');
+      const matchedUserIds = await UserModel.find({ email: emailRegex }).distinct('_id');
+      andParts.push({ userId: { $in: matchedUserIds } });
+    }
+    const baseFilter = { $and: andParts };
+    ['status', 'email', 'academyId', 'clubName'].forEach((k) => delete listQuery[k]);
+    delete listQuery.fields;
+
+    const playerQuery = new QueryBuilder(PlayerProfile.find(baseFilter), listQuery)
+      .search(['fullName', 'position', 'currentClub', 'country'])
+      .filter()
+      .sort()
+      .paginate();
+    const [players, meta] = await Promise.all([
+      playerQuery.modelQuery.populate('userId', 'email name avatar').lean(),
+      playerQuery.countTotal(),
     ]);
 
+    const playerIds = (players as any[]).map((p) => p._id);
+    const matchStatsAgg = playerIds.length
+      ? await MatchRecord.aggregate([
+          { $match: { playerId: { $in: playerIds } } },
+          {
+            $group: {
+              _id: '$playerId',
+              matches: { $sum: 1 },
+              goals: { $sum: { $ifNull: ['$goals', { $ifNull: ['$stats.goalScored', 0] }] } },
+              assists: { $sum: { $ifNull: ['$assists', { $ifNull: ['$stats.assists', 0] }] } },
+            },
+          },
+        ])
+      : [];
     const statsMap = new Map<string, any>();
     matchStatsAgg.forEach((s) => statsMap.set(s._id.toString(), s));
 
-    const processedList: any[] = [];
-
-    allMatchingPlayers.forEach((p: any) => {
+    const list = (players as any[]).map((p) => {
       const verifiedAt = p.coachVerification?.verifiedAt
         ? new Date(p.coachVerification.verifiedAt)
         : null;
-      const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
+      const meStr = me.toString();
+      const requestedMe = p.coachVerification?.coachId?.toString() === meStr;
+      const verifiedByMeRow =
+        p.verifyingCoachId?.toString() === meStr &&
+        Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
+      const payStatus = p.coachVerification?.validationPaymentStatus;
 
-      let status: 'VERIFIED' | 'PENDING' | 'EXPIRED';
-
-      if (isVerified && verifiedAt) {
-        if (verifiedAt < oneYearAgo) {
-          status = 'EXPIRED';
-          expiredCount++;
-        } else {
-          status = 'VERIFIED';
-          verifiedCount++;
-        }
-      } else {
-        status = 'PENDING';
-        pendingCount++;
-      }
-
-      const updatedAt = new Date(p.updatedAt || p.createdAt || 0);
-      if (updatedAt >= startOfMonth || (verifiedAt && verifiedAt >= startOfMonth)) {
-        updatedThisMonthCount++;
-      }
+      let status: 'VERIFIED' | 'EXPIRED' | 'PENDING' | 'AWAITING_PAYMENT';
+      if (requestedMe && payStatus === 'PAID') status = 'PENDING';
+      else if (verifiedByMeRow)
+        status = verifiedAt && verifiedAt < oneYearAgo ? 'EXPIRED' : 'VERIFIED';
+      else status = 'AWAITING_PAYMENT';
 
       const st = statsMap.get(p._id.toString()) || { goals: 0, assists: 0, matches: 0 };
 
-      processedList.push({
+      return {
         _id: p._id,
-        name: p.fullName,
+        name: p.fullName || '',
         email: (p.userId as any)?.email || '',
-        position: p.position,
+        position: p.position || '',
         avatar: p.profileImage || (p.userId as any)?.avatar || '',
         rating: p.overallRating || 0,
-        club: p.currentClub || coach.currentClub || 'Academy Player',
-        goals: st.goals,
-        assists: st.assists,
-        matches: st.matches,
-        lastValidated: verifiedAt ? verifiedAt.toISOString().split('T')[0] : 'Never',
+        club: p.currentClub || '',
+        goals: st.goals || 0,
+        assists: st.assists || 0,
+        matches: st.matches || 0,
+        lastValidated: verifiedAt ? verifiedAt.toISOString().split('T')[0] : null,
         status,
+        paymentStatus: p.coachVerification?.validationPaymentStatus || null,
+        canValidate: status === 'PENDING',
         createdAt: p.createdAt,
-      });
+      };
     });
 
-    // Filter by tab status if passed (?status=VERIFIED or PENDING or EXPIRED)
-    let filteredList = processedList;
-    if (query.status && typeof query.status === 'string' && query.status !== 'ALL') {
-      const s = query.status.toUpperCase().trim();
-      filteredList = processedList.filter((item) => item.status === s);
-    }
-
-    const total = filteredList.length;
-    const totalPage = Math.ceil(total / limit) || 1;
-    const skip = (page - 1) * limit;
-    const paginatedList = filteredList.slice(skip, skip + limit);
-
     return {
-      meta: {
-        page,
-        limit,
-        total,
-        totalPage,
-      },
+      meta,
       data: {
         summary: {
-          pendingValidations: pendingCount,
-          verifiedCvs: verifiedCount,
-          updatedThisMonth: updatedThisMonthCount,
-          expiredStatus: expiredCount,
+          pendingValidations,
+          verifiedCvs,
+          updatedThisMonth,
+          expiredStatus,
+          awaitingPayment,
         },
-        players: paginatedList,
+        players: list,
       },
     };
   }

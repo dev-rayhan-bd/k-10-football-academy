@@ -73,10 +73,12 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
   const webhookSecret = env.STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
 
   let event: any;
+  let signatureVerified = false;
   if (webhookSecret && sig) {
     const stripe = getStripeClient();
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      signatureVerified = true;
     } catch (err: any) {
       res
         .status(StatusCodes.BAD_REQUEST)
@@ -109,10 +111,31 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
     obj.metadata?.paymentType === 'CV_VALIDATION' ||
     obj.metadata?.type === 'CV_VALIDATION'
   ) {
-    const playerId = obj.metadata?.playerId;
-    const transactionId = obj.id || obj.payment_intent;
-    if (playerId) {
-      await playerCvValidationRequestService.finalizePaidCvValidation(playerId, transactionId);
+    // Fulfil ONLY a completed, paid checkout session (ignore expired/failed/payment_intent events)
+    const isCheckoutEvent =
+      (event.type === 'checkout.session.completed' ||
+        event.type === 'checkout.session.async_payment_succeeded') &&
+      obj.object === 'checkout.session' &&
+      typeof obj.id === 'string';
+    if (isCheckoutEvent) {
+      // Never trust an unsigned body: re-read the session from Stripe before fulfilling
+      const session = signatureVerified
+        ? obj
+        : await getStripeClient()
+            .checkout.sessions.retrieve(obj.id)
+            .catch(() => null);
+      if (
+        session &&
+        session.payment_status === 'paid' &&
+        session.metadata?.paymentType === 'CV_VALIDATION' &&
+        session.metadata?.playerId
+      ) {
+        await playerCvValidationRequestService.finalizePaidCvValidation(
+          session.metadata.playerId,
+          session.id,
+          session.amount_total,
+        );
+      }
     }
   } else if (
     obj.metadata?.paymentType === 'EVENT_ENTRY_FEE' ||

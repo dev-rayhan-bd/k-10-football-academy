@@ -141,9 +141,11 @@ export interface IPlayerProfile {
     digitalStamp?: string;
     officialSealUrl?: string;
     certificateId?: string;
-    validationPaymentStatus?: 'UNPAID' | 'PAID';
+    validationPaymentStatus?: 'UNPAID' | 'PAID' | 'USED';
     validationFee?: number;
     transactionId?: string;
+    requestedAt?: Date;
+    paidAt?: Date;
   };
   perceptionMetrics?: {
     spaceAwareness?: { score: number; trend: number; grade: string };

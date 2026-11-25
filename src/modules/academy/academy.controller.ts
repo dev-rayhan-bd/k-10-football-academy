@@ -455,8 +455,10 @@ export const getGameReports = catchAsync(async (req: Request, res: Response) => 
 });
 
 export const getEvaluationDashboard = catchAsync(async (req: Request, res: Response) => {
-  const academyId = req.params.academyId || (req as any).user.userId;
-  const result = await academyService.getEvaluationDashboard(academyId);
+  const result = await academyService.getEvaluationDashboard(
+    (req as any).user,
+    req.params.academyId,
+  );
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -466,9 +468,11 @@ export const getEvaluationDashboard = catchAsync(async (req: Request, res: Respo
 });
 
 export const requestPlayerEvaluation = catchAsync(async (req: Request, res: Response) => {
-  const academyId = req.params.academyId || (req as any).user.userId;
-  const managerUserId = (req as any).user.userId;
-  const result = await academyService.requestPlayerEvaluation(academyId, managerUserId, req.body);
+  const result = await academyService.requestPlayerEvaluation(
+    (req as any).user,
+    req.params.academyId,
+    req.body,
+  );
   sendResponse(res, {
     statusCode: 201,
     success: true,
@@ -478,10 +482,9 @@ export const requestPlayerEvaluation = catchAsync(async (req: Request, res: Resp
 });
 
 export const sendEvaluationReminder = catchAsync(async (req: Request, res: Response) => {
-  const managerUserId = (req as any).user.userId;
   const result = await academyService.sendEvaluationReminder(
+    (req as any).user,
     req.params.evaluationId,
-    managerUserId,
   );
   sendResponse(res, {
     statusCode: 200,
@@ -491,25 +494,11 @@ export const sendEvaluationReminder = catchAsync(async (req: Request, res: Respo
   });
 });
 
-export const submitPlayerEvaluation = catchAsync(async (req: Request, res: Response) => {
-  const coachUserId = (req as any).user.userId;
-  const result = await academyService.submitPlayerEvaluation(
-    req.params.evaluationId,
-    coachUserId,
-    req.body,
-  );
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Player evaluation submitted successfully',
-    data: result,
-  });
-});
-
 export const getPlayerEvaluations = catchAsync(async (req: Request, res: Response) => {
-  const academyId = req.params.academyId || (req as any).user.userId;
-  const playerId = req.query.playerId as string;
-  const result = await academyService.getPlayerEvaluations(academyId, playerId);
+  const result = await academyService.getPlayerEvaluations((req as any).user, {
+    academyId: (req.params.academyId || req.query.academyId) as string | undefined,
+    playerId: req.query.playerId as string | undefined,
+  });
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -1945,10 +1934,9 @@ export const notifyCoachForCvValidation = catchAsync(async (req: Request, res: R
 
 export const getAcademyPlayerEvaluationDashboard = catchAsync(
   async (req: Request, res: Response) => {
-    const user = (req as any).user;
-    const academyIdentifier = req.params.academyId || user?.userId;
     const result = await academyService.getAcademyPlayerEvaluationDashboard(
-      academyIdentifier,
+      (req as any).user,
+      req.params.academyId,
       req.query as Record<string, unknown>,
     );
     sendResponse(res, {
@@ -1961,12 +1949,9 @@ export const getAcademyPlayerEvaluationDashboard = catchAsync(
 );
 
 export const getAcademyPlayerEvaluationDetails = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const academyIdentifier = req.params.academyId || user?.userId;
-  const targetId = req.params.id || req.params.evaluationId;
   const result = await academyService.getAcademyPlayerEvaluationDetails(
-    targetId,
-    academyIdentifier,
+    (req as any).user,
+    req.params.id,
   );
   sendResponse(res, {
     statusCode: 200,
@@ -1977,9 +1962,10 @@ export const getAcademyPlayerEvaluationDetails = catchAsync(async (req: Request,
 });
 
 export const getAcademyPlayerEvaluationPdfData = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const targetId = req.params.id || req.params.evaluationId;
-  const result = await coachService.getPlayerEvaluationProgressPdfData(user?.userId, targetId);
+  const result = await coachService.getPlayerEvaluationProgressPdfData(
+    (req as any).user,
+    req.params.id,
+  );
   sendResponse(res, {
     statusCode: 200,
     success: true,

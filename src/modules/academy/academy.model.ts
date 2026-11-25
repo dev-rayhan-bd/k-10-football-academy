@@ -125,7 +125,8 @@ const PlayerEvaluationSchema = new Schema<IPlayerEvaluationDocument>(
     academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: false, index: true },
     playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true, index: true },
     coachId: { type: Schema.Types.ObjectId, ref: 'CoachProfile', required: true, index: true },
-    evaluationDate: { type: Date, default: Date.now },
+    // Set only when the coach submits (an open request has no evaluation date)
+    evaluationDate: { type: Date },
     overallRating: { type: Number },
     technicalScore: { type: Number },
     physicalScore: { type: Number },
@@ -319,6 +320,8 @@ const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDoc
       index: true,
     },
     stripeTransferId: { type: String, trim: true },
+    // Stripe checkout session id of the payment this transaction belongs to (idempotency key)
+    paymentReference: { type: String, trim: true, index: true },
     transferredAmount: { type: Number },
     transferredAt: { type: Date },
     payoutStatusAcademy: {

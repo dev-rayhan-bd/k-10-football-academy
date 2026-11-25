@@ -83,20 +83,8 @@ router.get(
   requireCoachSubscription(),
   getPlayerCvValidationsDashboard,
 );
-router.get(
-  '/my-cv-validations',
-  auth('COACH', 'SUPER_ADMIN'),
-  requireCoachSubscription(),
-  getPlayerCvValidationsDashboard,
-);
 router.post(
   '/players/:playerId/validate-cv',
-  auth('COACH', 'SUPER_ADMIN'),
-  requireCoachSubscription(),
-  validatePlayerCV,
-);
-router.post(
-  '/validate-player-cv',
   auth('COACH', 'SUPER_ADMIN'),
   requireCoachSubscription(),
   validatePlayerCV,
@@ -112,18 +100,7 @@ router.get(
   getPlayerEvaluationsDashboard,
 );
 router.get(
-  '/my-player-evaluations',
-  auth('COACH', 'SUPER_ADMIN'),
-  requireCoachSubscription(),
-  getPlayerEvaluationsDashboard,
-);
-router.get(
   '/me/player-evaluations/:id',
-  auth('COACH', 'SUPER_ADMIN', 'ACADEMY', 'PLAYER'),
-  getPlayerEvaluationDetails,
-);
-router.get(
-  '/player-evaluations/:id',
   auth('COACH', 'SUPER_ADMIN', 'ACADEMY', 'PLAYER'),
   getPlayerEvaluationDetails,
 );
@@ -132,26 +109,10 @@ router.get(
   auth('COACH', 'SUPER_ADMIN', 'PLAYER', 'ACADEMY'),
   getPlayerEvaluationPdfData,
 );
-router.get(
-  '/player-evaluations/:id/pdf',
-  auth('COACH', 'SUPER_ADMIN', 'PLAYER', 'ACADEMY'),
-  getPlayerEvaluationPdfData,
-);
 router.post(
   '/me/player-evaluations/:id/submit',
-  auth('COACH', 'ACADEMY', 'SUPER_ADMIN'),
-  validateRequest(submitPlayerEvaluationZodSchema),
-  submitPlayerEvaluation,
-);
-router.post(
-  '/me/player-evaluations/submit',
-  auth('COACH', 'ACADEMY', 'SUPER_ADMIN'),
-  validateRequest(submitPlayerEvaluationZodSchema),
-  submitPlayerEvaluation,
-);
-router.post(
-  '/players/:playerId/evaluate',
-  auth('COACH', 'ACADEMY', 'SUPER_ADMIN'),
+  auth('COACH'),
+  requireCoachSubscription(),
   validateRequest(submitPlayerEvaluationZodSchema),
   submitPlayerEvaluation,
 );

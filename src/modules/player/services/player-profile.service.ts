@@ -331,7 +331,7 @@ export class PlayerProfileService {
         overallRating: obj.playerEvaluation?.overallRating ?? obj.overallRating ?? 50,
         lastEvaluationDate: obj.playerEvaluation?.lastEvaluationDate ?? null,
         nextEvaluationDue: obj.playerEvaluation?.nextEvaluationDue ?? null,
-        evaluationCycle: '3_MONTHS',
+        evaluationCycle: '4_MONTHS',
       };
       return playerCvService.applySafeguarding(obj, viewer);
     });

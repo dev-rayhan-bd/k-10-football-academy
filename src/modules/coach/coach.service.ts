@@ -197,16 +197,23 @@ export class CoachService {
     return await coachEvaluationsService.getPlayerEvaluationsDashboard(userId, query);
   }
 
-  async getPlayerEvaluationDetails(userId: string, targetId: string) {
-    return await coachEvaluationsService.getPlayerEvaluationDetails(userId, targetId);
+  async getPlayerEvaluationDetails(user: { userId?: string; role?: string }, targetId: string) {
+    return await coachEvaluationsService.getPlayerEvaluationDetails(user, targetId);
   }
 
-  async getPlayerEvaluationProgressPdfData(userId?: string, targetId?: string) {
-    return await coachEvaluationsService.getPlayerEvaluationProgressPdfData(userId, targetId);
+  async getPlayerEvaluationProgressPdfData(
+    user: { userId?: string; role?: string } | undefined,
+    targetId: string,
+  ) {
+    return await coachEvaluationsService.getPlayerEvaluationProgressPdfData(user, targetId);
   }
 
-  async submitPlayerEvaluation(userOrUserId: any, targetId: string, payload: any) {
-    return await coachEvaluationsService.submitPlayerEvaluation(userOrUserId, targetId, payload);
+  async submitPlayerEvaluation(
+    user: { userId?: string; role?: string },
+    targetId: string,
+    payload: any,
+  ) {
+    return await coachEvaluationsService.submitPlayerEvaluation(user, targetId, payload);
   }
 
   // --- CoachFinancesService Delegates ---

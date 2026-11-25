@@ -133,11 +133,6 @@ router.post(
   auth('PLAYER', 'PARENT', 'SUPER_ADMIN'),
   requestPlayerCvValidation,
 );
-router.post(
-  '/me/cv-validation/request',
-  auth('PLAYER', 'PARENT', 'SUPER_ADMIN'),
-  requestPlayerCvValidation,
-);
 router.get('/me/cv-validation/verify-payment', optionalAuth(), verifyCvValidationPayment);
 router.get('/me/matches', auth(), getMatchRecords);
 router.post(

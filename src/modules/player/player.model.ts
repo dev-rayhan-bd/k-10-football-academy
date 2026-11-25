@@ -128,7 +128,7 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
       overallRating: { type: Number },
       lastEvaluationDate: { type: Date },
       nextEvaluationDue: { type: Date },
-      evaluationCycle: { type: String, default: '3_MONTHS' },
+      evaluationCycle: { type: String, default: '4_MONTHS' },
     },
     coachVerification: {
       isVerified: { type: Boolean, default: false },
@@ -138,6 +138,15 @@ const PlayerProfileSchema = new Schema<IPlayerProfileDocument>(
       licenseNumber: { type: String },
       clubManaged: { type: String },
       verifiedAt: { type: Date },
+      digitalStamp: { type: String },
+      officialSealUrl: { type: String },
+      certificateId: { type: String },
+      // UNPAID = checkout created, PAID = paid & waiting for coach, USED = coach validated this payment
+      validationPaymentStatus: { type: String, enum: ['UNPAID', 'PAID', 'USED'] },
+      validationFee: { type: Number },
+      transactionId: { type: String },
+      requestedAt: { type: Date },
+      paidAt: { type: Date },
     },
     perceptionMetrics: {
       spaceAwareness: {

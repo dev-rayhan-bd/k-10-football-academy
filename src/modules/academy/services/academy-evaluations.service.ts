@@ -1,358 +1,307 @@
 import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
+import QueryBuilder from '@/builder/QueryBuilder';
 import { IPlayerEvaluation } from '../academy.interface';
-import { AcademyProfile, PlayerEvaluation, AcademyCoach } from '../academy.model';
+import { PlayerEvaluation, AcademyCoach, Team } from '../academy.model';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { PlayerProfile } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
-import { playerCacheService } from '@/modules/player/services/player-cache.service';
-import { playerStatsService } from '@/modules/player/services/player-stats.service';
+import {
+  EVALUATION_CYCLE_LABEL,
+  EVALUATION_CYCLE_MONTHS,
+  addEvaluationCycle,
+  assertCanViewEvaluation,
+  effectiveEvaluationStatus,
+  getAcademyPlayerIds,
+  mapToObject,
+  resolveAcademyForUser,
+  scoreToGrade,
+} from './evaluation-rules';
 
 const notificationService = new NotificationService();
+
+type AuthUser = { userId?: string; role?: string } | undefined;
+
+const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const outOf10 = (v?: number | null) =>
+  typeof v === 'number' && Number.isFinite(v) ? +(v / 10).toFixed(1) : null;
+const outOf20 = (v?: number | null) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(20, Math.max(0, Math.round(v / 5))) : null;
+const fmtDate = (d?: Date | string | null) =>
+  d
+    ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
+
+/** Age group of a player = ageGroup of the academy team they play in ('' if none). */
+const buildAgeGroupMap = async (academyId: Types.ObjectId) => {
+  const teams = await Team.find({ academyId }).select('ageGroup playerIds').lean();
+  const map = new Map<string, string>();
+  teams.forEach((t: any) =>
+    (t.playerIds || []).forEach((p: any) => {
+      if (!map.has(String(p))) map.set(String(p), t.ageGroup || '');
+    }),
+  );
+  return map;
+};
+
+const SUBMITTED = ['EVALUATED', 'EXPIRED', 'OVERDUE'];
 
 export class AcademyEvaluationsService {
   async createPlayerEvaluation(academyId: string, payload: Partial<IPlayerEvaluation>) {
     return PlayerEvaluation.create({ ...payload, academyId });
   }
 
-  async getPlayerEvaluations(academyId: string, playerId?: string) {
-    const filter: Record<string, unknown> = { academyId };
-    if (playerId) filter.playerId = playerId;
-    return PlayerEvaluation.find(filter)
+  /**
+   * Evaluation history, scoped by role:
+   * ACADEMY → own academy, COACH → own evaluations, PLAYER → own submitted evaluations,
+   * SUPER_ADMIN/ADMIN → ?academyId (or all).
+   */
+  async getPlayerEvaluations(user: AuthUser, query: { academyId?: string; playerId?: string }) {
+    const filter: Record<string, unknown> = {};
+    const role = user?.role;
+
+    if (query.playerId) {
+      if (!Types.ObjectId.isValid(query.playerId)) throw new AppError(400, 'Invalid player ID');
+      filter.playerId = new Types.ObjectId(query.playerId);
+    }
+
+    if (role === 'ACADEMY') {
+      const academy = await resolveAcademyForUser(user, query.academyId);
+      filter.academyId = academy._id;
+    } else if (role === 'COACH') {
+      const coach = await CoachProfile.findOne({ userId: user?.userId }).select('_id');
+      if (!coach) throw new AppError(404, 'Coach profile not found');
+      filter.coachId = coach._id;
+    } else if (role === 'PLAYER') {
+      const player = await PlayerProfile.findOne({ userId: user?.userId }).select('_id');
+      if (!player) throw new AppError(404, 'Player profile not found');
+      filter.playerId = player._id;
+      filter.status = { $in: SUBMITTED };
+    } else if (role === 'SUPER_ADMIN' || role === 'ADMIN') {
+      if (query.academyId) {
+        const academy = await resolveAcademyForUser(user, query.academyId);
+        filter.academyId = academy._id;
+      }
+    } else {
+      throw new AppError(403, 'You do not have access to player evaluations');
+    }
+
+    const list = await PlayerEvaluation.find(filter)
       .populate('playerId', 'fullName position profileImage overallRating currentClub')
-      .populate('coachId', 'fullName title profileImage licenseStatus');
-  }
-
-  async getAcademyPlayerEvaluationDashboard(
-    academyIdentifier: string,
-    query: Record<string, unknown> = {},
-  ) {
-    let academy = null;
-    if (Types.ObjectId.isValid(academyIdentifier)) {
-      academy = await AcademyProfile.findOne({
-        $or: [{ _id: academyIdentifier }, { userId: academyIdentifier }],
-      });
-    }
-    if (!academy) {
-      throw new AppError(404, 'Academy profile not found');
-    }
-
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Number(query.limit) || 10);
-    const searchTerm = query.searchTerm ? String(query.searchTerm).trim() : '';
-    const ageGroupFilter = query.ageGroup ? String(query.ageGroup).trim() : '';
-
-    // Find all players of this academy
-    const academyPlayers = await PlayerProfile.find({
-      $or: [{ academyId: academy._id }, { currentClub: academy.name }],
-    })
-      .select('_id fullName age dateOfBirth position profileImage currentClub tier overallRating')
-      .lean();
-
-    const academyPlayerIds = academyPlayers.map((p) => p._id);
-
-    // Find all evaluations associated with this academy or its players
-    const allEvaluations = await PlayerEvaluation.find({
-      $or: [{ academyId: academy._id }, { playerId: { $in: academyPlayerIds } }],
-    })
-      .populate(
-        'playerId',
-        'fullName age dateOfBirth position profileImage currentClub tier overallRating',
-      )
-      .populate('coachId', 'fullName title profileImage currentClub coachingLicenseLevel')
+      .populate('coachId', 'fullName title profileImage licenseStatus')
       .sort({ evaluationDate: -1, createdAt: -1 })
       .lean();
+    return list.map((ev: any) => ({ ...ev, status: effectiveEvaluationStatus(ev) }));
+  }
 
-    // Helper for age group
-    const getAgeGroup = (player: any): string => {
-      if (!player) return 'U-16';
-      if (player.ageGroup) return player.ageGroup;
-      let age = player.age;
-      if (!age && player.dateOfBirth) {
-        const diff = Date.now() - new Date(player.dateOfBirth).getTime();
-        age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
-      }
-      return age ? `U-${age}` : 'U-16';
+  /** Academy analytics page: metrics, widgets and the evaluations table (QueryBuilder). */
+  async getAcademyPlayerEvaluationDashboard(
+    user: AuthUser,
+    academyIdParam: string | undefined,
+    query: Record<string, unknown> = {},
+  ) {
+    const academy = await resolveAcademyForUser(user, academyIdParam);
+    const academyPlayerIds = (await getAcademyPlayerIds(academy._id)).map(
+      (id) => new Types.ObjectId(id),
+    );
+    const scope = {
+      $or: [{ academyId: academy._id }, { playerId: { $in: academyPlayerIds } }],
     };
+    const ageGroupMap = await buildAgeGroupMap(academy._id);
 
-    // 1. Metric Cards Calculation
-    const totalEvaluations = allEvaluations.length;
-    let sumOverallRating = 0;
-    let countRated = 0;
-    let improvingCount = 0;
-    let evaluatedThisMonth = 0;
-
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // Group evaluations by player to calculate deltas
-    const evalsByPlayer = new Map<string, any[]>();
-    for (const ev of allEvaluations) {
-      const pid = ev.playerId ? ((ev.playerId as any)._id || ev.playerId).toString() : null;
-      if (pid) {
-        if (!evalsByPlayer.has(pid)) {
-          evalsByPlayer.set(pid, []);
-        }
-        evalsByPlayer.get(pid)!.push(ev);
-      }
-
-      if (
-        typeof ev.overallRating === 'number' &&
-        !isNaN(ev.overallRating) &&
-        ev.overallRating > 0
-      ) {
-        sumOverallRating += ev.overallRating;
-        countRated++;
-      }
-
-      const evalDate = ev.evaluationDate
-        ? new Date(ev.evaluationDate)
-        : ev.createdAt
-          ? new Date(ev.createdAt)
-          : null;
-      if (
-        evalDate &&
-        evalDate.getMonth() === currentMonth &&
-        evalDate.getFullYear() === currentYear
-      ) {
-        evaluatedThisMonth++;
-      }
-    }
-
-    // Calculate player deltas
-    const playerDeltas: Array<{
-      playerId: string;
-      playerName: string;
-      ageGroup: string;
-      delta: number;
-      rating: number;
-    }> = [];
-
-    evalsByPlayer.forEach((playerEvals, pid) => {
-      const latest = playerEvals[0];
-      const previous = playerEvals.length > 1 ? playerEvals[1] : null;
-      let delta =
-        typeof latest.improvementDelta === 'number' && latest.improvementDelta !== 0
-          ? latest.improvementDelta
-          : 0;
-
-      if (
-        delta === 0 &&
-        previous &&
-        typeof latest.overallRating === 'number' &&
-        typeof previous.overallRating === 'number'
-      ) {
-        const rawDiff = latest.overallRating - previous.overallRating;
-        delta = rawDiff > 10 ? +(rawDiff / 10).toFixed(1) : +rawDiff.toFixed(1);
-      }
-
-      const player = latest.playerId as any;
-      if (delta > 0) {
-        improvingCount++;
-      }
-
-      if (player) {
-        playerDeltas.push({
-          playerId: pid,
-          playerName: player.fullName || 'Player',
-          ageGroup: getAgeGroup(player),
-          delta,
-          rating: latest.overallRating || player.overallRating || 0,
-        });
-      }
+    // ---- Metrics & widgets over SUBMITTED evaluations only ----
+    const submitted = await PlayerEvaluation.find({ $and: [scope, { status: { $in: SUBMITTED } }] })
+      .populate('playerId', 'fullName position profileImage overallRating')
+      .sort({ evaluationDate: -1, createdAt: -1 })
+      .lean();
+    const openRequests = await PlayerEvaluation.countDocuments({
+      $and: [scope, { status: 'NEED_EVALUATION' }],
     });
 
-    const avgOverallRatingRaw = countRated > 0 ? sumOverallRating / countRated : 0;
-    const avgOverallRating =
-      avgOverallRatingRaw > 10
-        ? +(avgOverallRatingRaw / 10).toFixed(1)
-        : +avgOverallRatingRaw.toFixed(1);
-
-    // 2. Right Sidebar Widgets
-    // Most Improved widget: players with deltas sorted desc
-    const mostImproved = [...playerDeltas]
-      .filter((d) => d.delta !== 0)
-      .sort((a, b) => b.delta - a.delta)
-      .slice(0, 5)
-      .map((item) => ({
-        playerId: item.playerId,
-        playerName: item.playerName,
-        ageGroup: item.ageGroup,
-        delta: item.delta > 0 ? `+${item.delta.toFixed(1)}` : `${item.delta.toFixed(1)}`,
-        deltaValue: item.delta,
-        isPositive: item.delta >= 0,
-      }));
-
-    // Top Performers widget: players sorted by overall rating
-    const topPerformersMap = new Map<string, any>();
-    for (const ev of allEvaluations) {
-      const p = ev.playerId as any;
-      if (p && p._id && !topPerformersMap.has(p._id.toString())) {
-        topPerformersMap.set(p._id.toString(), {
-          playerId: p._id,
-          playerName: p.fullName || 'Player',
-          ageGroup: getAgeGroup(p),
-          position: (p.position || 'FORWARD').toUpperCase(),
-          rawRating: ev.overallRating || p.overallRating || 0,
-        });
+    const now = new Date();
+    let sum = 0;
+    let rated = 0;
+    let evaluatedThisMonth = 0;
+    const latestByPlayer = new Map<string, any>();
+    for (const ev of submitted as any[]) {
+      if (typeof ev.overallRating === 'number') {
+        sum += ev.overallRating;
+        rated++;
       }
+      const d = ev.evaluationDate ? new Date(ev.evaluationDate) : null;
+      if (d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+        evaluatedThisMonth++;
+      }
+      const pid = ev.playerId ? String(ev.playerId._id || ev.playerId) : null;
+      if (pid && !latestByPlayer.has(pid)) latestByPlayer.set(pid, ev);
     }
+    const latest = Array.from(latestByPlayer.entries()).filter(([, ev]) => ev.playerId);
 
-    const topPerformers = Array.from(topPerformersMap.values())
-      .sort((a, b) => b.rawRating - a.rawRating)
+    const mostImproved = latest
+      .filter(([, ev]) => typeof ev.improvementDelta === 'number' && ev.improvementDelta !== 0)
+      .sort((a, b) => b[1].improvementDelta - a[1].improvementDelta)
       .slice(0, 5)
-      .map((p, idx) => {
-        const rOutOf10 =
-          p.rawRating > 10 ? +(p.rawRating / 10).toFixed(1) : +p.rawRating.toFixed(1);
+      .map(([pid, ev]) => {
+        const delta = +(ev.improvementDelta / 10).toFixed(1); // same /10 scale as ratings
         return {
-          rank: idx + 1,
-          playerId: p.playerId,
-          playerName: p.playerName,
-          ageGroup: p.ageGroup,
-          position: p.position,
-          rating: rOutOf10,
+          playerId: pid,
+          playerName: ev.playerId.fullName || '',
+          ageGroup: ageGroupMap.get(pid) || '',
+          delta: delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1),
+          deltaValue: delta,
+          isPositive: delta >= 0,
         };
       });
 
-    // 3. Scale scores & format dates
-    const scaleScoreTo20 = (score?: number) => {
-      if (typeof score !== 'number' || isNaN(score)) return 15;
-      if (score <= 20) return Math.round(score);
-      return Math.min(20, Math.max(1, Math.round(score / 5)));
-    };
+    const topPerformers = latest
+      .filter(([, ev]) => typeof ev.overallRating === 'number')
+      .sort((a, b) => b[1].overallRating - a[1].overallRating)
+      .slice(0, 5)
+      .map(([pid, ev], idx) => ({
+        rank: idx + 1,
+        playerId: pid,
+        playerName: ev.playerId.fullName || '',
+        ageGroup: ageGroupMap.get(pid) || '',
+        position: (ev.playerId.position || '').toUpperCase(),
+        rating: outOf10(ev.overallRating),
+      }));
 
-    const formatDate = (date?: Date | string): string => {
-      if (!date) return '';
-      const d = new Date(date);
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-    };
-
-    // Filter evaluations by searchTerm & ageGroup
-    let filteredEvaluations = allEvaluations;
-
-    if (searchTerm) {
-      const regex = new RegExp(searchTerm, 'i');
-      filteredEvaluations = filteredEvaluations.filter((ev) => {
-        const p = ev.playerId as any;
-        const c = ev.coachId as any;
-        return (
-          (p?.fullName && regex.test(p.fullName)) ||
-          (p?.position && regex.test(p.position)) ||
-          (p?.currentClub && regex.test(p.currentClub)) ||
-          (c?.fullName && regex.test(c.fullName))
+    // ---- Evaluations table (requests + submitted), QueryBuilder ----
+    const listQuery: Record<string, unknown> = { ...query };
+    const andParts: Record<string, unknown>[] = [scope];
+    const term = typeof listQuery.searchTerm === 'string' ? listQuery.searchTerm.trim() : '';
+    if (term) {
+      const rx = new RegExp(escapeRegex(term), 'i');
+      const [pIds, cIds] = await Promise.all([
+        PlayerProfile.find({
+          _id: { $in: academyPlayerIds },
+          $or: [{ fullName: rx }, { position: rx }, { currentClub: rx }],
+        }).distinct('_id'),
+        CoachProfile.find({ fullName: rx }).distinct('_id'),
+      ]);
+      andParts.push({ $or: [{ playerId: { $in: pIds } }, { coachId: { $in: cIds } }] });
+    }
+    const ageGroup = typeof listQuery.ageGroup === 'string' ? listQuery.ageGroup.trim() : '';
+    if (ageGroup) {
+      const ids = Array.from(ageGroupMap.entries())
+        .filter(([, g]) => g.toLowerCase() === ageGroup.toLowerCase())
+        .map(([pid]) => new Types.ObjectId(pid));
+      andParts.push({ playerId: { $in: ids } });
+    }
+    const status = typeof listQuery.status === 'string' ? listQuery.status.toUpperCase() : '';
+    if (status && status !== 'ALL') {
+      if (status === 'NEED_EVALUATION') andParts.push({ status: 'NEED_EVALUATION' });
+      else if (status === 'EVALUATED')
+        andParts.push({
+          status: 'EVALUATED',
+          $or: [{ nextEvaluationDue: { $gte: now } }, { nextEvaluationDue: null }],
+        });
+      else if (status === 'EXPIRED')
+        andParts.push({
+          $or: [
+            { status: { $in: ['EXPIRED', 'OVERDUE'] } },
+            { status: 'EVALUATED', nextEvaluationDue: { $lt: now } },
+          ],
+        });
+      else
+        throw new AppError(
+          400,
+          'Invalid status. Allowed: ALL, NEED_EVALUATION, EVALUATED, EXPIRED',
         );
-      });
     }
+    ['searchTerm', 'ageGroup', 'status', 'academyId', 'fields'].forEach((k) => delete listQuery[k]);
+    if (!listQuery.sort) listQuery.sort = '-evaluationDate,-createdAt';
 
-    if (ageGroupFilter) {
-      filteredEvaluations = filteredEvaluations.filter((ev) => {
-        const p = ev.playerId as any;
-        return getAgeGroup(p).toLowerCase() === ageGroupFilter.toLowerCase();
-      });
-    }
+    const evalQuery = new QueryBuilder(PlayerEvaluation.find({ $and: andParts }), listQuery)
+      .filter()
+      .sort()
+      .paginate();
+    const [rows, meta] = await Promise.all([
+      evalQuery.modelQuery
+        .populate('playerId', 'fullName position profileImage currentClub tier overallRating')
+        .populate('coachId', 'fullName title profileImage')
+        .lean(),
+      evalQuery.countTotal(),
+    ]);
 
-    const totalCount = filteredEvaluations.length;
-    const totalPage = Math.ceil(totalCount / limit) || 1;
-    const skip = (page - 1) * limit;
-    const paginatedEvals = filteredEvaluations.slice(skip, skip + limit);
-
-    const evaluations = paginatedEvals.map((ev) => {
+    const evaluations = (rows as any[]).map((ev) => {
       const p = ev.playerId as any;
       const c = ev.coachId as any;
-      const rawRating = ev.overallRating || p?.overallRating || 0;
-      const ratingOutOf10 = rawRating > 10 ? +(rawRating / 10).toFixed(1) : +rawRating.toFixed(1);
-      const ageGroup = getAgeGroup(p);
-      const pos = p?.position || 'PLAYER';
-      const tier = p?.tier || 'TIER 1';
-
+      const pid = p?._id ? String(p._id) : '';
+      const st = effectiveEvaluationStatus(ev);
+      const isSubmitted = st !== 'NEED_EVALUATION';
+      const rating = isSubmitted ? (ev.overallRating ?? null) : null;
+      const position = p?.position || '';
+      const tier = p?.tier || '';
       return {
         _id: ev._id,
         evaluationId: ev._id,
-        evaluationDate: ev.evaluationDate || ev.createdAt,
-        formattedDate: formatDate(ev.evaluationDate || ev.createdAt),
-        ageGroup,
+        evaluationDate: isSubmitted ? ev.evaluationDate || null : null,
+        formattedDate: isSubmitted ? fmtDate(ev.evaluationDate) : '',
+        requestedAt: ev.createdAt || null,
+        ageGroup: ageGroupMap.get(pid) || '',
         player: {
-          _id: p?._id,
-          name: p?.fullName || 'Unknown Player',
+          _id: p?._id || null,
+          name: p?.fullName || '',
           avatar: p?.profileImage || '',
-          position: pos,
+          position,
           tier,
-          tierBadge: `${pos.toUpperCase()} - ${tier.toUpperCase()}`,
-          currentClub: p?.currentClub || academy.name,
+          tierBadge: [position, tier].filter(Boolean).join(' - ').toUpperCase(),
+          currentClub: p?.currentClub || '',
         },
         coach: {
-          _id: c?._id,
-          name: c?.fullName || 'Assigned Coach',
+          _id: c?._id || null,
+          name: c?.fullName || '',
           avatar: c?.profileImage || '',
-          title: c?.title || 'Youth Coach',
+          title: c?.title || '',
         },
-        overallRating: ratingOutOf10,
-        overallRatingFormatted: `(${ratingOutOf10}/10)`,
-        rawOverallRating: rawRating,
+        overallRating: outOf10(rating),
+        overallRatingFormatted: rating !== null ? `(${outOf10(rating)}/10)` : '',
+        rawOverallRating: rating,
         scores: {
-          technical: scaleScoreTo20(ev.technicalScore),
-          physical: scaleScoreTo20(ev.physicalScore),
-          mental: scaleScoreTo20(ev.mentalScore),
-          technicalScore: ev.technicalScore || 0,
-          physicalScore: ev.physicalScore || 0,
-          mentalScore: ev.mentalScore || 0,
+          technical: outOf20(ev.technicalScore),
+          physical: outOf20(ev.physicalScore),
+          mental: outOf20(ev.mentalScore),
+          technicalScore: ev.technicalScore ?? null,
+          physicalScore: ev.physicalScore ?? null,
+          mentalScore: ev.mentalScore ?? null,
         },
-        improvementDelta: ev.improvementDelta || 0,
-        status: ev.status || 'EVALUATED',
-        nextEvaluationDue: ev.nextEvaluationDue || null,
+        improvementDelta: ev.improvementDelta ?? 0,
+        status: st,
+        nextEvaluationDue: isSubmitted ? ev.nextEvaluationDue || null : null,
+        reminderCount: ev.reminderCount || 0,
       };
     });
 
     return {
       metrics: {
-        avgOverallRating,
-        improvingPlayers: improvingCount,
+        avgOverallRating: rated ? outOf10(sum / rated) : 0,
+        improvingPlayers: latest.filter(([, ev]) => (ev.improvementDelta || 0) > 0).length,
         evaluatedThisMonth,
-        totalEvaluations,
+        totalEvaluations: submitted.length,
+        openRequests,
+        evaluationCycleMonths: EVALUATION_CYCLE_MONTHS,
       },
       mostImproved,
       topPerformers,
       evaluations,
-      meta: {
-        page,
-        limit,
-        total: totalCount,
-        totalPage,
-      },
+      meta,
     };
   }
 
-  async getAcademyPlayerEvaluationDetails(targetId: string, _academyIdentifier?: string) {
-    let evaluation: any = null;
-    let player: any = null;
-
-    if (Types.ObjectId.isValid(targetId)) {
-      evaluation = await PlayerEvaluation.findById(targetId)
-        .populate('playerId')
-        .populate('coachId')
-        .populate('academyId')
-        .lean();
-      if (evaluation && evaluation.playerId) {
-        player = evaluation.playerId;
-      }
+  /** Full evaluation sheet (technical / mental / physical sections) for academy & player views. */
+  async getAcademyPlayerEvaluationDetails(user: AuthUser, targetId: string) {
+    if (!targetId || !Types.ObjectId.isValid(targetId)) {
+      throw new AppError(400, 'Invalid evaluation or player ID');
     }
-
-    if (!player && Types.ObjectId.isValid(targetId)) {
+    let evaluation: any = await PlayerEvaluation.findById(targetId)
+      .populate('coachId')
+      .populate('academyId')
+      .lean();
+    let player: any;
+    if (evaluation) {
+      player = await PlayerProfile.findById(evaluation.playerId).lean();
+    } else {
       player = await PlayerProfile.findById(targetId).lean();
       if (player) {
         evaluation = await PlayerEvaluation.findOne({ playerId: player._id })
@@ -362,166 +311,117 @@ export class AcademyEvaluationsService {
           .lean();
       }
     }
+    if (!player) throw new AppError(404, 'Player evaluation report not found');
+    await assertCanViewEvaluation(user, evaluation, player);
 
-    if (!evaluation && !player) {
-      throw new AppError(404, 'Player evaluation report not found');
-    }
-
-    const techniques = evaluation?.techniques
-      ? evaluation.techniques instanceof Map
-        ? Object.fromEntries(evaluation.techniques)
-        : evaluation.techniques
-      : {};
-    const characteristics = evaluation?.characteristics
-      ? evaluation.characteristics instanceof Map
-        ? Object.fromEntries(evaluation.characteristics)
-        : evaluation.characteristics
-      : {};
-    const physical = evaluation?.physical
-      ? evaluation.physical instanceof Map
-        ? Object.fromEntries(evaluation.physical)
-        : evaluation.physical
-      : {};
-
+    const techniques = mapToObject(evaluation?.techniques);
+    const characteristics = mapToObject(evaluation?.characteristics);
+    const physical = mapToObject(evaluation?.physical);
     const coach = evaluation?.coachId as any;
     const academy = evaluation?.academyId as any;
+    const st = evaluation ? effectiveEvaluationStatus(evaluation) : 'NEED_EVALUATION';
+    const isSubmitted = st !== 'NEED_EVALUATION';
+    const evalDate = isSubmitted ? evaluation?.evaluationDate || null : null;
+    const nextDue = isSubmitted
+      ? evaluation?.nextEvaluationDue || (evalDate ? addEvaluationCycle(new Date(evalDate)) : null)
+      : null;
+    const rawRating = isSubmitted ? (evaluation?.overallRating ?? null) : null;
 
-    const evalDate = evaluation?.evaluationDate || evaluation?.createdAt || new Date();
-    const formattedDate = new Date(evalDate).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-
-    const nextDue = evaluation?.nextEvaluationDue
-      ? new Date(evaluation.nextEvaluationDue).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-        })
-      : new Date(new Date(evalDate).getTime() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString(
-          'en-US',
-          {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          },
-        );
-
-    const rawRating = evaluation?.overallRating || player?.overallRating || 0;
-    const ratingOutOf10 = rawRating > 10 ? +(rawRating / 10).toFixed(1) : +rawRating.toFixed(1);
-
-    // Standard list for TECHNICAL skills
-    const technicalSkillsConfig = [
-      { key: 'dribbling', label: 'Dribbling' },
-      { key: 'ballMastery', label: 'Ball Mastery' },
-      { key: 'runningWithBall', label: 'Running with Ball' },
-      { key: 'rangeOfPassing', label: 'Range of Passing' },
-      { key: 'strikingFinishing', label: 'Striking / Finishing' },
-      { key: 'defending', label: 'Defending' },
-      { key: 'firstTouch', label: 'First Touch' },
-      { key: 'nonDominantFoot', label: 'Non dominant foot' },
-    ];
-
-    const technicalList = technicalSkillsConfig.map((item) => {
-      const val = techniques[item.key] || 'IMPROVEMENT';
-      return {
+    // Client evaluation sheet keys. A skill without a grade stays null (never a default grade).
+    const section = (cfg: Array<{ key: string; label: string }>, values: Record<string, any>) =>
+      cfg.map((item) => ({
         key: item.key,
         skill: item.label,
-        rating: String(val).toUpperCase(),
-      };
-    });
+        rating: values[item.key] ? String(values[item.key]).toUpperCase() : null,
+      }));
 
-    // Standard list for MENTAL skills
-    const mentalSkillsConfig = [
-      { key: 'gameAwareness', label: 'Game Awareness' },
-      { key: 'gamesUnderstanding', label: 'Games Understanding' },
-      { key: 'decisionMaking', label: 'Decision Making' },
-      { key: 'concentration', label: 'Concentration' },
-      { key: 'leadership', label: 'Leadership' },
-      { key: 'desire', label: 'Desire' },
-      { key: 'maturity', label: 'Maturity' },
-    ];
+    const technicalList = section(
+      [
+        { key: 'dribbling', label: 'Dribbling' },
+        { key: 'ballMastery', label: 'Ball Mastery' },
+        { key: 'runningWithBall', label: 'Running with Ball' },
+        { key: 'rangeOfPassing', label: 'Range of Passing' },
+        { key: 'strikingFinishing', label: 'Striking / Finishing' },
+        { key: 'defending', label: 'Defending' },
+        { key: 'firstTouch', label: 'First Touch' },
+        { key: 'nonDominantFoot', label: 'Non dominant foot' },
+      ],
+      techniques,
+    );
+    const mentalList = section(
+      [
+        { key: 'gameAwareness', label: 'Game Awareness' },
+        { key: 'gamesUnderstanding', label: 'Games Understanding' },
+        { key: 'decisionMaking', label: 'Decision Making' },
+        { key: 'concentration', label: 'Concentration' },
+        { key: 'leadership', label: 'Leadership' },
+        { key: 'desire', label: 'Desire' },
+        { key: 'maturity', label: 'Maturity' },
+      ],
+      characteristics,
+    );
+    const physicalList = section(
+      [
+        { key: 'speedAcceleration', label: 'Speed & Acceleration' },
+        { key: 'movement', label: 'Movement' },
+        { key: 'balance', label: 'Balance' },
+        { key: 'power', label: 'Power' },
+        { key: 'strength', label: 'Strength' },
+        { key: 'agility', label: 'Agility' },
+        { key: 'coordination', label: 'Coordination' },
+      ],
+      physical,
+    );
 
-    const mentalList = mentalSkillsConfig.map((item) => {
-      const val = characteristics[item.key] || 'IMPROVEMENT';
-      return {
-        key: item.key,
-        skill: item.label,
-        rating: String(val).toUpperCase(),
-      };
-    });
-
-    // Standard list for PHYSICAL skills
-    const physicalSkillsConfig = [
-      { key: 'speedAcceleration', label: 'Speed & Acceleration' },
-      { key: 'movement', label: 'Movement' },
-      { key: 'balance', label: 'Balance' },
-      { key: 'power', label: 'Power' },
-      { key: 'strength', label: 'Strength' },
-      { key: 'agility', label: 'Agility' },
-      { key: 'coordination', label: 'Coordination' },
-    ];
-
-    const physicalList = physicalSkillsConfig.map((item) => {
-      const val = physical[item.key] || 'IMPROVEMENT';
-      return {
-        key: item.key,
-        skill: item.label,
-        rating: String(val).toUpperCase(),
-      };
-    });
-
-    const scaleScoreTo20 = (score?: number) => {
-      if (typeof score !== 'number' || isNaN(score)) return 15;
-      if (score <= 20) return Math.round(score);
-      return Math.min(20, Math.max(1, Math.round(score / 5)));
-    };
+    const position = player.position || '';
+    const tier = player.tier || '';
 
     return {
       reportTitle: 'PLAYER EVALUATION REPORT',
-      subtitle: `DEVELOPMENT REPORT SHEET OVERLAY FOR ${(player?.fullName || 'PLAYER').toUpperCase()}`,
-      evaluationId: evaluation?._id || targetId,
+      subtitle: player.fullName
+        ? `DEVELOPMENT REPORT SHEET FOR ${String(player.fullName).toUpperCase()}`
+        : 'DEVELOPMENT REPORT SHEET',
+      evaluationId: evaluation?._id || null,
       evaluationDate: evalDate,
-      formattedDate,
-      cycle: '3-Month Progress Evaluation',
-      status: evaluation?.status || 'EVALUATED',
+      formattedDate: fmtDate(evalDate),
+      cycle: EVALUATION_CYCLE_LABEL,
+      status: st,
       nextEvaluationDue: nextDue,
-      overallRating: ratingOutOf10,
-      overallRatingFormatted: `(${ratingOutOf10}/10)`,
+      formattedNextEvaluationDue: fmtDate(nextDue),
+      overallRating: outOf10(rawRating),
+      overallRatingFormatted: rawRating !== null ? `(${outOf10(rawRating)}/10)` : '',
       rawOverallRating: rawRating,
-      grade: rawRating >= 90 ? 'EXCELLENT' : rawRating >= 75 ? 'GOOD' : 'NEEDS_IMPROVEMENT',
+      grade: scoreToGrade(rawRating),
       categoryScores: {
-        technical: scaleScoreTo20(evaluation?.technicalScore),
-        physical: scaleScoreTo20(evaluation?.physicalScore),
-        mental: scaleScoreTo20(evaluation?.mentalScore),
-        technicalScore: evaluation?.technicalScore || 0,
-        physicalScore: evaluation?.physicalScore || 0,
-        mentalScore: evaluation?.mentalScore || 0,
+        technical: outOf20(evaluation?.technicalScore),
+        physical: outOf20(evaluation?.physicalScore),
+        mental: outOf20(evaluation?.mentalScore),
+        technicalScore: evaluation?.technicalScore ?? null,
+        physicalScore: evaluation?.physicalScore ?? null,
+        mentalScore: evaluation?.mentalScore ?? null,
       },
       player: {
-        _id: player?._id,
-        name: player?.fullName || 'Unknown Player',
-        position: player?.position || 'Forward',
-        age: player?.age || null,
-        avatar: player?.profileImage || '',
-        academy: academy?.name || player?.currentClub || 'K10 Football Academy',
-        currentClub: player?.currentClub || academy?.name || 'K10 Football Academy',
-        overallRating: ratingOutOf10,
-        tier: player?.tier || 'TIER 1',
-        tierBadge: `${(player?.position || 'PLAYER').toUpperCase()} - ${(player?.tier || 'TIER 1').toUpperCase()}`,
+        _id: player._id,
+        name: player.fullName || '',
+        position,
+        age: player.age ?? null,
+        avatar: player.profileImage || '',
+        academy: academy?.name || '',
+        currentClub: player.currentClub || '',
+        overallRating: outOf10(player.overallRating),
+        tier,
+        tierBadge: [position, tier].filter(Boolean).join(' - ').toUpperCase(),
       },
       coach: {
-        _id: coach?._id,
-        name: coach?.fullName || 'Assigned Coach',
-        club: coach?.currentClub || academy?.name || 'K10 Football Academy',
+        _id: coach?._id || null,
+        name: coach?.fullName || '',
+        club: coach?.currentClub || '',
         avatar: coach?.profileImage || '',
-        license:
-          coach?.coachingLicenseLevel || coach?.licenseNumber || coach?.title || 'UEFA Certified',
+        license: coach?.coachingLicenseLevel || coach?.licenseStatus || '',
       },
       academy: {
-        _id: academy?._id,
-        name: academy?.name || player?.currentClub || 'K10 Football Academy',
+        _id: academy?._id || null,
+        name: academy?.name || '',
         logo: academy?.logo || '',
       },
       sections: {
@@ -532,48 +432,32 @@ export class AcademyEvaluationsService {
       techniquesRaw: techniques,
       characteristicsRaw: characteristics,
       physicalRaw: physical,
-      coachFeedback:
-        evaluation?.coachFeedback || evaluation?.notes || 'Player is performing consistently well.',
+      coachFeedback: evaluation?.coachFeedback || '',
       notes: evaluation?.notes || '',
-      downloadPdfUrl: `/api/v1/academies/player-evaluations/${evaluation?._id || targetId}/pdf`,
     };
   }
 
-  async getEvaluationDashboard(academyIdentifier: string) {
-    let academy = null;
-    if (Types.ObjectId.isValid(academyIdentifier)) {
-      academy = await AcademyProfile.findOne({
-        $or: [{ _id: academyIdentifier }, { userId: academyIdentifier }],
-      });
-    }
-    if (!academy) {
-      throw new AppError(404, 'Academy profile not found');
-    }
+  /** Request/reminder management page: due (open requests), overdue (expired), evaluated. */
+  async getEvaluationDashboard(user: AuthUser, academyIdParam?: string) {
+    const academy = await resolveAcademyForUser(user, academyIdParam);
 
     const evaluations = await PlayerEvaluation.find({ academyId: academy._id })
       .populate('playerId', 'fullName position profileImage overallRating currentClub')
       .populate('coachId', 'fullName title profileImage phone email licenseStatus')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
+    // Status computed at read time — this GET never writes to the database.
     const now = new Date();
     const evaluated: any[] = [];
     const due: any[] = [];
     const overdue: any[] = [];
-
-    for (const item of evaluations) {
-      // Auto check expiration (3-month cycle)
-      if (item.expiresAt && new Date(item.expiresAt) < now && item.status !== 'EXPIRED') {
-        item.status = 'EXPIRED';
-        item.save().catch(() => {});
-      }
-
-      if (item.status === 'EVALUATED') {
-        evaluated.push(item);
-      } else if (item.status === 'EXPIRED' || item.status === 'OVERDUE') {
-        overdue.push(item);
-      } else {
-        due.push(item);
-      }
+    for (const item of evaluations as any[]) {
+      const st = effectiveEvaluationStatus(item, now);
+      const row = { ...item, status: st };
+      if (st === 'EVALUATED') evaluated.push(row);
+      else if (st === 'EXPIRED') overdue.push(row);
+      else due.push(row);
     }
 
     return {
@@ -582,7 +466,7 @@ export class AcademyEvaluationsService {
         evaluatedCount: evaluated.length,
         dueCount: due.length,
         overdueCount: overdue.length,
-        evaluationCycleMonths: 3,
+        evaluationCycleMonths: EVALUATION_CYCLE_MONTHS,
       },
       due,
       overdue,
@@ -591,33 +475,35 @@ export class AcademyEvaluationsService {
   }
 
   async requestPlayerEvaluation(
-    academyIdentifier: string,
-    managerUserId: string,
+    user: AuthUser,
+    academyIdParam: string | undefined,
     payload: { playerId: string; coachId: string; notes?: string },
   ) {
-    let academy = null;
-    if (Types.ObjectId.isValid(academyIdentifier)) {
-      academy = await AcademyProfile.findOne({
-        $or: [{ _id: academyIdentifier }, { userId: academyIdentifier }],
-      });
+    const academy = await resolveAcademyForUser(user, academyIdParam);
+
+    if (!payload?.playerId || !Types.ObjectId.isValid(payload.playerId)) {
+      throw new AppError(400, 'A valid playerId is required');
     }
-    if (!academy) {
-      throw new AppError(404, 'Academy profile not found');
+    if (!payload?.coachId || !Types.ObjectId.isValid(payload.coachId)) {
+      throw new AppError(400, 'A valid coachId is required');
     }
 
     const player = await PlayerProfile.findById(payload.playerId);
-    if (!player) {
-      throw new AppError(404, 'Player not found');
+    if (!player) throw new AppError(404, 'Player not found');
+
+    const academyPlayerIds = await getAcademyPlayerIds(academy._id);
+    if (!academyPlayerIds.includes(String(player._id))) {
+      throw new AppError(
+        400,
+        `${player.fullName || 'This player'} is not a player of ${academy.name}.`,
+      );
     }
 
     const coach = await CoachProfile.findOne({
       $or: [{ _id: payload.coachId }, { userId: payload.coachId }],
     });
-    if (!coach) {
-      throw new AppError(404, 'Coach not found');
-    }
+    if (!coach) throw new AppError(404, 'Coach not found');
 
-    // Ensure the coach is an officially approved coach of this academy
     const approvedAffiliation = await AcademyCoach.findOne({
       academyId: academy._id,
       coachId: coach._id,
@@ -630,27 +516,32 @@ export class AcademyEvaluationsService {
       );
     }
 
-    // 3-month expiration deadline
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days = 3 months
+    const openRequest = await PlayerEvaluation.findOne({
+      playerId: player._id,
+      academyId: academy._id,
+      status: 'NEED_EVALUATION',
+    });
+    if (openRequest) {
+      throw new AppError(
+        409,
+        'An evaluation request for this player is already open. Send a reminder instead.',
+      );
+    }
 
     const evaluation = await PlayerEvaluation.create({
       academyId: academy._id,
       playerId: player._id,
       coachId: coach._id,
       status: 'NEED_EVALUATION',
-      nextEvaluationDue: now,
-      expiresAt,
-      requestedByManagerId: new Types.ObjectId(managerUserId),
-      notes: payload.notes || '3-month official academy player evaluation requested by management.',
+      requestedByManagerId: user?.userId ? new Types.ObjectId(user.userId) : undefined,
+      notes: payload.notes || '',
     });
 
-    // Notify Coach
     await notificationService.createNotification({
       recipientId: coach.userId,
       recipientRole: 'COACH',
       title: 'Player Evaluation Required',
-      message: `Management has requested an evaluation for ${player.fullName}. Evaluations expire every 4 months.`,
+      message: `${academy.name} has requested an evaluation for ${player.fullName}. Evaluations are valid for ${EVALUATION_CYCLE_MONTHS} months.`,
       type: 'PLAYER_EVALUATION_REQUESTED',
       data: {
         evaluationId: evaluation._id,
@@ -662,28 +553,38 @@ export class AcademyEvaluationsService {
     return evaluation;
   }
 
-  async sendEvaluationReminder(evaluationId: string, _managerUserId?: string) {
+  async sendEvaluationReminder(user: AuthUser, evaluationId: string) {
+    if (!Types.ObjectId.isValid(evaluationId)) {
+      throw new AppError(400, 'Invalid evaluation ID');
+    }
     const evaluation = await PlayerEvaluation.findById(evaluationId)
       .populate('playerId', 'fullName')
       .populate('coachId', 'userId fullName');
+    if (!evaluation) throw new AppError(404, 'Player evaluation record not found');
 
-    if (!evaluation) {
-      throw new AppError(404, 'Player evaluation record not found');
+    if (user?.role !== 'SUPER_ADMIN' && user?.role !== 'ADMIN') {
+      const academy = await resolveAcademyForUser(user);
+      if (String(evaluation.academyId) !== String(academy._id)) {
+        throw new AppError(403, 'This evaluation does not belong to your academy');
+      }
+    }
+    if (evaluation.status !== 'NEED_EVALUATION') {
+      throw new AppError(400, 'Reminders can only be sent for open evaluation requests');
     }
 
     const coach = evaluation.coachId as any;
     const player = evaluation.playerId as any;
+    if (!coach?.userId) throw new AppError(404, 'Assigned coach not found');
 
     evaluation.reminderCount = (evaluation.reminderCount || 0) + 1;
     evaluation.reminderSentAt = new Date();
     await evaluation.save();
 
-    // Send urgent reminder notification to Coach
     await notificationService.createNotification({
       recipientId: coach.userId,
       recipientRole: 'COACH',
       title: 'Reminder: Player Evaluation Due',
-      message: `URGENT: Player evaluation for ${player?.fullName || 'your player'} is due. Please submit the evaluation assessment.`,
+      message: `Player evaluation for ${player?.fullName || 'your player'} is due. Please submit the evaluation.`,
       type: 'PLAYER_EVALUATION_REMINDER',
       data: {
         evaluationId: evaluation._id,
@@ -698,112 +599,6 @@ export class AcademyEvaluationsService {
       reminderCount: evaluation.reminderCount,
       sentAt: evaluation.reminderSentAt,
     };
-  }
-
-  async submitPlayerEvaluation(
-    evaluationId: string,
-    coachUserId: string,
-    payload: {
-      technicalScore: number;
-      physicalScore: number;
-      mentalScore: number;
-      overallRating?: number;
-      coachFeedback?: string;
-    },
-  ) {
-    const evaluation = await PlayerEvaluation.findById(evaluationId);
-    if (!evaluation) {
-      throw new AppError(404, 'Player evaluation record not found');
-    }
-
-    const coach = await CoachProfile.findOne({ userId: coachUserId });
-    if (!coach || evaluation.coachId.toString() !== coach._id.toString()) {
-      throw new AppError(403, 'Only the assigned coach can submit this player evaluation');
-    }
-
-    const toScore = (val: unknown): number | null => {
-      if (val === undefined || val === null || val === '') return null;
-      const n = Number(val);
-      return Number.isFinite(n) ? n : null;
-    };
-    const technicalScore = toScore(payload.technicalScore);
-    const physicalScore = toScore(payload.physicalScore);
-    const mentalScore = toScore(payload.mentalScore);
-    if (technicalScore === null && physicalScore === null && mentalScore === null) {
-      throw new AppError(
-        400,
-        'Evaluation requires at least one score (technicalScore, physicalScore or mentalScore).',
-      );
-    }
-
-    const player = await PlayerProfile.findById(evaluation.playerId);
-    if (!player) {
-      throw new AppError(404, 'Player profile not found');
-    }
-    const previousOverall = player.overallRating;
-
-    // Coach-updated attributes, then the SAME recalculation a player profile edit triggers.
-    const recalculated = await playerStatsService.applyEvaluatorAttributes(player._id, {
-      stamina: physicalScore,
-      strength: physicalScore,
-      ballControl: technicalScore,
-      dribbling: technicalScore,
-    });
-    const overallRating = recalculated?.overallRating ?? previousOverall ?? 0;
-
-    // Calculate improvementDelta compared to the previous evaluation (if any)
-    const previousEvaluation = await PlayerEvaluation.findOne({
-      playerId: evaluation.playerId,
-      _id: { $ne: evaluation._id },
-      status: 'EVALUATED',
-    }).sort({ evaluationDate: -1, createdAt: -1 });
-
-    const improvementDelta =
-      previousEvaluation?.overallRating !== undefined
-        ? overallRating - previousEvaluation.overallRating
-        : 0;
-
-    const now = new Date();
-    const nextDue = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 3 months cycle (90 days)
-
-    evaluation.evaluationDate = now;
-    evaluation.overallRating = overallRating;
-    evaluation.improvementDelta = improvementDelta;
-    evaluation.technicalScore = technicalScore ?? undefined;
-    evaluation.physicalScore = physicalScore ?? undefined;
-    evaluation.mentalScore = mentalScore ?? undefined;
-    evaluation.status = 'EVALUATED';
-    evaluation.nextEvaluationDue = nextDue;
-    evaluation.expiresAt = nextDue;
-    evaluation.coachFeedback = payload.coachFeedback;
-    await evaluation.save();
-
-    // overallRating was set by recalculatePlayerStats; only record the evaluation cycle.
-    await PlayerProfile.updateOne(
-      { _id: player._id },
-      {
-        $set: {
-          'playerEvaluation.lastEvaluationDate': now,
-          'playerEvaluation.nextEvaluationDue': nextDue,
-          'playerEvaluation.overallRating': overallRating,
-          'playerEvaluation.evaluationCycle': '3_MONTHS',
-        },
-      },
-    );
-    await playerCacheService.invalidatePlayerCache(player._id, player.userId);
-
-    if (player.userId) {
-      await notificationService.createNotification({
-        recipientId: player.userId,
-        recipientRole: 'PLAYER',
-        title: 'Player Evaluation Completed',
-        message: `Coach ${coach.fullName} has completed your official 3-month evaluation. Rating: ${overallRating}/100.`,
-        type: 'PLAYER_EVALUATION_COMPLETED',
-        data: { evaluationId: evaluation._id, overallRating },
-      });
-    }
-
-    return evaluation;
   }
 }
 

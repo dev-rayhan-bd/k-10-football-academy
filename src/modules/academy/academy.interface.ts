@@ -249,6 +249,7 @@ export interface IAcademyFinanceTransaction {
   commissionPlatform?: number;
   payoutStatus?: 'NOT_APPLICABLE' | 'PENDING_TRANSFER' | 'TRANSFERRED' | 'FAILED';
   stripeTransferId?: string;
+  paymentReference?: string;
   transferredAmount?: number;
   transferredAt?: Date;
   payoutStatusAcademy?: 'PENDING' | 'PAID' | 'PROCESSING';

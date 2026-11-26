@@ -430,6 +430,9 @@ const ExtraEventParticipantSchema = new Schema<IExtraEventParticipant>(
       enum: ['PAID', 'PENDING', 'FREE'],
       default: 'FREE',
     },
+    // Stripe checkout of this registration (confirmed only by the webhook)
+    stripeSessionId: { type: String },
+    stripePaymentIntentId: { type: String },
   },
   { _id: true },
 );
@@ -459,6 +462,8 @@ const TournamentRegisteredClubSchema = new Schema(
     stripeSessionId: { type: String },
     stripePaymentIntentId: { type: String },
     allocatedGroup: { type: String, enum: ['GROUP A', 'GROUP B'] },
+    // logged-in user (club / coach / academy) who registered the team, for "my registrations"
+    registeredByUserId: { type: Schema.Types.ObjectId, ref: 'User' },
     roster: [TournamentClubRosterPlayerSchema],
     registeredAt: { type: Date, default: Date.now },
   },

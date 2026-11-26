@@ -104,9 +104,30 @@ export const handleStripeGameReportWebhook = catchAsync(async (req: Request, res
     await shopService.handleShopOrderStripeWebhook(obj);
   } else if (
     obj.metadata?.paymentType === 'TOURNAMENT_CLUB_REGISTRATION' ||
-    obj.metadata?.type === 'TOURNAMENT_CLUB_REGISTRATION'
+    obj.metadata?.type === 'TOURNAMENT_CLUB_REGISTRATION' ||
+    obj.metadata?.paymentType === 'EXTRA_EVENT_REGISTRATION' ||
+    obj.metadata?.type === 'EXTRA_EVENT_REGISTRATION'
   ) {
-    await academyService.handleTournamentRegistrationStripeWebhook(obj);
+    // Fulfil ONLY a completed, paid checkout session; re-read it from Stripe if unsigned
+    const isCheckoutEvent =
+      (event.type === 'checkout.session.completed' ||
+        event.type === 'checkout.session.async_payment_succeeded') &&
+      obj.object === 'checkout.session' &&
+      typeof obj.id === 'string';
+    if (isCheckoutEvent) {
+      const session = signatureVerified
+        ? obj
+        : await getStripeClient()
+            .checkout.sessions.retrieve(obj.id)
+            .catch(() => null);
+      if (session && session.payment_status === 'paid') {
+        if (session.metadata?.paymentType === 'EXTRA_EVENT_REGISTRATION') {
+          await academyService.handleExtraEventRegistrationStripeWebhook(session);
+        } else if (session.metadata?.paymentType === 'TOURNAMENT_CLUB_REGISTRATION') {
+          await academyService.handleTournamentRegistrationStripeWebhook(session);
+        }
+      }
+    }
   } else if (
     obj.metadata?.paymentType === 'CV_VALIDATION' ||
     obj.metadata?.type === 'CV_VALIDATION'

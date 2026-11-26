@@ -1,12 +1,155 @@
 import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
-import { Team, ExtraEvent } from '../academy.model';
+import { Team, ExtraEvent, AcademyProfile } from '../academy.model';
+import QueryBuilder from '@/builder/QueryBuilder';
+import { env } from '@/config/env';
+import { NotificationService } from '@/modules/notification/notification.service';
 import { academyResolverService } from './academy-resolver.service';
 import { TARGET_ATTENDEES_ENUM } from '../academy.interface';
 import { getStripeClient } from '@/config/stripe';
 import { academyStripeConnectService } from './academy-stripe-connect.service';
 import { normalizeStripeCurrency } from './academy-tournament-registration.service';
+
+const notificationService = new NotificationService();
+
+const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** An unpaid checkout holds a seat for 31 minutes (Stripe Checkout minimum expiry is 30). */
+const PENDING_HOLD_MS = 31 * 60 * 1000;
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+const isSamePerson = (p: any, userId: string, email: string) =>
+  (userId && p.userId && String(p.userId) === userId) ||
+  (email && p.email && String(p.email).toLowerCase() === email);
+
+const isExpiredPending = (p: any, now = new Date()) =>
+  p.paymentStatus === 'PENDING' &&
+  now.getTime() - new Date(p.registeredAt || 0).getTime() > PENDING_HOLD_MS;
+
+/** Confirmed places: paid/free individuals + paid clubs. */
+const confirmedCount = (ev: any) =>
+  (ev.participants || []).filter(
+    (p: any) => p.paymentStatus === 'PAID' || p.paymentStatus === 'FREE',
+  ).length + (ev.registeredClubs || []).filter((c: any) => c.paymentStatus === 'PAID').length;
+
+/** Confirmed + seats held by an open (not expired) checkout. */
+const heldCount = (ev: any, now = new Date()) =>
+  confirmedCount(ev) +
+  (ev.participants || []).filter(
+    (p: any) => p.paymentStatus === 'PENDING' && !isExpiredPending(p, now),
+  ).length;
+
+/** Status computed at read time: the stored status, closed by deadline or capacity. */
+export const effectiveEventStatus = (ev: any, now = new Date()) => {
+  if (ev.status === 'CLOSED') {
+    return { status: 'CLOSED', closedReason: 'Registration is closed for this event' };
+  }
+  if (ev.registrationDeadline && new Date(ev.registrationDeadline).getTime() < now.getTime()) {
+    return { status: 'CLOSED', closedReason: 'The registration deadline has passed' };
+  }
+  if (ev.maxCapacity && heldCount(ev, now) >= Number(ev.maxCapacity)) {
+    return { status: 'CLOSED', closedReason: 'This event is full' };
+  }
+  return { status: ev.status || 'OPEN', closedReason: null as string | null };
+};
+
+const isTournamentEvent = (ev: any) =>
+  /tournament/i.test(String(ev.eventType || '')) ||
+  (ev.tournamentStatus && ev.tournamentStatus !== 'REGISTRATION') ||
+  (ev.registeredClubs || []).length > 0;
+
+/** Public shape of an event: no participant / club contact data. */
+const toPublicEvent = (ev: any, userId?: string, detail = false) => {
+  const now = new Date();
+  const eff = effectiveEventStatus(ev, now);
+  const currency = ev.currency || '£';
+  const fee = Number(ev.registrationFee) || 0;
+  const maxCap = ev.maxCapacity ? Number(ev.maxCapacity) : null;
+  const confirmed = confirmedCount(ev);
+  const academy = ev.academyId && typeof ev.academyId === 'object' ? ev.academyId : null;
+  const tournament = isTournamentEvent(ev);
+
+  const myParticipant = userId
+    ? (ev.participants || []).find(
+        (p: any) => p.userId && String(p.userId) === userId && !isExpiredPending(p, now),
+      )
+    : null;
+  const myClub = userId
+    ? (ev.registeredClubs || []).find(
+        (c: any) => c.registeredByUserId && String(c.registeredByUserId) === userId,
+      )
+    : null;
+
+  return {
+    _id: ev._id,
+    eventName: ev.eventName,
+    eventType: ev.eventType,
+    isTournament: tournament,
+    registrationMode: tournament ? 'CLUB' : 'INDIVIDUAL',
+    group: ev.group,
+    ageGroup: ev.ageGroup,
+    targetAttendees: ev.targetAttendees,
+    academy: academy
+      ? {
+          _id: academy._id,
+          name: academy.name || '',
+          logo: academy.logo || '',
+          city: academy.city || '',
+          country: academy.country || '',
+        }
+      : { _id: ev.academyId || null, name: '', logo: '', city: '', country: '' },
+    eventDate: ev.eventDate,
+    eventEndDate: ev.eventEndDate || null,
+    formattedDate: ev.formattedDateRange || '',
+    startTime: ev.startTime,
+    endTime: ev.endTime,
+    registrationDeadline: ev.registrationDeadline,
+    venueName: ev.venueName,
+    venueAddress: ev.venueAddress,
+    bannerImage: ev.bannerImage || '',
+    registrationFee: fee,
+    currency,
+    feeFormatted: fee > 0 ? `${currency} ${fee}` : 'Free',
+    maxCapacity: maxCap,
+    confirmedCount: confirmed,
+    spotsLeft: maxCap ? Math.max(0, maxCap - heldCount(ev, now)) : null,
+    status: eff.status,
+    closedReason: eff.closedReason,
+    canRegister: eff.status !== 'CLOSED' && !myParticipant && !myClub,
+    tournamentStatus: ev.tournamentStatus || 'REGISTRATION',
+    isLiveMode: !!ev.isLiveMode,
+    myRegistration: myParticipant
+      ? {
+          type: 'INDIVIDUAL',
+          participantId: myParticipant._id,
+          paymentStatus: myParticipant.paymentStatus,
+          registeredAt: myParticipant.registeredAt,
+        }
+      : myClub
+        ? {
+            type: 'CLUB',
+            clubId: myClub._id,
+            clubName: myClub.clubName,
+            paymentStatus: myClub.paymentStatus,
+            registeredAt: myClub.registeredAt,
+          }
+        : null,
+    ...(detail
+      ? {
+          description: ev.description || '',
+          requirements: ev.requirements || '',
+          latitude: ev.latitude ?? null,
+          longitude: ev.longitude ?? null,
+          contactPerson: ev.contactPerson || '',
+          contactPhone: ev.contactPhone || '',
+          contactEmail: ev.contactEmail || '',
+        }
+      : {}),
+    createdAt: ev.createdAt,
+  };
+};
 
 export class AcademyEventsService {
   async getExtraEventsMeta(user: any, academyIdentifier?: string) {
@@ -143,10 +286,11 @@ export class AcademyEventsService {
         Number(ev.currentAttendees) ||
         (Array.isArray(ev.participants) ? ev.participants.length : 0);
 
+      const eff = effectiveEventStatus(ev);
       // Status badge styling metadata for UI
       let badgeVariant = 'green';
-      if (ev.status === 'CLOSING SOON') badgeVariant = 'yellow';
-      if (ev.status === 'CLOSED') badgeVariant = 'gray';
+      if (eff.status === 'CLOSING SOON') badgeVariant = 'yellow';
+      if (eff.status === 'CLOSED') badgeVariant = 'gray';
 
       return {
         _id: ev._id,
@@ -155,9 +299,10 @@ export class AcademyEventsService {
         group: ev.group,
         ageGroup: ev.ageGroup,
         targetAttendees: ev.targetAttendees,
-        status: ev.status,
+        status: eff.status,
+        closedReason: eff.closedReason,
         statusBadge: {
-          label: ev.status,
+          label: eff.status,
           variant: badgeVariant,
         },
         formattedDate: ev.formattedDateRange || '',
@@ -182,7 +327,7 @@ export class AcademyEventsService {
         contactPhone: ev.contactPhone,
         contactEmail: ev.contactEmail,
         bannerImage: ev.bannerImage || '',
-        canRegister: ev.status === 'OPEN' && (!maxCap || attendees < maxCap),
+        canRegister: eff.status !== 'CLOSED',
         shareUrl: `/dashboard/academy/management/extra-events/${ev._id}`,
         tournamentStatus: ev.tournamentStatus || 'REGISTRATION',
         isLiveMode: !!ev.isLiveMode,
@@ -227,7 +372,8 @@ export class AcademyEventsService {
       group: ev.group,
       ageGroup: ev.ageGroup,
       targetAttendees: ev.targetAttendees,
-      status: ev.status,
+      status: effectiveEventStatus(ev).status,
+      closedReason: effectiveEventStatus(ev).closedReason,
       formattedDate: ev.formattedDateRange || '',
       eventDate: ev.eventDate,
       eventEndDate: ev.eventEndDate,
@@ -261,7 +407,7 @@ export class AcademyEventsService {
         semifinals: [],
         grandFinal: null,
       },
-      canRegister: ev.status === 'OPEN' && (!maxCap || attendees < maxCap),
+      canRegister: effectiveEventStatus(ev).status !== 'CLOSED',
       shareUrl: `/dashboard/academy/management/extra-events/${ev._id}`,
       createdAt: ev.createdAt,
       updatedAt: ev.updatedAt,
@@ -379,67 +525,88 @@ export class AcademyEventsService {
   async deleteExtraEvent(id: string, user: any, academyIdentifier?: string) {
     const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
 
-    const event = await ExtraEvent.findOneAndDelete({
-      _id: id,
-      academyId: academy._id,
-    });
-
-    if (!event) {
+    const existing = await ExtraEvent.findOne({ _id: id, academyId: academy._id })
+      .select('participants.paymentStatus registeredClubs.paymentStatus')
+      .lean();
+    if (!existing) {
       throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
     }
+    const paidCount =
+      ((existing as any).participants || []).filter((p: any) => p.paymentStatus === 'PAID').length +
+      ((existing as any).registeredClubs || []).filter((c: any) => c.paymentStatus === 'PAID')
+        .length;
+    if (paidCount > 0) {
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        `This event has ${paidCount} paid registration(s). Close the event (status CLOSED) instead of deleting it, or refund the registrations first.`,
+      );
+    }
+    await ExtraEvent.deleteOne({ _id: id, academyId: academy._id });
 
     return {
       message: 'Extra event deleted successfully',
     };
   }
 
-  async registerForExtraEvent(
-    id: string,
-    user: any,
-    participantData: any,
-    academyIdentifier?: string,
-  ) {
-    let event = await ExtraEvent.findById(id);
-    if (!event && academyIdentifier) {
-      const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-      event = await ExtraEvent.findOne({ _id: id, academyId: academy._id });
+  /**
+   * Individual registration (player / parent / anyone, logged in or not).
+   * Paid events ALWAYS go through Stripe Checkout; the seat is confirmed only by the Stripe
+   * webhook (handleExtraEventRegistrationStripeWebhook). The client can never mark itself paid.
+   */
+  async registerForExtraEvent(id: string, user: any, participantData: any) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid event ID');
     }
-
+    const event = await ExtraEvent.findById(id);
     if (!event) {
       throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
     }
 
-    if (event.status === 'CLOSED') {
-      throw new AppError(StatusCodes.BAD_REQUEST, 'Registration is closed for this event');
+    const now = new Date();
+    const effective = effectiveEventStatus(event, now);
+    if (effective.status === 'CLOSED') {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        effective.closedReason || 'Registration is closed',
+      );
     }
 
-    if (event.maxCapacity && event.currentAttendees >= event.maxCapacity) {
-      event.status = 'CLOSED';
-      await event.save();
-      throw new AppError(StatusCodes.BAD_REQUEST, 'This event has reached maximum capacity');
+    const email = participantData.email ? String(participantData.email).trim().toLowerCase() : '';
+    const userId = user?.userId ? String(user.userId) : '';
+    if (!userId && !email) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Email is required when not logged in');
+    }
+
+    // Same person can't hold two seats. A stale unpaid checkout (expired) is dropped.
+    event.participants = (event.participants || []).filter(
+      (p: any) => !(isSamePerson(p, userId, email) && isExpiredPending(p, now)),
+    );
+    const existing = (event.participants || []).find((p: any) => isSamePerson(p, userId, email));
+    if (existing) {
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        existing.paymentStatus === 'PENDING'
+          ? 'You already have a registration waiting for payment. Complete it or try again in 30 minutes.'
+          : 'You are already registered for this event',
+      );
     }
 
     const fee = Number(event.registrationFee) || 0;
+    const participantId = new Types.ObjectId();
     let checkoutUrl: string | null = null;
     let sessionId: string | null = null;
-    let paymentStatus: 'PAID' | 'PENDING' | 'FREE' =
-      fee > 0 ? participantData.paymentStatus || 'PAID' : 'FREE';
+    const paymentStatus: 'PENDING' | 'FREE' = fee > 0 ? 'PENDING' : 'FREE';
 
-    if (
-      fee > 0 &&
-      (participantData.paymentMethod === 'STRIPE' || participantData.useStripe === true)
-    ) {
+    if (fee > 0) {
       const stripe = getStripeClient();
-      const currency = normalizeStripeCurrency(event.currency);
       const academyStripeAccountId =
         await academyStripeConnectService.getActiveConnectedStripeAccountId(event.academyId);
-      const baseUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
-
       const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
         line_items: [
           {
             price_data: {
-              currency,
+              currency: normalizeStripeCurrency(event.currency),
               product_data: {
                 name: `Event Registration: ${event.eventName}`,
                 description: `Participant: ${participantData.name}`,
@@ -449,62 +616,218 @@ export class AcademyEventsService {
             quantity: 1,
           },
         ],
-        mode: 'payment',
-        customer_email: participantData.email || undefined,
+        customer_email: email || undefined,
+        // seat is held only while the checkout is open
+        expires_at: Math.floor((now.getTime() + PENDING_HOLD_MS) / 1000),
         ...(academyStripeAccountId
-          ? {
-              payment_intent_data: {
-                transfer_data: {
-                  destination: academyStripeAccountId,
-                },
-              },
-            }
+          ? { payment_intent_data: { transfer_data: { destination: academyStripeAccountId } } }
           : {}),
         metadata: {
           type: 'EXTRA_EVENT_REGISTRATION',
           paymentType: 'EXTRA_EVENT_REGISTRATION',
           eventId: event._id.toString(),
+          participantId: participantId.toString(),
           academyId: event.academyId?.toString() || '',
-          participantEmail: participantData.email || '',
         },
-        success_url: `${baseUrl}/dashboard/academy/management/extra-events/${event._id}?session_id={CHECKOUT_SESSION_ID}&payment=success`,
-        cancel_url: `${baseUrl}/dashboard/academy/management/extra-events/${event._id}?payment=cancelled`,
+        success_url: `${env.STRIPE_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}&type=EXTRA_EVENT&eventId=${event._id}`,
+        cancel_url: `${env.STRIPE_CANCEL_URL}?type=EXTRA_EVENT&eventId=${event._id}`,
       });
-
       checkoutUrl = session.url;
       sessionId = session.id;
-      paymentStatus = 'PENDING';
     }
 
-    event.participants = event.participants || [];
     event.participants.push({
-      userId: user?.userId ? new Types.ObjectId(user.userId) : undefined,
-      name: participantData.name,
-      email: participantData.email,
+      _id: participantId,
+      userId: userId ? new Types.ObjectId(userId) : undefined,
+      name: String(participantData.name).trim(),
+      email: email || undefined,
       phone: participantData.phone,
       teamName: participantData.teamName,
-      registeredAt: new Date(),
-      paidAmount: paymentStatus === 'PAID' ? participantData.paidAmount || fee : 0,
+      registeredAt: now,
+      paidAmount: 0,
       paymentStatus,
-    });
+      stripeSessionId: sessionId || undefined,
+    } as any);
 
-    event.currentAttendees = (event.currentAttendees || 0) + 1;
-
-    if (event.maxCapacity && event.currentAttendees >= event.maxCapacity) {
-      event.status = 'CLOSED';
+    if (paymentStatus === 'FREE') {
+      event.currentAttendees = confirmedCount(event);
+      if (event.maxCapacity && event.currentAttendees >= event.maxCapacity) event.status = 'CLOSED';
     }
-
     await event.save();
+
+    if (paymentStatus === 'FREE') {
+      await this.notifyAcademyOfRegistration(event, String(participantData.name));
+    }
 
     return {
       message: checkoutUrl
-        ? 'Event registration initiated. Please complete Stripe payment.'
+        ? 'Complete the payment to confirm your place.'
         : 'Registration completed successfully',
-      currentAttendees: event.currentAttendees,
-      maxCapacity: event.maxCapacity,
-      status: event.status,
+      participantId,
+      paymentStatus,
+      requiresPayment: Boolean(checkoutUrl),
       checkoutUrl,
       sessionId,
+      currentAttendees: event.currentAttendees,
+      maxCapacity: event.maxCapacity ?? null,
+      status: effectiveEventStatus(event).status,
+    };
+  }
+
+  /** Stripe webhook: confirm a paid individual registration (idempotent). */
+  async handleExtraEventRegistrationStripeWebhook(session: any) {
+    const { eventId, participantId } = session?.metadata || {};
+    if (!eventId || !Types.ObjectId.isValid(eventId)) return;
+    const event = await ExtraEvent.findById(eventId);
+    if (!event) return;
+
+    const participant: any = (event.participants || []).find(
+      (p: any) =>
+        (participantId && String(p._id) === participantId) ||
+        (session.id && p.stripeSessionId === session.id),
+    );
+    if (!participant || participant.paymentStatus === 'PAID') return;
+    if (participant.stripeSessionId && participant.stripeSessionId !== session.id) return;
+
+    participant.paymentStatus = 'PAID';
+    participant.paidAmount = session.amount_total
+      ? session.amount_total / 100
+      : Number(event.registrationFee) || 0;
+    participant.stripePaymentIntentId = session.payment_intent || undefined;
+    event.currentAttendees = confirmedCount(event);
+    if (event.maxCapacity && event.currentAttendees >= event.maxCapacity) event.status = 'CLOSED';
+    await event.save();
+
+    await this.notifyAcademyOfRegistration(event, participant.name);
+    if (participant.userId) {
+      await notificationService.createNotification({
+        recipientId: participant.userId,
+        recipientRole: 'PLAYER',
+        title: 'Event registration confirmed',
+        message: `Your place at ${event.eventName} is confirmed.`,
+        type: 'EXTRA_EVENT_REGISTERED',
+        data: { eventId: event._id },
+      });
+    }
+  }
+
+  private async notifyAcademyOfRegistration(event: any, who: string) {
+    const academy = await AcademyProfile.findById(event.academyId).select('userId').lean();
+    if (!academy?.userId) return;
+    await notificationService
+      .createNotification({
+        recipientId: academy.userId,
+        recipientRole: 'ACADEMY',
+        title: 'New event registration',
+        message: `${who} registered for ${event.eventName}.`,
+        type: 'EXTRA_EVENT_REGISTRATION',
+        data: { eventId: event._id },
+      })
+      .catch(() => null);
+  }
+
+  // ==========================================
+  // PUBLIC / PLAYER / CLUB DISCOVERY
+  // ==========================================
+  /** Public event list (no login needed). Never returns participant or club contact data. */
+  async getPublicEvents(query: any = {}, user?: any) {
+    const q: Record<string, unknown> = { ...query };
+    const and: Record<string, any>[] = [];
+    const now = new Date();
+
+    if (q.academyId) {
+      if (!Types.ObjectId.isValid(String(q.academyId))) {
+        throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid academyId');
+      }
+      and.push({ academyId: new Types.ObjectId(String(q.academyId)) });
+    }
+    const exact = (field: string, key: string) => {
+      const v = String(q[key] || '').trim();
+      if (v && v.toUpperCase() !== 'ALL') {
+        and.push({ [field]: { $regex: `^${escapeRegex(v)}$`, $options: 'i' } });
+      }
+    };
+    exact('eventType', 'eventType');
+    exact('ageGroup', 'ageGroup');
+    exact('targetAttendees', 'targetAttendees');
+
+    // default: upcoming events only
+    const when = String(q.when || 'upcoming').toLowerCase();
+    if (when === 'upcoming') and.push({ eventDate: { $gte: startOfDay(now) } });
+    else if (when === 'past') and.push({ eventDate: { $lt: startOfDay(now) } });
+    else if (when !== 'all') {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid when. Use upcoming, past or all');
+    }
+
+    const onlyOpen = String(q.openOnly || '').toLowerCase() === 'true';
+    if (onlyOpen) {
+      and.push({ status: { $ne: 'CLOSED' }, registrationDeadline: { $gte: now } });
+    }
+
+    const term = String(q.searchTerm || q.search || '').trim();
+    const listQuery: Record<string, unknown> = {
+      page: Math.max(1, Number(q.page) || 1),
+      limit: Math.max(1, Math.min(100, Number(q.limit) || 10)),
+      sort:
+        typeof q.sort === 'string' && q.sort
+          ? q.sort
+          : when === 'past'
+            ? '-eventDate'
+            : 'eventDate',
+      ...(term ? { searchTerm: escapeRegex(term) } : {}),
+    };
+
+    const builder = new QueryBuilder(ExtraEvent.find(and.length ? { $and: and } : {}), listQuery)
+      .search(['eventName', 'eventType', 'venueName', 'venueAddress'])
+      .filter()
+      .sort()
+      .paginate();
+    const [events, meta] = await Promise.all([
+      builder.modelQuery.populate('academyId', 'name logo city country').lean(),
+      builder.countTotal(),
+    ]);
+
+    return {
+      meta,
+      events: (events as any[]).map((ev) => toPublicEvent(ev, user?.userId)),
+    };
+  }
+
+  /** Public event detail (+ my registration when logged in). */
+  async getPublicEventById(id: string, user?: any) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid event ID');
+    }
+    const ev: any = await ExtraEvent.findById(id)
+      .populate('academyId', 'name logo city country')
+      .lean();
+    if (!ev) throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
+    return toPublicEvent(ev, user?.userId, true);
+  }
+
+  /** Events the logged-in user registered for (individually, or a club they registered). */
+  async getMyRegistrations(user: any, query: any = {}) {
+    const me = new Types.ObjectId(String(user.userId));
+    const listQuery: Record<string, unknown> = {
+      page: Math.max(1, Number(query.page) || 1),
+      limit: Math.max(1, Math.min(100, Number(query.limit) || 10)),
+      sort: '-eventDate',
+    };
+    const builder = new QueryBuilder(
+      ExtraEvent.find({
+        $or: [{ 'participants.userId': me }, { 'registeredClubs.registeredByUserId': me }],
+      }),
+      listQuery,
+    )
+      .sort()
+      .paginate();
+    const [events, meta] = await Promise.all([
+      builder.modelQuery.populate('academyId', 'name logo city country').lean(),
+      builder.countTotal(),
+    ]);
+    return {
+      meta,
+      events: (events as any[]).map((ev) => toPublicEvent(ev, String(user.userId), true)),
     };
   }
 }

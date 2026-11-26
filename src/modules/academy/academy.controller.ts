@@ -1178,14 +1178,45 @@ export const deleteExtraEvent = catchAsync(async (req: Request, res: Response) =
 
 export const registerForExtraEvent = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { id } = req.params;
-  const academyIdentifier = req.params.academyId;
-  const result = await academyService.registerForExtraEvent(id, user, req.body, academyIdentifier);
+  const result = await academyService.registerForExtraEvent(req.params.id, user, req.body);
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: result.message,
     data: result,
+  });
+});
+
+// Public discovery (no login needed) + the logged-in user's own registrations
+export const getPublicExtraEvents = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.getPublicExtraEvents(req.query, (req as any).user);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Events fetched successfully',
+    meta: result.meta,
+    data: result.events,
+  });
+});
+
+export const getPublicExtraEventById = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.getPublicExtraEventById(req.params.id, (req as any).user);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Event fetched successfully',
+    data: result,
+  });
+});
+
+export const getMyExtraEventRegistrations = catchAsync(async (req: Request, res: Response) => {
+  const result = await academyService.getMyExtraEventRegistrations((req as any).user, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Your event registrations fetched successfully',
+    meta: result.meta,
+    data: result.events,
   });
 });
 
@@ -1195,7 +1226,6 @@ export const registerForExtraEvent = catchAsync(async (req: Request, res: Respon
 
 export const registerTournamentClub = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const originUrl = (req.headers.origin || req.headers.referer) as string;
 
   // 1. Support multipart form-data 'data' JSON string if present
   if (req.body?.data && typeof req.body.data === 'string') {
@@ -1240,7 +1270,7 @@ export const registerTournamentClub = catchAsync(async (req: Request, res: Respo
       : `${req.body.clubName || 'Club'} Logo`;
   }
 
-  const result = await academyService.registerTournamentClub(id, req.body, originUrl);
+  const result = await academyService.registerTournamentClub(id, req.body, (req as any).user);
   sendResponse(res, {
     statusCode: 200,
     success: true,

@@ -318,6 +318,8 @@ export interface IExtraEventParticipant {
   registeredAt: Date;
   paidAmount?: number;
   paymentStatus?: 'PAID' | 'PENDING' | 'FREE';
+  stripeSessionId?: string;
+  stripePaymentIntentId?: string;
 }
 
 export interface ITournamentClubRosterPlayer {

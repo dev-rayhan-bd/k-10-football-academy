@@ -5,6 +5,8 @@ import { ExtraEvent } from '../academy.model';
 import { getStripeClient } from '@/config/stripe';
 import { logger } from '@/utils/logger';
 import { academyStripeConnectService } from './academy-stripe-connect.service';
+import { env } from '@/config/env';
+import { AcademyProfile } from '../academy.model';
 
 export const TOURNAMENT_PRESET_BADGES = [
   {
@@ -50,7 +52,7 @@ export class AcademyTournamentRegistrationService {
   /**
    * Register a club for a tournament with roster & Stripe checkout session
    */
-  async registerClub(eventId: string, payload: any, originUrl?: string) {
+  async registerClub(eventId: string, payload: any, user?: any) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid event ID');
     }
@@ -62,6 +64,26 @@ export class AcademyTournamentRegistrationService {
 
     if (event.status === 'CLOSED') {
       throw new AppError(StatusCodes.BAD_REQUEST, 'Registration is closed for this tournament');
+    }
+    if (event.registrationDeadline && new Date(event.registrationDeadline) < new Date()) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'The registration deadline has passed');
+    }
+    if (event.tournamentStatus && event.tournamentStatus !== 'REGISTRATION') {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'This tournament has already started');
+    }
+
+    // MANUAL (offline payment) can only be recorded by the organising academy or an admin
+    let isOrganiser = false;
+    if (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') isOrganiser = true;
+    else if (user?.role === 'ACADEMY') {
+      const own = await AcademyProfile.findOne({ userId: user.userId }).select('_id').lean();
+      isOrganiser = Boolean(own && String(own._id) === String(event.academyId));
+    }
+    if (payload.paymentMethod === 'MANUAL' && !isOrganiser) {
+      throw new AppError(
+        StatusCodes.FORBIDDEN,
+        'Only the organising academy can add a club with manual (offline) payment',
+      );
     }
 
     const maxCap = event.maxCapacity || 8;
@@ -108,10 +130,6 @@ export class AcademyTournamentRegistrationService {
       const academyStripeAccountId =
         await academyStripeConnectService.getActiveConnectedStripeAccountId(event.academyId);
 
-      const baseUrl = (originUrl || process.env.CLIENT_URL || 'http://localhost:3000').replace(
-        /\/$/,
-        '',
-      );
       try {
         stripeSession = await stripe.checkout.sessions.create({
           line_items: [
@@ -146,8 +164,8 @@ export class AcademyTournamentRegistrationService {
             clubId: clubId.toString(),
             clubName: payload.clubName,
           },
-          success_url: `${baseUrl}/dashboard/academy/management/extra-events/${event._id}?session_id={CHECKOUT_SESSION_ID}&payment=success`,
-          cancel_url: `${baseUrl}/dashboard/academy/management/extra-events/${event._id}?payment=cancelled`,
+          success_url: `${env.STRIPE_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}&type=TOURNAMENT_CLUB&eventId=${event._id}&clubId=${clubId}`,
+          cancel_url: `${env.STRIPE_CANCEL_URL}?type=TOURNAMENT_CLUB&eventId=${event._id}`,
         });
       } catch (stripeErr: any) {
         logger.error('Stripe checkout session creation failed:', stripeErr);
@@ -224,6 +242,7 @@ export class AcademyTournamentRegistrationService {
       paymentStatus,
       paidAmount: paymentStatus === 'PAID' ? fee : 0,
       stripeSessionId: stripeSession ? stripeSession.id : undefined,
+      registeredByUserId: user?.userId ? new Types.ObjectId(String(user.userId)) : undefined,
       roster,
       registeredAt: new Date(),
     };
@@ -270,9 +289,12 @@ export class AcademyTournamentRegistrationService {
     const club = event.registeredClubs?.find(
       (c) =>
         (clubId && c._id?.toString() === clubId) ||
-        (sessionObject.id && c.stripeSessionId === sessionObject.id) ||
-        (clubName && c.clubName.toLowerCase() === clubName.toLowerCase()),
+        (sessionObject.id && c.stripeSessionId === sessionObject.id),
     );
+    if (club && club.stripeSessionId && club.stripeSessionId !== sessionObject.id) {
+      logger.warn(`Tournament Webhook: session mismatch for club ${clubName || clubId}`);
+      return;
+    }
 
     if (club && club.paymentStatus !== 'PAID') {
       club.paymentStatus = 'PAID';

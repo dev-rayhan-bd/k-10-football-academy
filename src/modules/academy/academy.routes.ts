@@ -118,6 +118,9 @@ import {
   updateExtraEvent,
   deleteExtraEvent,
   registerForExtraEvent,
+  getPublicExtraEvents,
+  getPublicExtraEventById,
+  getMyExtraEventRegistrations,
   registerTournamentClub,
   verifyClubRegistrationPayment,
   getTournamentRegisteredClubs,
@@ -881,6 +884,10 @@ router.delete('/:academyId/matches/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteM
 // ==========================================
 // EXTRA EVENTS ROUTES
 // ==========================================
+// Public discovery + my registrations (declared before /extra-events/:id)
+router.get('/extra-events/public', optionalAuth(), getPublicExtraEvents);
+router.get('/extra-events/public/:id', optionalAuth(), getPublicExtraEventById);
+router.get('/extra-events/my-registrations', auth(), getMyExtraEventRegistrations);
 router.get('/extra-events/meta', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getExtraEventsMeta);
 router.get(
   '/:academyId/extra-events/meta',

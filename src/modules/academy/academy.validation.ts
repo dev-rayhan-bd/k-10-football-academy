@@ -429,10 +429,8 @@ export const registerExtraEventParticipantZodSchema = z.object({
       email: z.string().email().optional(),
       phone: z.string().optional(),
       teamName: z.string().optional(),
-      paidAmount: z.number().optional(),
-      paymentStatus: z.enum(['PAID', 'PENDING', 'FREE']).optional(),
     })
-    .passthrough(),
+    .strip(),
 });
 
 export const registerTournamentClubZodSchema = z.object({

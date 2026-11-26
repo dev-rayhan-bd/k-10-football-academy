@@ -487,24 +487,30 @@ export class AcademyService {
     return await academyEventsService.deleteExtraEvent(id, user, academyIdentifier);
   }
 
-  async registerForExtraEvent(
-    id: string,
-    user: any,
-    participantData: any,
-    academyIdentifier?: string,
-  ) {
-    return await academyEventsService.registerForExtraEvent(
-      id,
-      user,
-      participantData,
-      academyIdentifier,
-    );
+  async registerForExtraEvent(id: string, user: any, participantData: any) {
+    return await academyEventsService.registerForExtraEvent(id, user, participantData);
+  }
+
+  async handleExtraEventRegistrationStripeWebhook(session: any) {
+    return await academyEventsService.handleExtraEventRegistrationStripeWebhook(session);
+  }
+
+  async getPublicExtraEvents(query: any = {}, user?: any) {
+    return await academyEventsService.getPublicEvents(query, user);
+  }
+
+  async getPublicExtraEventById(id: string, user?: any) {
+    return await academyEventsService.getPublicEventById(id, user);
+  }
+
+  async getMyExtraEventRegistrations(user: any, query: any = {}) {
+    return await academyEventsService.getMyRegistrations(user, query);
   }
 
   // --- AcademyTournament Delegates ---
 
-  async registerTournamentClub(eventId: string, payload: any, originUrl?: string) {
-    return await academyTournamentRegistrationService.registerClub(eventId, payload, originUrl);
+  async registerTournamentClub(eventId: string, payload: any, user?: any) {
+    return await academyTournamentRegistrationService.registerClub(eventId, payload, user);
   }
 
   async handleTournamentRegistrationStripeWebhook(sessionObject: any) {

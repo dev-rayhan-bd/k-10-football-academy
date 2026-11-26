@@ -214,8 +214,10 @@ export type FeePaymentStatus = 'PAID' | 'UNPAID' | 'PENDING';
 
 export interface IAcademyFeePayment {
   academyId: Types.ObjectId;
-  playerId: Types.ObjectId;
+  playerId?: Types.ObjectId;
   parentId?: Types.ObjectId;
+  eventId?: Types.ObjectId;
+  clubName?: string;
   feeType: FeePaymentType;
   amount: number;
   paymentDate: Date;

@@ -269,8 +269,10 @@ export const TransferRequest = model<ITransferRequestDocument>(
 const AcademyFeePaymentSchema = new Schema<IAcademyFeePaymentDocument>(
   {
     academyId: { type: Schema.Types.ObjectId, ref: 'AcademyProfile', required: true, index: true },
-    playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: true, index: true },
+    playerId: { type: Schema.Types.ObjectId, ref: 'PlayerProfile', required: false, index: true },
     parentId: { type: Schema.Types.ObjectId, ref: 'ParentProfile' },
+    eventId: { type: Schema.Types.ObjectId, ref: 'ExtraEvent' },
+    clubName: { type: String },
     feeType: { type: String, required: true, default: 'Monthly Fee' },
     amount: { type: Number, required: true },
     paymentDate: { type: Date, required: true, default: Date.now },

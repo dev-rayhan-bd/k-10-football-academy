@@ -109,10 +109,10 @@ export class AcademyFinanceService {
         player: {
           _id: player._id || null,
           id: player._id || null,
-          name: player.fullName || 'Player',
-          position: player.position || 'Forward',
+          name: player.fullName || doc.clubName || 'Player',
+          position: player.position || (doc.clubName ? 'Club Squad' : 'Forward'),
           avatar: player.profileImage || '',
-          currentClub: player.currentClub || academy.name,
+          currentClub: player.currentClub || doc.clubName || academy.name,
         },
         feeType: doc.feeType,
         type: doc.feeType,

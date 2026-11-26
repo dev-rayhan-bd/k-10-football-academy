@@ -1,12 +1,11 @@
 import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
-import { ExtraEvent } from '../academy.model';
+import { ExtraEvent, AcademyProfile, AcademyFeePayment } from '../academy.model';
 import { getStripeClient } from '@/config/stripe';
 import { logger } from '@/utils/logger';
 import { academyStripeConnectService } from './academy-stripe-connect.service';
 import { env } from '@/config/env';
-import { AcademyProfile } from '../academy.model';
 
 export const TOURNAMENT_PRESET_BADGES = [
   {
@@ -49,6 +48,39 @@ export const normalizeStripeCurrency = (raw?: string): string => {
 };
 
 export class AcademyTournamentRegistrationService {
+  /**
+   * Idempotently record a paid tournament club registration into AcademyFeePayment
+   * so Academy Fees & Payments and Dashboard Revenue reflect the 100% direct earnings.
+   */
+  private async recordAcademyTournamentFeePayment(event: any, club: any) {
+    try {
+      const amount = Number(club.paidAmount || event.registrationFee || 0);
+      if (amount <= 0 || !event.academyId) return;
+
+      const txnId = club.stripeSessionId || club.stripePaymentIntentId || String(club._id);
+      const existing = await AcademyFeePayment.findOne({
+        academyId: event.academyId,
+        transactionId: txnId,
+      }).lean();
+      if (existing) return;
+
+      await AcademyFeePayment.create({
+        academyId: event.academyId,
+        eventId: event._id,
+        clubName: club.clubName,
+        feeType: `Tournament Entry Fee (${event.eventName || 'Tournament'})`,
+        amount,
+        paymentDate: club.registeredAt || new Date(),
+        status: 'PAID',
+        paymentMethod: club.stripeSessionId ? 'STRIPE' : 'OTHER',
+        transactionId: txnId,
+        notes: `Club registration fee for ${club.clubName} (${club.category || event.ageGroup || 'Open'})`,
+      });
+    } catch (err: any) {
+      logger.warn(`Failed to record AcademyFeePayment for tournament club: ${err.message}`);
+    }
+  }
+
   /**
    * Register a club for a tournament with roster & Stripe checkout session
    */
@@ -259,6 +291,10 @@ export class AcademyTournamentRegistrationService {
 
     await event.save();
 
+    if (paymentStatus === 'PAID') {
+      await this.recordAcademyTournamentFeePayment(event, newClubRecord);
+    }
+
     return {
       message:
         paymentStatus === 'PENDING'
@@ -309,6 +345,7 @@ export class AcademyTournamentRegistrationService {
       }
 
       await event.save();
+      await this.recordAcademyTournamentFeePayment(event, club);
       logger.info(
         `Tournament Webhook: Club ${club.clubName} payment confirmed for event ${event.eventName}`,
       );
@@ -353,6 +390,8 @@ export class AcademyTournamentRegistrationService {
       event.currentAttendees = (event.currentAttendees || 0) + 1;
       await event.save();
     }
+
+    await this.recordAcademyTournamentFeePayment(event, club);
 
     return {
       message: 'Club registration payment verified successfully',

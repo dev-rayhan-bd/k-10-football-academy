@@ -6,6 +6,7 @@ import { UserModel } from '@/modules/user/user.model';
 import { uploadToStorage } from '@/utils/fileUpload.utils';
 
 import { emitToUser, isUserOnline } from '@/socket';
+import { getDisplayMap, displayOf, findUserIdsByProfileName } from './chat-display';
 
 /**
  * Emit an event once to every participant's personal room (`user:<id>`).
@@ -104,6 +105,7 @@ export class ChatService {
       }
 
       const groupName = groupData.name?.trim() || `Group Chat (${existingUsers.length} members)`;
+      const groupDisplay = await getDisplayMap(existingUsers.map((u) => u._id));
 
       const conversation = await Conversation.create({
         type: 'GROUP',
@@ -151,9 +153,9 @@ export class ChatService {
         participants: existingUsers.map((u: any) => ({
           _id: u._id,
           id: u._id.toString(),
-          name: u.name || u.fullName || 'User',
+          name: displayOf(groupDisplay, u).name,
           role: u.role || 'MEMBER',
-          avatar: u.avatar || '',
+          avatar: displayOf(groupDisplay, u).avatar,
         })),
         lastMessage: conversation.lastMessage || 'Group created',
         lastMessageTime: conversation.lastMessageTime,
@@ -224,6 +226,7 @@ export class ChatService {
       ]);
     }
 
+    const targetDisplay = displayOf(await getDisplayMap([targetUser._id]), targetUser);
     return {
       id: conversation._id.toString(),
       _id: conversation._id,
@@ -231,10 +234,10 @@ export class ChatService {
       user: {
         _id: targetUser._id,
         id: targetUser._id.toString(),
-        name: targetUser.name || (targetUser as any).fullName || 'User',
-        fullName: (targetUser as any).fullName || targetUser.name || 'User',
+        name: targetDisplay.name,
+        fullName: targetDisplay.name,
         role: targetUser.role,
-        avatar: targetUser.avatar || '',
+        avatar: targetDisplay.avatar,
         email: targetUser.email,
         currentClub: targetUser.currentClub || '',
         isOnline: isUserOnline(targetUserId),
@@ -286,19 +289,23 @@ export class ChatService {
       .sort({ createdAt: 1 })
       .lean();
 
+    const memberDisplay = await getDisplayMap(
+      participants.map((p: any) => p.userId?._id || p.userId).filter(Boolean),
+    );
     const members = participants
       .filter((p: any) => p.userId)
       .map((p: any) => {
         const u = p.userId;
+        const shown = displayOf(memberDisplay, u);
         const uid = String(u._id);
         const memberIsAdmin =
           isGroup && (String(conversation.creatorId || '') === uid || p.role === 'ADMIN');
         return {
           _id: u._id,
           id: uid,
-          name: u.name || u.fullName || '',
+          name: shown.name,
           email: u.email || '',
-          avatar: u.avatar || '',
+          avatar: shown.avatar,
           userRole: u.role || '',
           chatRole: memberIsAdmin ? 'ADMIN' : 'MEMBER',
           isAdmin: memberIsAdmin,
@@ -444,6 +451,9 @@ export class ChatService {
       .populate('userId', '_id name fullName email role avatar currentClub status')
       .lean();
 
+    const listDisplay = await getDisplayMap(
+      allParticipants.map((p: any) => p.userId?._id || p.userId).filter(Boolean),
+    );
     const participantMap = new Map<string, any[]>();
     allParticipants.forEach((p) => {
       const key = p.conversationId.toString();
@@ -487,11 +497,10 @@ export class ChatService {
       const primaryUserId = primaryUser?._id ? primaryUser._id.toString() : '';
       const unreadCount = unreadMap.get(conv._id.toString()) || 0;
 
-      const displayName = isGroup
-        ? conv.name || 'Group Chat'
-        : primaryUser?.name || primaryUser?.fullName || 'User';
+      const primaryDisplay = primaryUser ? displayOf(listDisplay, primaryUser) : null;
+      const displayName = isGroup ? conv.name || 'Group Chat' : primaryDisplay?.name || '';
 
-      const displayAvatar = isGroup ? conv.avatar || '' : primaryUser?.avatar || '';
+      const displayAvatar = isGroup ? conv.avatar || '' : primaryDisplay?.avatar || '';
 
       const displayRole = isGroup ? 'GROUP' : primaryUser?.role || 'USER';
 
@@ -514,9 +523,9 @@ export class ChatService {
         participants: isGroup
           ? otherMembers.map((m: any) => ({
               _id: m._id,
-              name: m.name || m.fullName || 'User',
+              name: displayOf(listDisplay, m).name,
               role: m.role || 'MEMBER',
-              avatar: m.avatar || '',
+              avatar: displayOf(listDisplay, m).avatar,
             }))
           : undefined,
         lastMessage: conv.lastMessage || '',
@@ -684,6 +693,7 @@ export class ChatService {
     );
 
     const senderObj = message.senderId as any;
+    const senderShown = displayOf(await getDisplayMap([senderObj?._id || senderId]), senderObj);
     const formattedMessage = {
       id: message._id.toString(),
       _id: message._id,
@@ -691,9 +701,9 @@ export class ChatService {
       senderId: senderObj?._id || senderId,
       sender: {
         _id: senderObj?._id || senderId,
-        name: senderObj?.name || senderObj?.fullName || 'User',
+        name: senderShown.name,
         role: senderObj?.role || 'USER',
-        avatar: senderObj?.avatar || '',
+        avatar: senderShown.avatar,
       },
       receiverId: message.receiverId,
       text: message.text || '',
@@ -719,8 +729,8 @@ export class ChatService {
         lastMessageTime: sentAt,
         lastSenderId: senderId,
         senderId,
-        senderName: senderObj?.name || senderObj?.fullName || 'User',
-        senderAvatar: senderObj?.avatar || '',
+        senderName: senderShown.name,
+        senderAvatar: senderShown.avatar,
         unreadIncrement: isSender ? 0 : 1,
       });
     });
@@ -768,8 +778,12 @@ export class ChatService {
       await this.markMessagesAsRead(conversationId, currentUserId);
     }
 
+    const messageDisplay = await getDisplayMap(
+      messages.map((m: any) => m.senderId?._id || m.senderId).filter(Boolean),
+    );
     const data = messages.map((msg: any) => {
       const s = msg.senderId || {};
+      const shown = displayOf(messageDisplay, s);
       const sId = s._id ? s._id.toString() : (msg.senderId || '').toString();
       const isMe = sId === currentUserId.toString();
 
@@ -780,9 +794,9 @@ export class ChatService {
         senderId: sId,
         sender: {
           _id: s._id || sId,
-          name: s.name || s.fullName || 'User',
+          name: shown.name,
           role: s.role || 'USER',
-          avatar: s.avatar || '',
+          avatar: shown.avatar,
         },
         receiverId: msg.receiverId,
         text: msg.text || '',
@@ -944,10 +958,12 @@ export class ChatService {
       }
     }
 
-    if (query.search && typeof query.search === 'string') {
-      const term = query.search.trim();
+    if (query.search && typeof query.search === 'string' && query.search.trim()) {
+      const term = query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(term, 'i');
+      const profileMatches = await findUserIdsByProfileName(term);
       filter.$or = [
+        { _id: { $in: profileMatches, $ne: new Types.ObjectId(currentUserId) } },
         { name: regex },
         { fullName: regex },
         { email: regex },
@@ -968,13 +984,14 @@ export class ChatService {
       UserModel.countDocuments(filter),
     ]);
 
+    const contactDisplay = await getDisplayMap(contacts.map((c: any) => c._id));
     const formattedContacts = contacts.map((c: any) => ({
       _id: c._id,
       id: c._id.toString(),
-      name: c.name || c.fullName || 'User',
-      fullName: c.fullName || c.name || 'User',
+      name: displayOf(contactDisplay, c).name,
+      fullName: displayOf(contactDisplay, c).name,
       role: c.role,
-      avatar: c.avatar || '',
+      avatar: displayOf(contactDisplay, c).avatar,
       email: c.email || '',
       club: c.currentClub || c.clubName || c.academyName || c.agencyName || '',
       isOnline: isUserOnline(c._id.toString()),

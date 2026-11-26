@@ -580,3 +580,29 @@ export interface IAcademySuccessStory {
 }
 
 export interface IAcademySuccessStoryDocument extends IAcademySuccessStory, Document {}
+
+export const SUCCESS_STORY_CATEGORIES = [
+  'Tournament Achievement',
+  'Seasonal Highlight',
+  'Coach Promotion',
+  'Player Signing',
+  'National Team Callup',
+  'International Debut',
+  'General Achievement',
+];
+
+export const SUCCESS_STORY_POSITIONS = [
+  'Goalkeeper',
+  'Right Back',
+  'Left Back',
+  'Centre Back',
+  'Defensive Midfielder',
+  'Central Midfielder',
+  'Attacking Midfielder',
+  'Right Winger',
+  'Left Winger',
+  'Winger',
+  'Forward',
+  'Striker',
+  'Coach',
+];

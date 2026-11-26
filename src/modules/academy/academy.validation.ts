@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { TARGET_ATTENDEES_ENUM } from './academy.interface';
+import {
+  TARGET_ATTENDEES_ENUM,
+  SUCCESS_STORY_CATEGORIES,
+  SUCCESS_STORY_POSITIONS,
+} from './academy.interface';
 
 export const createAcademyProfileZodSchema = z.object({
   body: z.object({
@@ -715,48 +719,43 @@ export const updateAcademyNewsZodSchema = z.object({
 // ==========================================
 // ACADEMY SUCCESS STORY VALIDATIONS
 // ==========================================
+const successStoryDate = z
+  .string()
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), 'Invalid date (use YYYY-MM-DD)');
+const successStoryCategory = z.enum(SUCCESS_STORY_CATEGORIES as [string, ...string[]], {
+  errorMap: () => ({ message: `Category must be one of: ${SUCCESS_STORY_CATEGORIES.join(', ')}` }),
+});
+const successStoryPosition = z
+  .enum(SUCCESS_STORY_POSITIONS as [string, ...string[]], {
+    errorMap: () => ({ message: `Position must be one of: ${SUCCESS_STORY_POSITIONS.join(', ')}` }),
+  })
+  .or(z.literal(''));
+
+// status/rejectionReason are intentionally not accepted: academies cannot change review state.
 export const createAcademySuccessStoryZodSchema = z.object({
-  body: z
-    .object({
-      storyTitle: z.string({ required_error: 'Story title is required' }).min(2),
-      playerName: z.string().optional(),
-      position: z.string().optional(),
-      currentAcademy: z.string().optional(),
-      date: z.string().or(z.date()).optional(),
-      category: z.string({ required_error: 'Category is required' }).min(2),
-      photo: z.string().optional(),
-      storyContent: z.string().optional(),
-      status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional().default('PENDING'),
-    })
-    .passthrough(),
+  body: z.object({
+    storyTitle: z.string({ required_error: 'Story title is required' }).trim().min(2),
+    category: successStoryCategory,
+    playerName: z.string().trim().optional(),
+    position: successStoryPosition.optional(),
+    currentAcademy: z.string().trim().optional(),
+    date: successStoryDate.optional(),
+    storyContent: z.string().optional(),
+    photo: z.string().optional(),
+  }),
 });
 
 export const updateAcademySuccessStoryZodSchema = z.object({
-  body: z
-    .object({
-      storyTitle: z.string().min(2).optional(),
-      playerName: z.string().optional(),
-      position: z.string().optional(),
-      currentAcademy: z.string().optional(),
-      date: z.string().or(z.date()).optional(),
-      category: z.string().optional(),
-      photo: z.string().optional(),
-      storyContent: z.string().optional(),
-      status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
-      rejectionReason: z.string().optional(),
-    })
-    .passthrough(),
-});
-
-export const updateSuccessStoryStatusZodSchema = z.object({
-  body: z
-    .object({
-      status: z.enum(['PENDING', 'APPROVED', 'REJECTED'], {
-        required_error: 'Status is required (PENDING, APPROVED, REJECTED)',
-      }),
-      rejectionReason: z.string().optional(),
-    })
-    .passthrough(),
+  body: z.object({
+    storyTitle: z.string().trim().min(2).optional(),
+    category: successStoryCategory.optional(),
+    playerName: z.string().trim().optional(),
+    position: successStoryPosition.optional(),
+    currentAcademy: z.string().trim().optional(),
+    date: successStoryDate.optional(),
+    storyContent: z.string().optional(),
+    photo: z.string().optional(),
+  }),
 });
 
 export const notifyCoachCvValidationZodSchema = z.object({

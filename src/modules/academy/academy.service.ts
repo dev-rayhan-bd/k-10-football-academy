@@ -686,44 +686,28 @@ export class AcademyService {
     return await academyMediaService.deleteNewsPermanently(id, user, academyIdentifier);
   }
 
-  async getSuccessStoriesMeta(user: any, academyIdentifier?: string) {
-    return await academyMediaService.getSuccessStoriesMeta(user, academyIdentifier);
+  async getSuccessStoriesMeta(user: any) {
+    return await academyMediaService.getSuccessStoriesMeta(user);
   }
 
-  async getSuccessStories(user: any, query: any = {}, academyIdentifier?: string) {
-    return await academyMediaService.getSuccessStories(user, query, academyIdentifier);
+  async getSuccessStories(user: any, query: any = {}) {
+    return await academyMediaService.getSuccessStories(user, query);
   }
 
-  async getSuccessStoryById(id: string, user: any, academyIdentifier?: string) {
-    return await academyMediaService.getSuccessStoryById(id, user, academyIdentifier);
+  async getSuccessStoryById(id: string, user: any) {
+    return await academyMediaService.getSuccessStoryById(id, user);
   }
 
-  async createSuccessStory(user: any, payload: any, academyIdentifier?: string) {
-    return await academyMediaService.createSuccessStory(user, payload, academyIdentifier);
+  async createSuccessStory(user: any, payload: any) {
+    return await academyMediaService.createSuccessStory(user, payload);
   }
 
-  async updateSuccessStory(id: string, user: any, payload: any, academyIdentifier?: string) {
-    return await academyMediaService.updateSuccessStory(id, user, payload, academyIdentifier);
+  async updateSuccessStory(id: string, user: any, payload: any) {
+    return await academyMediaService.updateSuccessStory(id, user, payload);
   }
 
-  async updateSuccessStoryStatus(
-    id: string,
-    user: any,
-    status: string,
-    rejectionReason?: string,
-    academyIdentifier?: string,
-  ) {
-    return await academyMediaService.updateSuccessStoryStatus(
-      id,
-      user,
-      status,
-      rejectionReason,
-      academyIdentifier,
-    );
-  }
-
-  async deleteSuccessStory(id: string, user: any, academyIdentifier?: string) {
-    return await academyMediaService.deleteSuccessStory(id, user, academyIdentifier);
+  async deleteSuccessStory(id: string, user: any) {
+    return await academyMediaService.deleteSuccessStory(id, user);
   }
 
   // --- AcademyCvValidationService Delegates ---

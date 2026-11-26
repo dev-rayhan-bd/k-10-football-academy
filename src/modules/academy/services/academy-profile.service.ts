@@ -395,7 +395,7 @@ export class AcademyProfileService {
         AcademySuccessStory.find({
           academyId,
           isDeleted: { $ne: true },
-          status: { $ne: 'REJECTED' },
+          status: 'APPROVED',
         })
           .sort({ date: -1 })
           .limit(20)

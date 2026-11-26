@@ -36,7 +36,6 @@ import {
   updateAcademyNewsZodSchema,
   createAcademySuccessStoryZodSchema,
   updateAcademySuccessStoryZodSchema,
-  updateSuccessStoryStatusZodSchema,
   notifyCoachCvValidationZodSchema,
 } from './academy.validation';
 import {
@@ -154,7 +153,6 @@ import {
   getSuccessStoryById,
   createSuccessStory,
   updateSuccessStory,
-  updateSuccessStoryStatus,
   deleteSuccessStory,
   getAcademyGameReportsDashboard,
   getAcademyValidateCvDashboard,
@@ -1231,89 +1229,26 @@ router.delete(
 
 // ==========================================
 // ACADEMY SUCCESS STORY ROUTES
+// (academy submits; approval is SUPER_ADMIN only via PATCH /admin/success-stories/:id)
 // ==========================================
-router.get(
-  '/success-stories/meta',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
-  getSuccessStoriesMeta,
-);
-router.get(
-  '/:academyId/success-stories/meta',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
-  getSuccessStoriesMeta,
-);
-
-router.get(
-  '/success-stories',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
-  getSuccessStories,
-);
-router.get(
-  '/:academyId/success-stories',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
-  getSuccessStories,
-);
-
+router.get('/success-stories/meta', auth('ACADEMY'), getSuccessStoriesMeta);
+router.get('/success-stories', auth('ACADEMY'), getSuccessStories);
 router.post(
   '/success-stories',
-  auth('ACADEMY', 'SUPER_ADMIN'),
+  auth('ACADEMY'),
   upload.any() as any,
   validateRequest(createAcademySuccessStoryZodSchema),
   createSuccessStory,
 );
-router.post(
-  '/:academyId/success-stories',
-  auth('ACADEMY', 'SUPER_ADMIN'),
-  upload.any() as any,
-  validateRequest(createAcademySuccessStoryZodSchema),
-  createSuccessStory,
-);
-
-router.get(
-  '/success-stories/:id',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
-  getSuccessStoryById,
-);
-router.get(
-  '/:academyId/success-stories/:id',
-  auth('ACADEMY', 'SUPER_ADMIN', 'COACH', 'PLAYER', 'PARENT'),
-  getSuccessStoryById,
-);
-
+router.get('/success-stories/:id', auth('ACADEMY'), getSuccessStoryById);
 router.patch(
   '/success-stories/:id',
-  auth('ACADEMY', 'SUPER_ADMIN'),
+  auth('ACADEMY'),
   upload.any() as any,
   validateRequest(updateAcademySuccessStoryZodSchema),
   updateSuccessStory,
 );
-router.patch(
-  '/:academyId/success-stories/:id',
-  auth('ACADEMY', 'SUPER_ADMIN'),
-  upload.any() as any,
-  validateRequest(updateAcademySuccessStoryZodSchema),
-  updateSuccessStory,
-);
-
-router.patch(
-  '/success-stories/:id/status',
-  auth('ACADEMY', 'SUPER_ADMIN'),
-  validateRequest(updateSuccessStoryStatusZodSchema),
-  updateSuccessStoryStatus,
-);
-router.patch(
-  '/:academyId/success-stories/:id/status',
-  auth('ACADEMY', 'SUPER_ADMIN'),
-  validateRequest(updateSuccessStoryStatusZodSchema),
-  updateSuccessStoryStatus,
-);
-
-router.delete('/success-stories/:id', auth('ACADEMY', 'SUPER_ADMIN'), deleteSuccessStory);
-router.delete(
-  '/:academyId/success-stories/:id',
-  auth('ACADEMY', 'SUPER_ADMIN'),
-  deleteSuccessStory,
-);
+router.delete('/success-stories/:id', auth('ACADEMY'), deleteSuccessStory);
 
 // ==========================================
 // ACADEMY GAME REPORTS DASHBOARD

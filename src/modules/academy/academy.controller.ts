@@ -1717,10 +1717,20 @@ export const deleteNewsPermanently = catchAsync(async (req: Request, res: Respon
 // ACADEMY SUCCESS STORY CONTROLLERS
 // ==========================================
 
+// Story image: form-data file field `photo` (JSON fields may be sent inline or in `data`,
+// which validateRequest already merges into req.body).
+const uploadSuccessStoryPhoto = async (req: Request) => {
+  const files = Array.isArray(req.files) ? (req.files as Express.Multer.File[]) : [];
+  const photo = files.find((f) => f.fieldname === 'photo');
+  if (!photo) return;
+  if (!photo.mimetype?.startsWith('image/')) {
+    throw new AppError(StatusCodes.BAD_REQUEST, 'Story photo must be an image file');
+  }
+  req.body.photo = await uploadToStorage(photo, 'academy_success_stories');
+};
+
 export const getSuccessStoriesMeta = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const academyIdentifier = req.params.academyId;
-  const result = await academyService.getSuccessStoriesMeta(user, academyIdentifier);
+  const result = await academyService.getSuccessStoriesMeta((req as any).user);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -1730,9 +1740,7 @@ export const getSuccessStoriesMeta = catchAsync(async (req: Request, res: Respon
 });
 
 export const getSuccessStories = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const academyIdentifier = req.params.academyId;
-  const result = await academyService.getSuccessStories(user, req.query, academyIdentifier);
+  const result = await academyService.getSuccessStories((req as any).user, req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -1742,10 +1750,7 @@ export const getSuccessStories = catchAsync(async (req: Request, res: Response) 
 });
 
 export const getSuccessStoryById = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const { id } = req.params;
-  const academyIdentifier = req.params.academyId;
-  const result = await academyService.getSuccessStoryById(id, user, academyIdentifier);
+  const result = await academyService.getSuccessStoryById(req.params.id, (req as any).user);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -1755,43 +1760,8 @@ export const getSuccessStoryById = catchAsync(async (req: Request, res: Response
 });
 
 export const createSuccessStory = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const academyIdentifier = req.params.academyId;
-
-  // 1. Support multipart form-data 'data' JSON string if present
-  if (req.body?.data && typeof req.body.data === 'string') {
-    try {
-      const parsed = JSON.parse(req.body.data);
-      req.body = { ...req.body, ...parsed };
-      delete req.body.data;
-    } catch {
-      // Ignore JSON parse error if data is already processed
-    }
-  }
-
-  // 2. Handle photo upload from form-data
-  const allFiles = Array.isArray(req.files)
-    ? (req.files as Express.Multer.File[])
-    : req.file
-      ? [req.file as Express.Multer.File]
-      : [];
-
-  if (allFiles.length > 0) {
-    const imgFile =
-      allFiles.find(
-        (f) =>
-          f.fieldname === 'photo' ||
-          f.fieldname === 'image' ||
-          f.fieldname === 'file' ||
-          f.fieldname === 'uploadPhoto',
-      ) || allFiles[0];
-
-    if (imgFile) {
-      req.body.photo = await uploadToStorage(imgFile, 'academy_success_stories');
-    }
-  }
-
-  const result = await academyService.createSuccessStory(user, req.body, academyIdentifier);
+  await uploadSuccessStoryPhoto(req);
+  const result = await academyService.createSuccessStory((req as any).user, req.body);
   sendResponse(res, {
     statusCode: 201,
     success: true,
@@ -1801,63 +1771,11 @@ export const createSuccessStory = catchAsync(async (req: Request, res: Response)
 });
 
 export const updateSuccessStory = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const { id } = req.params;
-  const academyIdentifier = req.params.academyId;
-
-  // 1. Support multipart form-data 'data' JSON string if present
-  if (req.body?.data && typeof req.body.data === 'string') {
-    try {
-      const parsed = JSON.parse(req.body.data);
-      req.body = { ...req.body, ...parsed };
-      delete req.body.data;
-    } catch {
-      // Ignore JSON parse error if data is already processed
-    }
-  }
-
-  // 2. Handle photo upload from form-data
-  const allFiles = Array.isArray(req.files)
-    ? (req.files as Express.Multer.File[])
-    : req.file
-      ? [req.file as Express.Multer.File]
-      : [];
-
-  if (allFiles.length > 0) {
-    const imgFile =
-      allFiles.find(
-        (f) =>
-          f.fieldname === 'photo' ||
-          f.fieldname === 'image' ||
-          f.fieldname === 'file' ||
-          f.fieldname === 'uploadPhoto',
-      ) || allFiles[0];
-
-    if (imgFile) {
-      req.body.photo = await uploadToStorage(imgFile, 'academy_success_stories');
-    }
-  }
-
-  const result = await academyService.updateSuccessStory(id, user, req.body, academyIdentifier);
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: result.message,
-    data: result.story,
-  });
-});
-
-export const updateSuccessStoryStatus = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const { id } = req.params;
-  const { status, rejectionReason } = req.body;
-  const academyIdentifier = req.params.academyId;
-  const result = await academyService.updateSuccessStoryStatus(
-    id,
-    user,
-    status,
-    rejectionReason,
-    academyIdentifier,
+  await uploadSuccessStoryPhoto(req);
+  const result = await academyService.updateSuccessStory(
+    req.params.id,
+    (req as any).user,
+    req.body,
   );
   sendResponse(res, {
     statusCode: 200,
@@ -1868,10 +1786,7 @@ export const updateSuccessStoryStatus = catchAsync(async (req: Request, res: Res
 });
 
 export const deleteSuccessStory = catchAsync(async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const { id } = req.params;
-  const academyIdentifier = req.params.academyId;
-  const result = await academyService.deleteSuccessStory(id, user, academyIdentifier);
+  const result = await academyService.deleteSuccessStory(req.params.id, (req as any).user);
   sendResponse(res, {
     statusCode: 200,
     success: true,

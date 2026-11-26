@@ -1,11 +1,16 @@
 import { StatusCodes } from 'http-status-codes';
+import { Types } from 'mongoose';
+import QueryBuilder from '@/builder/QueryBuilder';
 import { AppError } from '@/utils/AppError';
 import { AcademyCoach, AcademySponsor, AcademyNews, AcademySuccessStory } from '../academy.model';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { PlayerProfile } from '@/modules/player/player.model';
 import { academyResolverService } from './academy-resolver.service';
+import { SUCCESS_STORY_CATEGORIES, SUCCESS_STORY_POSITIONS } from '../academy.interface';
 
 const notificationService = new NotificationService();
+
+const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export class AcademyMediaService {
   private async notifyAcademyUsersAboutNews(academy: any, article: any) {
@@ -746,138 +751,44 @@ export class AcademyMediaService {
     };
   }
 
-  async getSuccessStoriesMeta(user: any, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-
-    const [allCount, approvedCount, pendingCount, rejectedCount] = await Promise.all([
-      AcademySuccessStory.countDocuments({ academyId: academy._id, isDeleted: false }),
-      AcademySuccessStory.countDocuments({
-        academyId: academy._id,
-        status: 'APPROVED',
-        isDeleted: false,
-      }),
-      AcademySuccessStory.countDocuments({
-        academyId: academy._id,
-        status: 'PENDING',
-        isDeleted: false,
-      }),
-      AcademySuccessStory.countDocuments({
-        academyId: academy._id,
-        status: 'REJECTED',
-        isDeleted: false,
-      }),
+  // ==========================================
+  // SUCCESS STORIES (academy submits, SUPER_ADMIN approves via /admin/success-stories/:id)
+  // ==========================================
+  private async getStoryCounts(academyId: any) {
+    const rows = await AcademySuccessStory.aggregate([
+      { $match: { academyId, isDeleted: false } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
-
-    return {
-      currentAcademy: academy.name,
-      categories: [
-        'Tournament Achievement',
-        'Seasonal Highlight',
-        'Coach Promotion',
-        'Player Signing',
-        'National Team Callup',
-        'International Debut',
-        'General Achievement',
-      ],
-      positions: [
-        'Goalkeeper',
-        'Right Back',
-        'Left Back',
-        'Centre Back',
-        'Defensive Midfielder',
-        'Central Midfielder',
-        'Attacking Midfielder',
-        'Right Winger',
-        'Left Winger',
-        'Winger',
-        'Forward',
-        'Striker',
-        'Coach',
-      ],
-      statuses: ['PENDING', 'APPROVED', 'REJECTED'],
-      counts: {
-        all: allCount,
-        approved: approvedCount,
-        pending: pendingCount,
-        rejected: rejectedCount,
-      },
-    };
+    const byStatus = Object.fromEntries(rows.map((r: any) => [r._id, r.count]));
+    const approved = byStatus.APPROVED || 0;
+    const pending = byStatus.PENDING || 0;
+    const rejected = byStatus.REJECTED || 0;
+    return { all: approved + pending + rejected, approved, pending, rejected };
   }
 
-  async getSuccessStories(user: any, query: any = {}, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const skip = (page - 1) * limit;
-
-    const [allCount, approvedCount, pendingCount, rejectedCount] = await Promise.all([
-      AcademySuccessStory.countDocuments({ academyId: academy._id, isDeleted: false }),
-      AcademySuccessStory.countDocuments({
-        academyId: academy._id,
-        status: 'APPROVED',
-        isDeleted: false,
-      }),
-      AcademySuccessStory.countDocuments({
-        academyId: academy._id,
-        status: 'PENDING',
-        isDeleted: false,
-      }),
-      AcademySuccessStory.countDocuments({
-        academyId: academy._id,
-        status: 'REJECTED',
-        isDeleted: false,
-      }),
-    ]);
-
-    const counts = {
-      all: allCount,
-      approved: approvedCount,
-      pending: pendingCount,
-      rejected: rejectedCount,
-    };
-
-    const filter: any = {
+  private async findOwnStory(id: string, user: any) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid success story ID');
+    }
+    const academy = await academyResolverService.resolveUserAcademy(user);
+    const story = await AcademySuccessStory.findOne({
+      _id: id,
       academyId: academy._id,
       isDeleted: false,
-    };
-
-    if (query.status && String(query.status).toUpperCase() !== 'ALL') {
-      filter.status = String(query.status).toUpperCase();
+    });
+    if (!story) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy success story not found');
     }
+    return { academy, story };
+  }
 
-    if (query.category) {
-      filter.category = { $regex: new RegExp(String(query.category).trim(), 'i') };
-    }
-
-    if (query.searchTerm || query.search) {
-      const term = String(query.searchTerm || query.search).trim();
-      const regex = new RegExp(term, 'i');
-      filter.$or = [
-        { storyTitle: regex },
-        { playerName: regex },
-        { position: regex },
-        { currentAcademy: regex },
-        { category: regex },
-        { storyContent: regex },
-      ];
-    }
-
-    const [totalRecords, stories] = await Promise.all([
-      AcademySuccessStory.countDocuments(filter),
-      AcademySuccessStory.find(filter)
-        .sort({ date: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-    ]);
-
-    const formattedStories = stories.map((s: any) => ({
+  private formatStory(s: any, academyName: string) {
+    return {
       _id: s._id,
       storyTitle: s.storyTitle,
       playerName: s.playerName || '',
       position: s.position || '',
-      currentAcademy: s.currentAcademy || academy.name,
+      currentAcademy: s.currentAcademy || academyName,
       date: s.date,
       formattedDate:
         s.formattedDate || (s.date ? new Date(s.date).toISOString().split('T')[0] : ''),
@@ -889,40 +800,96 @@ export class AcademyMediaService {
         label: s.status,
         variant: s.status === 'APPROVED' ? 'green' : s.status === 'REJECTED' ? 'red' : 'yellow',
       },
-      rejectionReason: s.rejectionReason,
+      rejectionReason: s.status === 'REJECTED' ? s.rejectionReason || '' : '',
       createdAt: s.createdAt,
-    }));
+      updatedAt: s.updatedAt,
+    };
+  }
+
+  async getSuccessStoriesMeta(user: any) {
+    const academy = await academyResolverService.resolveUserAcademy(user);
+    const counts = await this.getStoryCounts(academy._id);
+
+    return {
+      currentAcademy: academy.name,
+      categories: SUCCESS_STORY_CATEGORIES,
+      positions: SUCCESS_STORY_POSITIONS,
+      statuses: ['PENDING', 'APPROVED', 'REJECTED'],
+      counts,
+    };
+  }
+
+  async getSuccessStories(user: any, query: any = {}) {
+    const academy = await academyResolverService.resolveUserAcademy(user);
+    const q: Record<string, unknown> = { ...query };
+
+    const baseFilter: Record<string, any> = { academyId: academy._id, isDeleted: false };
+
+    const status = q.status ? String(q.status).toUpperCase() : 'ALL';
+    if (status !== 'ALL') {
+      if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          'Invalid status. Use ALL, PENDING, APPROVED or REJECTED',
+        );
+      }
+      baseFilter.status = status;
+    }
+    if (q.category && String(q.category).toUpperCase() !== 'ALL') {
+      baseFilter.category = String(q.category).trim();
+    }
+
+    const term = String(q.searchTerm || q.search || '').trim();
+    if (term) q.searchTerm = escapeRegex(term);
+    delete q.search;
+    delete q.status;
+    delete q.category;
+    if (!q.sort) q.sort = '-date,-createdAt';
+    // only allow pagination/search/sort keys through to .filter()
+    Object.keys(q).forEach((key) => {
+      if (!['searchTerm', 'sort', 'page', 'limit'].includes(key)) delete q[key];
+    });
+    q.limit = Math.max(1, Math.min(100, Number(q.limit) || 10));
+    q.page = Math.max(1, Number(q.page) || 1);
+
+    const builder = new QueryBuilder(AcademySuccessStory.find(baseFilter), q)
+      .search([
+        'storyTitle',
+        'playerName',
+        'position',
+        'currentAcademy',
+        'category',
+        'storyContent',
+      ])
+      .filter()
+      .sort()
+      .paginate();
+
+    const [stories, pageMeta, counts] = await Promise.all([
+      builder.modelQuery.lean(),
+      builder.countTotal(),
+      this.getStoryCounts(academy._id),
+    ]);
 
     return {
       counts,
-      stories: formattedStories,
+      stories: stories.map((s: any) => this.formatStory(s, academy.name)),
       meta: {
-        page,
-        limit,
-        total: totalRecords,
-        totalPages: Math.ceil(totalRecords / limit) || 1,
+        page: pageMeta.page,
+        limit: pageMeta.limit,
+        total: pageMeta.total,
+        totalPages: pageMeta.totalPage,
       },
     };
   }
 
-  async getSuccessStoryById(id: string, user: any, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-
-    const story = await AcademySuccessStory.findOne({
-      _id: id,
-      academyId: academy._id,
-      isDeleted: false,
-    }).lean();
-
-    if (!story) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'Academy success story not found');
-    }
-
-    return story;
+  async getSuccessStoryById(id: string, user: any) {
+    const { academy, story } = await this.findOwnStory(id, user);
+    return this.formatStory(story.toObject(), academy.name);
   }
 
-  async createSuccessStory(user: any, payload: any, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
+  async createSuccessStory(user: any, payload: any) {
+    const academy = await academyResolverService.resolveUserAcademy(user);
 
     const story = new AcademySuccessStory({
       academyId: academy._id,
@@ -934,7 +901,8 @@ export class AcademyMediaService {
       category: payload.category,
       photo: payload.photo || '',
       storyContent: payload.storyContent || '',
-      status: payload.status || 'PENDING',
+      // always goes to admin review; academies can never self-approve
+      status: 'PENDING',
       isDeleted: false,
     });
 
@@ -942,84 +910,40 @@ export class AcademyMediaService {
 
     return {
       message: 'Success story submitted for approval successfully',
-      story,
+      story: this.formatStory(story.toObject(), academy.name),
     };
   }
 
-  async updateSuccessStory(id: string, user: any, payload: any, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
+  async updateSuccessStory(id: string, user: any, payload: any) {
+    const { academy, story } = await this.findOwnStory(id, user);
 
-    const story = await AcademySuccessStory.findOne({
-      _id: id,
-      academyId: academy._id,
-      isDeleted: false,
-    });
-
-    if (!story) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'Academy success story not found');
-    }
-
-    if (payload.storyTitle) story.storyTitle = payload.storyTitle;
+    if (payload.storyTitle !== undefined) story.storyTitle = payload.storyTitle;
     if (payload.playerName !== undefined) story.playerName = payload.playerName;
     if (payload.position !== undefined) story.position = payload.position;
     if (payload.currentAcademy !== undefined) story.currentAcademy = payload.currentAcademy;
     if (payload.date) story.date = new Date(payload.date);
-    if (payload.category) story.category = payload.category;
+    if (payload.category !== undefined) story.category = payload.category;
     if (payload.photo !== undefined) story.photo = payload.photo;
     if (payload.storyContent !== undefined) story.storyContent = payload.storyContent;
-    if (payload.status) story.status = payload.status;
-    if (payload.rejectionReason !== undefined) story.rejectionReason = payload.rejectionReason;
+
+    // any edit sends the story back to admin review
+    const wasStatus = story.status;
+    story.status = 'PENDING';
+    story.rejectionReason = undefined;
 
     await story.save();
 
     return {
-      message: 'Success story updated successfully',
-      story,
+      message:
+        wasStatus === 'PENDING'
+          ? 'Success story updated successfully'
+          : 'Success story updated and re-submitted for approval',
+      story: this.formatStory(story.toObject(), academy.name),
     };
   }
 
-  async updateSuccessStoryStatus(
-    id: string,
-    user: any,
-    status: string,
-    rejectionReason?: string,
-    academyIdentifier?: string,
-  ) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-
-    const story = await AcademySuccessStory.findOne({
-      _id: id,
-      academyId: academy._id,
-      isDeleted: false,
-    });
-
-    if (!story) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'Academy success story not found');
-    }
-
-    story.status = status;
-    if (rejectionReason !== undefined) {
-      story.rejectionReason = rejectionReason;
-    }
-    await story.save();
-
-    return {
-      message: `Success story status updated to ${status}`,
-      story,
-    };
-  }
-
-  async deleteSuccessStory(id: string, user: any, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-
-    const story = await AcademySuccessStory.findOne({
-      _id: id,
-      academyId: academy._id,
-    });
-
-    if (!story) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'Academy success story not found');
-    }
+  async deleteSuccessStory(id: string, user: any) {
+    const { story } = await this.findOwnStory(id, user);
 
     story.isDeleted = true;
     story.deletedAt = new Date();

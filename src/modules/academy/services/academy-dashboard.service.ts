@@ -14,6 +14,8 @@ import { CoachProfile } from '@/modules/coach/coach.model';
 import { User } from '@/modules/user/user.model';
 import { ClubFavourite } from '@/modules/club/club.model';
 import { academyResolverService } from './academy-resolver.service';
+import { effectiveEvaluationStatus } from './evaluation-rules';
+import { getRevalidationStatus } from '@/modules/player/services/cv-validation-rules';
 
 export class AcademyDashboardService {
   async getAcademyAnalyticsReport(user: any, query: any = {}, academyIdentifier?: string) {
@@ -1013,10 +1015,38 @@ export class AcademyDashboardService {
     const academyPlayers = await PlayerProfile.find({
       $or: [{ academyId: academy._id }, { currentClub: academy.name }, { academy: academy.name }],
     })
-      .select('_id fullName avatar position dateOfBirth age overallRating createdAt')
+      .select('_id fullName profileImage position dateOfBirth age overallRating createdAt')
       .lean();
 
     const academyPlayerIds = academyPlayers.map((p) => p._id);
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    // Evaluations of this academy, latest record per player, status computed at read time
+    // (4-month cycle: NEED_EVALUATION | EVALUATED | EXPIRED)
+    const academyEvaluations = await PlayerEvaluation.find({
+      $or: [{ academyId: academy._id }, { playerId: { $in: academyPlayerIds } }],
+    })
+      .populate('playerId', 'fullName profileImage position')
+      .populate('coachId', 'fullName')
+      .sort({ evaluationDate: -1, createdAt: -1 })
+      .lean();
+    const latestEvaluationByPlayer = new Map<string, any>();
+    for (const ev of academyEvaluations as any[]) {
+      const pid = String(ev.playerId?._id || ev.playerId || '');
+      if (pid && !latestEvaluationByPlayer.has(pid)) latestEvaluationByPlayer.set(pid, ev);
+    }
+    const latestEvaluations = [...latestEvaluationByPlayer.values()].map((ev: any) => ({
+      ev,
+      status: effectiveEvaluationStatus(ev),
+    }));
+
+    // CV validations waiting for a coach: paid requests (the real CV validation flow)
+    const cvAwaitingPlayers = await PlayerProfile.find({
+      _id: { $in: academyPlayerIds },
+      'coachVerification.validationPaymentStatus': 'PAID',
+    })
+      .select('_id fullName profileImage coachVerification')
+      .lean();
 
     // 1. Metric Cards (6 cards)
     const teamsCount = await Team.countDocuments({ academyId: academy._id });
@@ -1026,14 +1056,7 @@ export class AcademyDashboardService {
       academyId: academy._id,
       status: 'APPROVED',
     }).distinct('coachId');
-    const directCoachIds = await CoachProfile.find({
-      academyId: academy._id,
-    }).distinct('_id');
-    const uniqueCoachIds = new Set([
-      ...approvedCoachAffiliationIds.map((id) => id.toString()),
-      ...directCoachIds.map((id) => id.toString()),
-    ]);
-    const coachesCount = uniqueCoachIds.size;
+    const coachesCount = new Set(approvedCoachAffiliationIds.map((id) => id.toString())).size;
 
     const gameReportsCount = await GameReport.countDocuments({
       academyId: academy._id,
@@ -1048,15 +1071,12 @@ export class AcademyDashboardService {
       ],
     });
 
-    const pendingEvaluationsCount = await PlayerEvaluation.countDocuments({
-      $or: [{ academyId: academy._id }, { playerId: { $in: academyPlayerIds } }],
-      status: { $in: ['NEED_EVALUATION', 'PENDING'] },
-    });
+    // needs action: an open request (NEED_EVALUATION) or an expired evaluation
+    const pendingEvaluationsCount = latestEvaluations.filter(
+      (x) => x.status === 'NEED_EVALUATION' || x.status === 'EXPIRED',
+    ).length;
 
-    const pendingCvsCount = await PlayerCvValidation.countDocuments({
-      playerId: { $in: academyPlayerIds },
-      status: { $in: ['REQUESTED', 'ASSIGNED', 'PENDING'] },
-    });
+    const pendingCvsCount = cvAwaitingPlayers.length;
 
     const metricCards = {
       teams: { label: 'TEAMS', count: teamsCount },
@@ -1181,46 +1201,17 @@ export class AcademyDashboardService {
     }));
 
     // 4. ANALYTICS - PLAYER EVALUATION STATUS (Donut/Pie Chart)
-    const evaluationsStatusAgg = await PlayerEvaluation.aggregate([
-      {
-        $match: {
-          $and: [
-            {
-              $or: [{ academyId: academy._id }, { playerId: { $in: academyPlayerIds } }],
-            },
-            {
-              $or: [
-                { evaluationDate: { $gte: startDate, $lte: endDate } },
-                {
-                  $and: [
-                    { evaluationDate: { $exists: false } },
-                    { createdAt: { $gte: startDate, $lte: endDate } },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-        },
-      },
-    ]);
-
+    // latest evaluation per player, status computed with the 4-month rule
     let evaluatedCount = 0;
     let needEvaluationCount = 0;
     let expiredCount = 0;
-
-    evaluationsStatusAgg.forEach((item) => {
-      if (item._id === 'EVALUATED') evaluatedCount += item.count;
-      else if (item._id === 'NEED_EVALUATION' || item._id === 'PENDING')
-        needEvaluationCount += item.count;
-      else if (item._id === 'EXPIRED' || item._id === 'OVERDUE') expiredCount += item.count;
-      else needEvaluationCount += item.count;
-    });
+    for (const { ev, status } of latestEvaluations) {
+      const when = new Date(ev.evaluationDate || ev.createdAt || 0);
+      if (when < startDate || when > endDate) continue;
+      if (status === 'EVALUATED') evaluatedCount++;
+      else if (status === 'EXPIRED') expiredCount++;
+      else needEvaluationCount++;
+    }
 
     const totalEvaluations = evaluatedCount + needEvaluationCount + expiredCount;
     const calcPct = (v: number, t: number) => (t > 0 ? Math.round((v / t) * 100) : 0);
@@ -1258,7 +1249,7 @@ export class AcademyDashboardService {
       academyId: academy._id,
       status: { $in: ['PENDING', 'UNPAID'] },
     })
-      .populate('playerId', 'fullName avatar position')
+      .populate('playerId', 'fullName profileImage position')
       .sort({ matchDate: -1, createdAt: -1 })
       .limit(6)
       .lean();
@@ -1266,8 +1257,8 @@ export class AcademyDashboardService {
     const pendingGameReports = pendingGameReportsRaw.map((rep: any) => ({
       id: rep._id,
       playerId: rep.playerId?._id || rep.playerId,
-      playerName: rep.playerId?.fullName || rep.scoutName || 'Player',
-      playerAvatar: rep.playerId?.avatar || null,
+      playerName: rep.playerId?.fullName || rep.scoutName || '',
+      playerAvatar: rep.playerId?.profileImage || null,
       position: (rep.playerId?.position || 'FORWARD').toUpperCase(),
       score: Number(rep.overallPerformanceScore || 0).toFixed(1),
       matchName: rep.matchName,
@@ -1275,113 +1266,82 @@ export class AcademyDashboardService {
     }));
 
     // 6. SIDEBAR - PENDING CV VALIDATIONS
-    const pendingCvValidationsRaw = await PlayerCvValidation.find({
-      playerId: { $in: academyPlayerIds },
-      status: { $in: ['REQUESTED', 'ASSIGNED', 'PENDING'] },
-    })
-      .populate('playerId', 'fullName avatar')
-      .populate('coachId', 'name fullName')
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .lean();
-
-    let pendingCvValidations: any[];
-
-    if (pendingCvValidationsRaw.length > 0) {
-      pendingCvValidations = pendingCvValidationsRaw.map((cv: any) => {
-        const createdDate = new Date(cv.createdAt || Date.now());
-        const ageDays = Math.floor((Date.now() - createdDate.getTime()) / (24 * 60 * 60 * 1000));
-        const deadlineDays = 7;
-        const isOverdue = ageDays > deadlineDays;
-        const badge = isOverdue
-          ? `OVERDUE ${ageDays - deadlineDays}D`
-          : `${Math.max(1, deadlineDays - ageDays)}D LEFT`;
-
-        const coachName = (cv.coachId as any)?.fullName || (cv.coachId as any)?.name || 'Coach';
+    // Paid CV validation requests waiting for the chosen coach (or for a new coach when the
+    // chosen one left the academy). Players who never requested a validation are not listed.
+    const cvCoachUserIds = cvAwaitingPlayers
+      .map((p: any) => p.coachVerification?.coachId)
+      .filter(Boolean);
+    const cvCoaches = cvCoachUserIds.length
+      ? await CoachProfile.find({ userId: { $in: cvCoachUserIds } })
+          .select('userId fullName')
+          .lean()
+      : [];
+    const cvCoachNameByUser = new Map(
+      (cvCoaches as any[]).map((c) => [String(c.userId), c.fullName || '']),
+    );
+    const pendingCvValidations = (cvAwaitingPlayers as any[])
+      .map((p) => {
+        const cv = p.coachVerification || {};
+        const reval = getRevalidationStatus(p);
+        const since = cv.paidAt || cv.requestedAt || null;
+        const waitingDays = since
+          ? Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / DAY_MS))
+          : 0;
+        const needsNewCoach = reval.state === 'CHOOSE_NEW_COACH';
+        const coachName = needsNewCoach ? '' : cvCoachNameByUser.get(String(cv.coachId)) || '';
         return {
-          id: cv._id,
-          playerId: cv.playerId?._id || cv.playerId,
-          playerName: cv.playerId?.fullName || 'Player',
-          playerAvatar: cv.playerId?.avatar || null,
+          id: p._id,
+          playerId: p._id,
+          playerName: p.fullName || '',
+          playerAvatar: p.profileImage || null,
           coachName,
-          coachLabel: `COACH: ${coachName.toUpperCase()}`,
-          badge,
-          isOverdue,
+          coachLabel: needsNewCoach
+            ? 'COACH: NEEDS A NEW COACH'
+            : `COACH: ${(coachName || '—').toUpperCase()}`,
+          status: needsNewCoach ? 'NEEDS_NEW_COACH' : 'AWAITING_COACH',
+          badge: needsNewCoach ? 'NEEDS NEW COACH' : `WAITING ${waitingDays}D`,
+          waitingDays,
+          paidAt: cv.paidAt || null,
+          isOverdue: false,
         };
-      });
-    } else {
-      // Check unverified players in the academy
-      const unverifiedPlayers = await PlayerProfile.find({
-        _id: { $in: academyPlayerIds },
-        $or: [
-          { isVerifiedByCoach: false },
-          { isVerifiedByCoach: { $exists: false } },
-          { 'coachVerification.isVerified': false },
-          { 'coachVerification.isVerified': { $exists: false } },
-        ],
       })
-        .select('_id fullName avatar position createdAt verifyingCoachId coachVerification')
-        .limit(6)
-        .lean();
-
-      if (unverifiedPlayers.length > 0) {
-        pendingCvValidations = unverifiedPlayers.map((p: any) => {
-          const createdDate = new Date(p.createdAt || Date.now());
-          const ageDays = Math.floor((Date.now() - createdDate.getTime()) / (24 * 60 * 60 * 1000));
-          const deadlineDays = 7;
-          const isOverdue = ageDays > deadlineDays;
-          const badge = isOverdue
-            ? `OVERDUE ${Math.max(1, ageDays - deadlineDays)}D`
-            : `${Math.max(1, deadlineDays - ageDays)}D LEFT`;
-
-          const coachName = p.coachVerification?.coachName || 'Unassigned';
-
-          return {
-            id: p._id,
-            playerId: p._id,
-            playerName: p.fullName || 'Player',
-            playerAvatar: p.avatar || null,
-            coachName,
-            coachLabel: `COACH: ${coachName.toUpperCase()}`,
-            badge,
-            isOverdue,
-          };
-        });
-      } else {
-        pendingCvValidations = [];
-      }
-    }
+      .sort((a, b) => b.waitingDays - a.waitingDays)
+      .slice(0, 6);
 
     // 7. SIDEBAR - PLAYER EVALUATIONS
-    const playerEvaluationsRaw = await PlayerEvaluation.find({
-      $or: [{ academyId: academy._id }, { playerId: { $in: academyPlayerIds } }],
-    })
-      .populate('playerId', 'fullName avatar position')
-      .populate('coachId', 'name fullName')
-      .sort({ evaluationDate: -1, createdAt: -1 })
-      .limit(6)
-      .lean();
-
-    const sidebarPlayerEvaluations: any[] = playerEvaluationsRaw.map((ev: any) => {
-      const evDate = new Date(ev.evaluationDate || ev.createdAt || Date.now());
-      const diffDays = Math.floor((Date.now() - evDate.getTime()) / (24 * 60 * 60 * 1000));
-      let badge = 'NEED EVALUATION';
-      if (ev.status === 'EXPIRED') badge = 'EXPIRED';
-      else if (ev.status === 'OVERDUE' || diffDays > 30) badge = `OVERDUE ${diffDays}D`;
-      else if (ev.status === 'EVALUATED') badge = 'EVALUATED';
-
-      const coachName = (ev.coachId as any)?.fullName || (ev.coachId as any)?.name || 'Coach';
-      return {
-        id: ev._id,
-        playerId: ev.playerId?._id || ev.playerId,
-        playerName: ev.playerId?.fullName || 'Player',
-        playerAvatar: ev.playerId?.avatar || null,
-        coachName,
-        coachLabel: `COACH: ${coachName.toUpperCase()}`,
-        badge,
-        status: ev.status,
-      };
-    });
+    // Latest evaluation per player. Needs-action first (open request, expired), then evaluated.
+    const evalPriority: Record<string, number> = { NEED_EVALUATION: 0, EXPIRED: 1, EVALUATED: 2 };
+    const sidebarPlayerEvaluations: any[] = latestEvaluations
+      .filter(({ ev }) => ev.playerId && typeof ev.playerId === 'object')
+      .sort(
+        (a, b) =>
+          evalPriority[a.status] - evalPriority[b.status] ||
+          new Date(b.ev.evaluationDate || b.ev.createdAt || 0).getTime() -
+            new Date(a.ev.evaluationDate || a.ev.createdAt || 0).getTime(),
+      )
+      .slice(0, 6)
+      .map(({ ev, status }) => {
+        const due = ev.nextEvaluationDue ? new Date(ev.nextEvaluationDue) : null;
+        const daysToDue = due ? Math.ceil((due.getTime() - Date.now()) / DAY_MS) : null;
+        let badge = 'NEED EVALUATION';
+        if (status === 'EVALUATED') badge = 'EVALUATED';
+        else if (status === 'EXPIRED')
+          badge = daysToDue !== null ? `EXPIRED ${Math.abs(daysToDue)}D` : 'EXPIRED';
+        const coachName = (ev.coachId as any)?.fullName || '';
+        return {
+          id: ev._id,
+          playerId: ev.playerId?._id || ev.playerId,
+          playerName: ev.playerId?.fullName || '',
+          playerAvatar: ev.playerId?.profileImage || null,
+          coachName,
+          coachLabel: `COACH: ${(coachName || '—').toUpperCase()}`,
+          badge,
+          status, // NEED_EVALUATION | EVALUATED | EXPIRED
+          evaluationDate: status === 'NEED_EVALUATION' ? null : ev.evaluationDate || null,
+          nextEvaluationDue: status === 'NEED_EVALUATION' ? null : ev.nextEvaluationDue || null,
+          daysToDue: status === 'NEED_EVALUATION' ? null : daysToDue,
+        };
+      });
 
     // 8. SIDEBAR - CLUBS INTERESTED
     const clubFavourites = await ClubFavourite.find({

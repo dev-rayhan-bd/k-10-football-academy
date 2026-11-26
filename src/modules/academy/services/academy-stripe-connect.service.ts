@@ -189,11 +189,28 @@ export class AcademyStripeConnectService {
     let pendingTransferAmount = 0;
     let pendingTransferCount = 0;
     let transferredCount = 0;
+    let onHoldAmount = 0;
+    let onHoldCount = 0;
 
     for (const tx of transactions) {
       const share = Number(tx.commissionAcademy || 0);
+
+      // Uncompleted, on-hold or locked transactions are not earned/payable yet
+      if (
+        tx.status !== 'COMPLETED' ||
+        tx.payoutStatusAcademy === 'ON_HOLD' ||
+        tx.payoutStatusAcademy === 'LOCKED_NO_SUBSCRIPTION'
+      ) {
+        onHoldAmount += share;
+        onHoldCount++;
+        continue;
+      }
+
       totalEarnedCommission += share;
-      if (tx.payoutStatus === 'TRANSFERRED') {
+
+      const isTransferred = tx.payoutStatus === 'TRANSFERRED' || tx.payoutStatusAcademy === 'PAID';
+
+      if (isTransferred) {
         totalTransferredAmount += Number(tx.transferredAmount || share);
         transferredCount++;
       } else {
@@ -208,6 +225,10 @@ export class AcademyStripeConnectService {
       pendingTransferAmount: parseFloat(pendingTransferAmount.toFixed(2)),
       pendingTransferCount,
       transferredCount,
+      onHoldAmount: parseFloat(onHoldAmount.toFixed(2)),
+      onHoldCount,
+      currency: '$',
+      currencySymbol: '$',
     };
   }
 

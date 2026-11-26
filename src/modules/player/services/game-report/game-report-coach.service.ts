@@ -120,7 +120,7 @@ export class GameReportCoachService {
         recipientId: playerProfile.userId,
         recipientRole: 'ATHLETE',
         title: 'Coach Evaluation Completed',
-        message: `Coach ${coachUser.name || 'Your Coach'} evaluated your match performance. Rating: ${finalRating}/100.`,
+        message: `Coach ${coachUser.name || 'Your Coach'} evaluated your match performance. Rating: ${finalRating}/10.`,
         type: 'EVALUATION_COMPLETED',
         data: { reportId: matchRecord._id, rating: finalRating },
       });
@@ -139,7 +139,7 @@ export class GameReportCoachService {
               recipientId: parent.userId,
               recipientRole: 'PARENT',
               title: 'Child Match Evaluation Completed',
-              message: `Coach ${coachUser.name || 'Coach'} completed the match evaluation for ${playerProfile.fullName || 'your child'}. Rating: ${finalRating}/100.`,
+              message: `Coach ${coachUser.name || 'Coach'} completed the match evaluation for ${playerProfile.fullName || 'your child'}. Rating: ${finalRating}/10.`,
               type: 'CHILD_EVALUATION_COMPLETED',
               data: {
                 reportId: matchRecord._id,
@@ -157,7 +157,7 @@ export class GameReportCoachService {
     void notificationService.notifyAdmins({
       settingKey: 'reportAlerts',
       title: 'Match Report Evaluated',
-      message: `Coach ${coachUser.name || 'Coach'} completed the match evaluation for ${playerProfile.fullName || 'player'}. Rating: ${finalRating}/100.`,
+      message: `Coach ${coachUser.name || 'Coach'} completed the match evaluation for ${playerProfile.fullName || 'player'}. Rating: ${finalRating}/10.`,
       type: 'EVALUATION_COMPLETED',
       data: {
         reportId: matchRecord._id,

@@ -531,9 +531,11 @@ export const requestCoachAffiliation = catchAsync(async (req: Request, res: Resp
 });
 
 export const getAcademyCoaches = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
   const paramId = req.params.academyId;
+  // An academy only ever sees its own coaches; an admin may pass the academy id
   const academyId =
-    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
+    user?.role !== 'ACADEMY' && paramId && Types.ObjectId.isValid(paramId) ? paramId : user?.userId;
   const result = await academyService.getAcademyCoaches(academyId, req.query);
   sendResponse(res, {
     statusCode: 200,

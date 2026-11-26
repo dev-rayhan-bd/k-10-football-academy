@@ -129,17 +129,19 @@ export class CoachProfileService {
   }
 
   async getAcademyCoachesDropdown(query: Record<string, unknown> = {}) {
+    // Only coaches who can actually take a CV validation request: approved by an academy
+    // (same rule as POST /players/me/request-cv-validation). A coach merely placed on a team,
+    // or with a club name, is not academy-approved.
     const filter: any = {
-      $or: [
-        { academyId: { $exists: true, $ne: null } },
-        { isVerifiedByAcademy: true },
-        { currentClub: { $exists: true, $ne: '' } },
-      ],
+      isVerifiedByAcademy: true,
+      academyId: { $exists: true, $ne: null },
     };
 
-    if (query.academyId && Types.ObjectId.isValid(String(query.academyId))) {
+    if (query.academyId !== undefined && query.academyId !== '') {
+      if (!Types.ObjectId.isValid(String(query.academyId))) {
+        throw new AppError(400, 'Invalid academyId');
+      }
       filter.academyId = new Types.ObjectId(String(query.academyId));
-      delete filter.$or;
     }
 
     if (query.search) {

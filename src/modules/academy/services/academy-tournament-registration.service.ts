@@ -499,6 +499,7 @@ export const formatTournamentClub = (c: any) => {
     stripeSessionId: c.stripeSessionId || null,
     stripePaymentIntentId: c.stripePaymentIntentId || null,
     allocatedGroup: c.allocatedGroup || null,
+    group: c.allocatedGroup || null,
     registeredAt: c.registeredAt || null,
     roster: (c.roster || []).map((p: any) => ({
       _id: p._id ? p._id.toString() : new Types.ObjectId().toString(),

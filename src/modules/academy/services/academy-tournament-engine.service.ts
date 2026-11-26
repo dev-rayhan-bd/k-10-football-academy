@@ -193,6 +193,13 @@ export class AcademyTournamentEngineService {
       groupB = paidClubs.filter((c) => c.allocatedGroup === 'GROUP B');
     }
 
+    if (groupA.length < 2 || groupB.length < 2) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        `Each group (Group A and Group B) must have at least 2 allocated paid clubs to start the tournament and generate fixtures. Currently Group A has ${groupA.length} and Group B has ${groupB.length}.`,
+      );
+    }
+
     const matchDateStr = event.eventDate
       ? new Date(event.eventDate).toLocaleDateString('en-GB', {
           day: 'numeric',

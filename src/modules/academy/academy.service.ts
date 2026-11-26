@@ -728,16 +728,16 @@ export class AcademyService {
     );
   }
 
-  async getCvsLibrary(user: any, query: any = {}, academyIdentifier?: string) {
-    return await academyCvValidationService.getCvsLibrary(user, query, academyIdentifier);
+  async getCvsLibrary(user: any, query: any = {}) {
+    return await academyCvValidationService.getCvsLibrary(user, query);
   }
 
-  async toggleLikePlayerCv(user: any, playerId: string, academyIdentifier?: string) {
-    return await academyCvValidationService.toggleLikePlayerCv(user, playerId, academyIdentifier);
+  async toggleLikePlayerCv(user: any, playerId: string) {
+    return await academyCvValidationService.toggleLikePlayerCv(user, playerId);
   }
 
-  async sharePlayerCv(user: any, playerId: string, academyIdentifier?: string) {
-    return await academyCvValidationService.sharePlayerCv(user, playerId, academyIdentifier);
+  async sharePlayerCv(user: any, playerId: string) {
+    return await academyCvValidationService.sharePlayerCv(user, playerId);
   }
 
   async getPublicPlayerCv(playerId: string) {

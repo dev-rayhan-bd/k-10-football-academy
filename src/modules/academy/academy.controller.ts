@@ -1947,8 +1947,7 @@ export const getAcademyManagementDashboard = catchAsync(async (req: Request, res
 
 export const getCvsLibrary = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const academyIdentifier = req.params.academyId;
-  const result = await academyService.getCvsLibrary(user, req.query, academyIdentifier);
+  const result = await academyService.getCvsLibrary(user, req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -1959,9 +1958,7 @@ export const getCvsLibrary = catchAsync(async (req: Request, res: Response) => {
 
 export const toggleLikePlayerCv = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const academyIdentifier = req.params.academyId;
-  const { playerId } = req.params;
-  const result = await academyService.toggleLikePlayerCv(user, playerId, academyIdentifier);
+  const result = await academyService.toggleLikePlayerCv(user, req.params.playerId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -1972,9 +1969,7 @@ export const toggleLikePlayerCv = catchAsync(async (req: Request, res: Response)
 
 export const sharePlayerCv = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const academyIdentifier = req.params.academyId;
-  const { playerId } = req.params;
-  const result = await academyService.sharePlayerCv(user, playerId, academyIdentifier);
+  const result = await academyService.sharePlayerCv(user, req.params.playerId);
   sendResponse(res, {
     statusCode: 200,
     success: true,

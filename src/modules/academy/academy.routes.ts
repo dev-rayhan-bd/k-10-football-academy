@@ -1450,20 +1450,9 @@ router.get(
 // ==========================================
 // CVS LIBRARY
 // ==========================================
-router.get('/cvs-library', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getCvsLibrary);
-router.post('/cvs-library/:playerId/like', auth('ACADEMY', 'SUPER_ADMIN'), toggleLikePlayerCv);
-router.post('/cvs-library/:playerId/share', auth('ACADEMY', 'SUPER_ADMIN'), sharePlayerCv);
-router.get('/:academyId/cvs-library', auth('ACADEMY', 'SUPER_ADMIN', 'COACH'), getCvsLibrary);
-router.post(
-  '/:academyId/cvs-library/:playerId/like',
-  auth('ACADEMY', 'SUPER_ADMIN'),
-  toggleLikePlayerCv,
-);
-router.post(
-  '/:academyId/cvs-library/:playerId/share',
-  auth('ACADEMY', 'SUPER_ADMIN'),
-  sharePlayerCv,
-);
+router.get('/cvs-library', auth('ACADEMY'), getCvsLibrary);
+router.post('/cvs-library/:playerId/like', auth('ACADEMY'), toggleLikePlayerCv);
+router.post('/cvs-library/:playerId/share', auth('ACADEMY'), sharePlayerCv);
 
 // Public Player CV View (NO AUTH REQUIRED)
 router.get('/public/players/:playerId/cv', getPublicPlayerCv);

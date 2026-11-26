@@ -1,7 +1,8 @@
 import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
-import { Team, AcademyCoach } from '../academy.model';
+import { Team, AcademyCoach, AcademyProfile } from '../academy.model';
+import QueryBuilder from '@/builder/QueryBuilder';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
@@ -10,6 +11,8 @@ import { academyResolverService } from './academy-resolver.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 
 const notificationService = new NotificationService();
+
+const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export class AcademyCvValidationService {
   async getAcademyValidateCvDashboard(user: any, query: any = {}, academyIdentifier?: string) {
@@ -165,9 +168,7 @@ export class AcademyCvValidationService {
       const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
       const validationStatus = isVerified ? 'VERIFIED' : 'PENDING';
       const rating = Number(p.overallRating) || 0;
-      const cvTier: 'GOLD' | 'SILVER' | 'BRONZE' = isVerified
-        ? (p.cvTier as any) || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
-        : 'BRONZE';
+      const cvTier: 'GOLD' | 'SILVER' | 'BRONZE' = (p.cvTier as any) || 'BRONZE';
 
       const verifyingCoach = p.verifyingCoachId
         ? coachMap.get(p.verifyingCoachId.toString())
@@ -293,245 +294,272 @@ export class AcademyCvValidationService {
     };
   }
 
-  async getCvsLibrary(user: any, query: any = {}, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-    const baseUrl = (env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+  // ==========================================
+  // CVS LIBRARY (academy browses all player CVs, likes and shares them)
+  // ==========================================
+  private shareUrlFor(playerId: string) {
+    const base = (
+      env.PUBLIC_SHARE_URL ||
+      `${(env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '')}/players/share`
+    ).replace(/\/$/, '');
+    return `${base}/${playerId}`;
+  }
 
-    const tab = (query.tab || 'ALL').toUpperCase();
-    const position = query.position ? String(query.position).toUpperCase() : null;
-    const country = query.country ? String(query.country).trim() : null;
-    const minAge = query.minAge ? Number(query.minAge) : null;
-    const maxAge = query.maxAge ? Number(query.maxAge) : null;
-    const statusFilter = query.status ? String(query.status).toUpperCase() : null;
-    const searchTerm = query.searchTerm ? String(query.searchTerm).trim() : null;
-
-    // Only consider shared and liked entries for players that actually exist in DB
-    const realSharedPlayerIds = (academy.sharedPlayerProfiles || [])
-      .map((s: any) => s.playerId)
-      .filter((id: any) => id && Types.ObjectId.isValid(id));
-    const existingSharedPlayers =
-      realSharedPlayerIds.length > 0
-        ? await PlayerProfile.find({ _id: { $in: realSharedPlayerIds } })
-            .select('_id')
-            .lean()
-        : [];
-    const existingSharedIdSet = new Set(existingSharedPlayers.map((p) => p._id.toString()));
-    const validSharedProfiles = (academy.sharedPlayerProfiles || []).filter(
-      (s: any) => s.playerId && existingSharedIdSet.has(s.playerId.toString()),
-    );
-
-    // Auto-clean any stale or non-existent test IDs from academy document
-    if (validSharedProfiles.length !== (academy.sharedPlayerProfiles || []).length) {
-      academy.sharedPlayerProfiles = validSharedProfiles;
-      await academy.save();
-    }
-
-    const realLikedPlayerIds = (academy.likedPlayerIds || []).filter(
-      (id: any) => id && Types.ObjectId.isValid(id),
-    );
-    const existingLikedPlayers =
-      realLikedPlayerIds.length > 0
-        ? await PlayerProfile.find({ _id: { $in: realLikedPlayerIds } })
-            .select('_id')
-            .lean()
-        : [];
-    const likedSet = new Set(existingLikedPlayers.map((p) => p._id.toString()));
-
-    if (likedSet.size !== (academy.likedPlayerIds || []).length) {
-      academy.likedPlayerIds = Array.from(likedSet).map((id) => new Types.ObjectId(id));
-      await academy.save();
-    }
-
-    const sharedMap = new Map<string, number>();
-    validSharedProfiles.forEach((s: any) => {
-      if (s.playerId) sharedMap.set(s.playerId.toString(), s.shareCount || 1);
-    });
-
-    const playerQuery: any = {};
-    if (tab === 'LIKED') {
-      playerQuery._id = { $in: Array.from(likedSet).map((id) => new Types.ObjectId(id)) };
-    } else if (tab === 'SHARED') {
-      playerQuery._id = { $in: Array.from(sharedMap.keys()).map((id) => new Types.ObjectId(id)) };
-    }
-
-    if (position && position !== 'ALL' && position !== 'ALL POSITIONS') {
-      playerQuery.position = new RegExp(position, 'i');
-    }
-    if (country && country !== 'ALL' && country !== 'ALL COUNTRIES') {
-      playerQuery.country = new RegExp(country, 'i');
-    }
-    if (searchTerm) {
-      const searchRegex = new RegExp(searchTerm, 'i');
-      playerQuery.$or = [
-        { fullName: searchRegex },
-        { currentClub: searchRegex },
-        { position: searchRegex },
-        { country: searchRegex },
-      ];
-    }
-
-    const playersRaw = await PlayerProfile.find(playerQuery)
-      .select('_id fullName avatar position currentClub country dateOfBirth age overallRating')
-      .sort({ overallRating: -1, createdAt: -1 })
-      .lean();
-
-    let processedPlayers = playersRaw.map((p: any) => {
-      let age = 18;
-      if (p.dateOfBirth) {
-        const diffMs = Date.now() - new Date(p.dateOfBirth).getTime();
-        age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
-      } else if (typeof p.age === 'number') {
-        age = p.age;
+  private ageFromProfile(p: any): number | null {
+    if (p.dateOfBirth) {
+      const dob = new Date(p.dateOfBirth);
+      if (!Number.isNaN(dob.getTime())) {
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+        return age;
       }
+    }
+    return typeof p.age === 'number' ? p.age : null;
+  }
 
-      const rating = Number(p.overallRating || 50);
-      const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
-      const tier: 'GOLD' | 'SILVER' | 'BRONZE' = isVerified
-        ? (p.cvTier as any) || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
-        : 'BRONZE';
-      const pid = p._id.toString();
+  private async getOwnAcademy(user: any) {
+    const academy = await AcademyProfile.findOne({ userId: user?.userId });
+    if (!academy) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy profile not found for this account');
+    }
+    return academy;
+  }
 
+  private async assertPlayerExists(playerId: string) {
+    if (!playerId || !Types.ObjectId.isValid(playerId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
+    }
+    const player = await PlayerProfile.findById(playerId).select('_id fullName userId');
+    if (!player) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Player profile not found');
+    }
+    return player;
+  }
+
+  async getCvsLibrary(user: any, query: any = {}) {
+    const academy = await this.getOwnAcademy(user);
+    const q: Record<string, unknown> = { ...query };
+
+    // Liked / shared ids, ignoring entries whose player no longer exists (read-only, no writes)
+    const likedIds = (academy.likedPlayerIds || [])
+      .map((id: any) => String(id))
+      .filter((id: string) => Types.ObjectId.isValid(id));
+    const sharedEntries = (academy.sharedPlayerProfiles || []).filter(
+      (s: any) => s.playerId && Types.ObjectId.isValid(String(s.playerId)),
+    );
+    const referencedIds = [
+      ...new Set([...likedIds, ...sharedEntries.map((s: any) => String(s.playerId))]),
+    ];
+    const existingIdSet = new Set(
+      (
+        await PlayerProfile.find({ _id: { $in: referencedIds } })
+          .select('_id')
+          .lean()
+      ).map((p: any) => String(p._id)),
+    );
+    const likedSet = new Set(likedIds.filter((id: string) => existingIdSet.has(id)));
+    const sharedMap = new Map<string, number>();
+    for (const s of sharedEntries) {
+      const id = String(s.playerId);
+      if (existingIdSet.has(id)) sharedMap.set(id, s.shareCount || 1);
+    }
+
+    // ---- filters → baseFilter (custom params are removed from q before QueryBuilder.filter())
+    const and: Record<string, any>[] = [];
+
+    const tab = String(q.tab || 'ALL').toUpperCase();
+    if (!['ALL', 'LIKED', 'SHARED'].includes(tab)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid tab. Use ALL, LIKED or SHARED');
+    }
+    if (tab === 'LIKED') {
+      and.push({ _id: { $in: [...likedSet].map((id) => new Types.ObjectId(id)) } });
+    } else if (tab === 'SHARED') {
+      and.push({ _id: { $in: [...sharedMap.keys()].map((id) => new Types.ObjectId(id)) } });
+    }
+
+    const position = String(q.position || '').trim();
+    if (position && !['ALL', 'ALL POSITIONS'].includes(position.toUpperCase())) {
+      and.push({ position: { $regex: `^${escapeRegex(position)}$`, $options: 'i' } });
+    }
+    const country = String(q.country || '').trim();
+    if (country && !['ALL', 'ALL COUNTRIES'].includes(country.toUpperCase())) {
+      and.push({ country: { $regex: `^${escapeRegex(country)}$`, $options: 'i' } });
+    }
+
+    const status = String(q.status || '').toUpperCase();
+    if (status && !['ALL', 'ALL STATUS'].includes(status)) {
+      if (!['GOLD', 'SILVER', 'BRONZE'].includes(status)) {
+        throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid status. Use GOLD, SILVER or BRONZE');
+      }
+      // cvTier is the persisted card tier computed by computePlayerCardTier (client rules)
+      and.push(
+        status === 'BRONZE'
+          ? { $or: [{ cvTier: 'BRONZE' }, { cvTier: { $exists: false } }, { cvTier: null }] }
+          : { cvTier: status },
+      );
+    }
+
+    const minAge = q.minAge !== undefined && q.minAge !== '' ? Number(q.minAge) : null;
+    const maxAge = q.maxAge !== undefined && q.maxAge !== '' ? Number(q.maxAge) : null;
+    if ((minAge !== null && Number.isNaN(minAge)) || (maxAge !== null && Number.isNaN(maxAge))) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'minAge and maxAge must be numbers');
+    }
+    const noDob = { $or: [{ dateOfBirth: { $exists: false } }, { dateOfBirth: null }] };
+    if (minAge !== null) {
+      const bornOnOrBefore = new Date();
+      bornOnOrBefore.setFullYear(bornOnOrBefore.getFullYear() - minAge);
+      and.push({
+        $or: [
+          { dateOfBirth: { $lte: bornOnOrBefore } },
+          { $and: [noDob, { age: { $gte: minAge } }] },
+        ],
+      });
+    }
+    if (maxAge !== null) {
+      const bornAfter = new Date();
+      bornAfter.setFullYear(bornAfter.getFullYear() - (maxAge + 1));
+      and.push({
+        $or: [{ dateOfBirth: { $gt: bornAfter } }, { $and: [noDob, { age: { $lte: maxAge } }] }],
+      });
+    }
+
+    const term = String(q.searchTerm || q.search || '').trim();
+    if (term) q.searchTerm = escapeRegex(term);
+    delete q.search;
+    Object.keys(q).forEach((key) => {
+      if (!['searchTerm', 'sort', 'page', 'limit'].includes(key)) delete q[key];
+    });
+    if (!q.sort) q.sort = '-overallRating,-createdAt';
+    q.page = Math.max(1, Number(q.page) || 1);
+    q.limit = Math.max(1, Math.min(100, Number(q.limit) || 10));
+    q.fields =
+      '_id,fullName,profileImage,position,currentClub,country,dateOfBirth,age,overallRating,cvTier';
+    const builder = new QueryBuilder(PlayerProfile.find(and.length ? { $and: and } : {}), q)
+      .search(['fullName', 'currentClub', 'position', 'country'])
+      .filter()
+      .sort()
+      .paginate()
+      .fields();
+
+    const [players, pageMeta, allCvsCount, countries, positions] = await Promise.all([
+      builder.modelQuery.lean(),
+      builder.countTotal(),
+      PlayerProfile.countDocuments({}),
+      PlayerProfile.distinct('country', { country: { $nin: [null, ''] } }),
+      PlayerProfile.distinct('position', { position: { $nin: [null, ''] } }),
+    ]);
+
+    const rows = players.map((p: any) => {
+      const pid = String(p._id);
+      const raw = typeof p.overallRating === 'number' ? p.overallRating : null;
       return {
         id: p._id,
         playerId: p._id,
-        name: p.fullName || 'Athlete',
-        position: (p.position || 'FORWARD').toUpperCase(),
-        avatar: p.avatar || null,
-        rating: (rating / 10).toFixed(1),
-        rawRating: rating,
-        club: p.currentClub || academy.name || 'Academy Athlete',
-        country: p.country || 'Brazil',
-        age,
-        status: tier,
+        name: p.fullName || '',
+        position: p.position || '',
+        avatar: p.profileImage || null,
+        rating: raw !== null ? (raw / 10).toFixed(1) : null,
+        rawRating: raw,
+        club: p.currentClub || '',
+        country: p.country || '',
+        age: this.ageFromProfile(p),
+        status: p.cvTier || 'BRONZE',
         isLiked: likedSet.has(pid),
         shareCount: sharedMap.get(pid) || 0,
-        shareableUrl: `${baseUrl}/players/share/${pid}`,
+        shareableUrl: this.shareUrlFor(pid),
       };
     });
-
-    if (minAge !== null) processedPlayers = processedPlayers.filter((p) => p.age >= minAge);
-    if (maxAge !== null) processedPlayers = processedPlayers.filter((p) => p.age <= maxAge);
-    if (statusFilter && statusFilter !== 'ALL' && statusFilter !== 'ALL STATUS') {
-      processedPlayers = processedPlayers.filter((p) => p.status === statusFilter);
-    }
-
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
-    const total = processedPlayers.length;
-    const paginated = processedPlayers.slice((page - 1) * limit, page * limit);
-
-    const totalLikedCount = likedSet.size;
-    const totalSharedCount = validSharedProfiles.reduce(
-      (sum: number, s: any) => sum + (s.shareCount || 1),
-      0,
-    );
-    const allCvsCount = await PlayerProfile.countDocuments({});
 
     return {
       metrics: {
         allCvs: { label: 'ALL CVS', count: allCvsCount },
-        likedCvs: { label: 'LIKED CVS', count: totalLikedCount },
-        profilesShared: { label: 'PROFILES SHARED', count: totalSharedCount },
+        likedCvs: { label: 'LIKED CVS', count: likedSet.size },
+        profilesShared: { label: 'PROFILES SHARED', count: sharedMap.size },
+      },
+      filterOptions: {
+        positions: (positions as string[]).sort(),
+        countries: (countries as string[]).sort(),
+        statuses: ['GOLD', 'SILVER', 'BRONZE'],
       },
       currentTab: tab,
       meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
+        page: pageMeta.page,
+        limit: pageMeta.limit,
+        total: pageMeta.total,
+        totalPages: pageMeta.totalPage,
       },
-      data: paginated,
+      data: rows,
     };
   }
 
-  async toggleLikePlayerCv(user: any, playerId: string, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-    if (!playerId || !Types.ObjectId.isValid(playerId)) {
-      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
-    }
+  async toggleLikePlayerCv(user: any, playerId: string) {
+    const player = await this.assertPlayerExists(playerId);
+    const academy = await this.getOwnAcademy(user);
 
-    const player = await PlayerProfile.findById(playerId);
-    if (!player) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'Player profile not found');
-    }
+    const alreadyLiked = (academy.likedPlayerIds || []).some(
+      (id: any) => String(id) === String(player._id),
+    );
+    const updated = await AcademyProfile.findByIdAndUpdate(
+      academy._id,
+      alreadyLiked
+        ? { $pull: { likedPlayerIds: player._id } }
+        : { $addToSet: { likedPlayerIds: player._id } },
+      { new: true },
+    )
+      .select('likedPlayerIds')
+      .lean();
 
-    const pId = new Types.ObjectId(playerId);
-    const existingIndex = (academy.likedPlayerIds || []).findIndex(
-      (id: any) => id.toString() === playerId,
+    const playerTotalLikes = await playerCacheService.syncPlayerTotalLikes(
+      String(player._id),
+      player.userId,
     );
 
-    let isLiked: boolean;
-    if (existingIndex > -1 && academy.likedPlayerIds) {
-      academy.likedPlayerIds.splice(existingIndex, 1);
-      isLiked = false;
-    } else {
-      academy.likedPlayerIds = academy.likedPlayerIds || [];
-      academy.likedPlayerIds.push(pId);
-      isLiked = true;
-    }
-
-    await academy.save();
-
-    const playerTotalLikes = await playerCacheService.syncPlayerTotalLikes(playerId, player.userId);
-
     return {
-      playerId,
+      playerId: player._id,
       playerName: player.fullName,
-      isLiked,
-      likedCount: academy.likedPlayerIds ? academy.likedPlayerIds.length : 0,
+      isLiked: !alreadyLiked,
+      likedCount: updated?.likedPlayerIds?.length || 0,
       playerTotalLikes,
-      message: isLiked
-        ? `${player.fullName} added to Liked CVs`
-        : `${player.fullName} removed from Liked CVs`,
+      message: alreadyLiked
+        ? `${player.fullName} removed from Liked CVs`
+        : `${player.fullName} added to Liked CVs`,
     };
   }
 
-  async sharePlayerCv(user: any, playerId: string, academyIdentifier?: string) {
-    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
-    if (!playerId || !Types.ObjectId.isValid(playerId)) {
-      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
-    }
+  async sharePlayerCv(user: any, playerId: string) {
+    const player = await this.assertPlayerExists(playerId);
+    const academy = await this.getOwnAcademy(user);
+    const now = new Date();
 
-    const player = await PlayerProfile.findById(playerId);
-    if (!player) {
-      throw new AppError(StatusCodes.NOT_FOUND, 'Player profile not found');
-    }
-
-    const baseShareUrl = (
-      env.PUBLIC_SHARE_URL ||
-      `${(env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '')}/players/share`
-    ).replace(/\/$/, '');
-    const shareableUrl = `${baseShareUrl}/${player._id}`;
-
-    academy.sharedPlayerProfiles = academy.sharedPlayerProfiles || [];
-    const existing = academy.sharedPlayerProfiles.find(
-      (s: any) => s.playerId && s.playerId.toString() === playerId,
+    // increment if this player was shared before, otherwise add the entry
+    const inc = await AcademyProfile.updateOne(
+      { _id: academy._id, 'sharedPlayerProfiles.playerId': player._id },
+      {
+        $inc: { 'sharedPlayerProfiles.$.shareCount': 1 },
+        $set: { 'sharedPlayerProfiles.$.sharedAt': now },
+      },
     );
-
-    if (existing) {
-      existing.shareCount = (existing.shareCount || 1) + 1;
-      existing.sharedAt = new Date();
-    } else {
-      academy.sharedPlayerProfiles.push({
-        playerId: new Types.ObjectId(playerId),
-        sharedAt: new Date(),
-        shareCount: 1,
-      });
+    if (!inc.matchedCount) {
+      await AcademyProfile.updateOne(
+        { _id: academy._id },
+        { $push: { sharedPlayerProfiles: { playerId: player._id, sharedAt: now, shareCount: 1 } } },
+      );
     }
-
-    await academy.save();
-
-    const totalSharedCount = academy.sharedPlayerProfiles.reduce(
-      (sum: number, s: any) => sum + (s.shareCount || 1),
-      0,
+    const updated = await AcademyProfile.findById(academy._id)
+      .select('sharedPlayerProfiles')
+      .lean();
+    const entry = (updated?.sharedPlayerProfiles || []).find(
+      (s: any) => String(s.playerId) === String(player._id),
     );
 
     return {
-      playerId: player._id.toString(),
+      playerId: player._id,
       playerName: player.fullName,
-      shareableUrl,
-      sharedCount: totalSharedCount,
-      uniqueSharedProfiles: academy.sharedPlayerProfiles.length,
+      shareableUrl: this.shareUrlFor(String(player._id)),
+      shareCount: entry?.shareCount || 1,
+      uniqueSharedProfiles: updated?.sharedPlayerProfiles?.length || 0,
       message: 'Share link generated and tracked successfully',
     };
   }
@@ -550,21 +578,10 @@ export class AcademyCvValidationService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Player profile not found');
     }
 
-    const rating = Number((player as any).overallRating || 50);
-    const isVerified = Boolean(
-      (player as any).isVerifiedByCoach || (player as any).coachVerification?.isVerified,
-    );
-    const tier = isVerified
-      ? (player as any).cvTier || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
-      : 'BRONZE';
-
-    let age = 18;
-    if (player.dateOfBirth) {
-      const diffMs = Date.now() - new Date(player.dateOfBirth).getTime();
-      age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
-    } else if (typeof player.age === 'number') {
-      age = player.age;
-    }
+    const rawRating =
+      typeof (player as any).overallRating === 'number' ? (player as any).overallRating : null;
+    const tier = (player as any).cvTier || 'BRONZE';
+    const age = this.ageFromProfile(player);
 
     const matchRecords = await MatchRecord.find({ playerId: player._id })
       .sort({ matchDate: -1 })
@@ -577,14 +594,14 @@ export class AcademyCvValidationService {
       position: player.position,
       age,
       country: player.country,
-      rating: (rating / 10).toFixed(1),
+      rating: rawRating !== null ? (rawRating / 10).toFixed(1) : null,
       tier,
       avatar:
         (player as any).avatar ||
         (player as any).profileImage ||
         (player.userId as any)?.avatar ||
         null,
-      currentClub: player.currentClub || (player.academyId as any)?.name || 'Football Academy',
+      currentClub: player.currentClub || (player.academyId as any)?.name || '',
       academy: player.academyId
         ? {
             id: (player.academyId as any)._id,
@@ -600,7 +617,7 @@ export class AcademyCvValidationService {
         matchDate: m.matchDate,
         goals: m.goals || 0,
         assists: m.assists || 0,
-        result: m.matchResult || 'W',
+        result: m.matchResult || null,
       })),
       isPublic: true,
     };

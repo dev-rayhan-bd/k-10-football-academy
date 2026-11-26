@@ -248,6 +248,166 @@ export class ChatService {
     };
   }
 
+  // ==========================================
+  // GROUP DETAILS / UPDATE / DELETE
+  // ==========================================
+  /** Load a conversation the current user belongs to (400 invalid id, 404 missing, 403 not a member). */
+  private async loadMemberConversation(conversationId: string, currentUserId: string) {
+    if (!Types.ObjectId.isValid(conversationId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid conversation ID');
+    }
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Conversation not found');
+    }
+    const me = await ConversationParticipant.findOne({
+      conversationId: conversation._id,
+      userId: new Types.ObjectId(currentUserId),
+    });
+    if (!me) {
+      throw new AppError(StatusCodes.FORBIDDEN, 'You are not a member of this conversation');
+    }
+    return { conversation, me };
+  }
+
+  /** Group admin = the creator, or a participant with chat role ADMIN. */
+  private isGroupAdmin(conversation: any, me: any, currentUserId: string) {
+    return String(conversation.creatorId || '') === String(currentUserId) || me?.role === 'ADMIN';
+  }
+
+  /** Conversation details with the full member list (any member can view). */
+  async getConversationDetails(conversationId: string, currentUserId: string) {
+    const { conversation, me } = await this.loadMemberConversation(conversationId, currentUserId);
+    const isGroup = conversation.type === 'GROUP';
+    const isAdmin = isGroup && this.isGroupAdmin(conversation, me, currentUserId);
+
+    const participants = await ConversationParticipant.find({ conversationId: conversation._id })
+      .populate('userId', '_id name fullName email role avatar status')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const members = participants
+      .filter((p: any) => p.userId)
+      .map((p: any) => {
+        const u = p.userId;
+        const uid = String(u._id);
+        const memberIsAdmin =
+          isGroup && (String(conversation.creatorId || '') === uid || p.role === 'ADMIN');
+        return {
+          _id: u._id,
+          id: uid,
+          name: u.name || u.fullName || '',
+          email: u.email || '',
+          avatar: u.avatar || '',
+          userRole: u.role || '',
+          chatRole: memberIsAdmin ? 'ADMIN' : 'MEMBER',
+          isAdmin: memberIsAdmin,
+          isCreator: String(conversation.creatorId || '') === uid,
+          isMe: uid === String(currentUserId),
+          isOnline: isUserOnline(uid),
+          joinedAt: p.createdAt || null,
+        };
+      })
+      // admins first, then by name
+      .sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin) || a.name.localeCompare(b.name));
+
+    return {
+      _id: conversation._id,
+      id: String(conversation._id),
+      type: conversation.type || 'INDIVIDUAL',
+      name: isGroup ? conversation.name || '' : '',
+      avatar: isGroup ? conversation.avatar || '' : '',
+      creatorId: conversation.creatorId || null,
+      membersCount: members.length,
+      members,
+      myChatRole: isAdmin ? 'ADMIN' : 'MEMBER',
+      permissions: {
+        canEdit: isAdmin,
+        canDelete: isAdmin,
+      },
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+    };
+  }
+
+  /** Update a group's name and/or image. Group admins only. */
+  async updateGroup(
+    conversationId: string,
+    currentUserId: string,
+    payload: { name?: string; avatar?: string; removeAvatar?: boolean },
+  ) {
+    const { conversation, me } = await this.loadMemberConversation(conversationId, currentUserId);
+    if (conversation.type !== 'GROUP') {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Only group conversations can be edited');
+    }
+    if (!this.isGroupAdmin(conversation, me, currentUserId)) {
+      throw new AppError(StatusCodes.FORBIDDEN, 'Only the group admin can edit this group');
+    }
+
+    const hasName = typeof payload.name === 'string';
+    const hasAvatar = typeof payload.avatar === 'string' && payload.avatar !== '';
+    if (!hasName && !hasAvatar && !payload.removeAvatar) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        'Nothing to update. Send name, an avatar image or removeAvatar=true',
+      );
+    }
+    if (hasName) {
+      const name = payload.name!.trim();
+      if (name.length < 1 || name.length > 100) {
+        throw new AppError(StatusCodes.BAD_REQUEST, 'Group name must be 1-100 characters');
+      }
+      conversation.name = name;
+    }
+    if (hasAvatar) conversation.avatar = payload.avatar!;
+    else if (payload.removeAvatar) conversation.avatar = '';
+    await conversation.save();
+
+    await emitToParticipants(conversation._id, 'conversation_updated', {
+      conversationId: String(conversation._id),
+      type: 'GROUP',
+      name: conversation.name,
+      avatar: conversation.avatar || '',
+      lastMessage: conversation.lastMessage || '',
+      lastMessageTime: conversation.lastMessageTime,
+      unreadIncrement: 0,
+      groupUpdated: true,
+    });
+
+    return this.getConversationDetails(String(conversation._id), currentUserId);
+  }
+
+  /** Delete a group with all its messages and participants. Group admins only. */
+  async deleteGroup(conversationId: string, currentUserId: string) {
+    const { conversation, me } = await this.loadMemberConversation(conversationId, currentUserId);
+    if (conversation.type !== 'GROUP') {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Only group conversations can be deleted');
+    }
+    if (!this.isGroupAdmin(conversation, me, currentUserId)) {
+      throw new AppError(StatusCodes.FORBIDDEN, 'Only the group admin can delete this group');
+    }
+
+    // notify members before the participant list is removed
+    const memberIds = (
+      await ConversationParticipant.find({ conversationId: conversation._id }).select('userId')
+    ).map((p) => String(p.userId));
+
+    await Promise.all([
+      Message.deleteMany({ conversationId: conversation._id }),
+      ConversationParticipant.deleteMany({ conversationId: conversation._id }),
+    ]);
+    await Conversation.deleteOne({ _id: conversation._id });
+
+    memberIds.forEach((uid) =>
+      emitToUser(uid, 'conversation_deleted', {
+        conversationId: String(conversation._id),
+        name: conversation.name || '',
+      }),
+    );
+
+    return { conversationId: String(conversation._id), deleted: true };
+  }
+
   /**
    * Get all conversations for current user with search & pagination
    */

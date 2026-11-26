@@ -17,6 +17,9 @@ import {
   markConversationAsUnread,
   uploadChatAttachment,
   getContacts,
+  getConversationDetails,
+  updateGroupConversation,
+  deleteGroupConversation,
 } from './chat.controller';
 import { upload } from '@/middlewares/multer';
 
@@ -33,6 +36,15 @@ router.post(
   startConversation,
 );
 router.get('/conversations', auth(), validateRequest(getConversationsZodSchema), getConversations);
+// Group details + members (any member), edit name/image and delete (group admin only)
+router.get('/conversations/:conversationId', auth(), getConversationDetails);
+router.patch(
+  '/conversations/:conversationId',
+  auth(),
+  upload.any() as any,
+  updateGroupConversation,
+);
+router.delete('/conversations/:conversationId', auth(), deleteGroupConversation);
 
 // ==========================================
 // 2. CONTACTS DIRECTORY FOR NEW CHATS (+ NEW CHAT)

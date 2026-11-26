@@ -163,3 +163,58 @@ export const getContacts = catchAsync(async (req: Request, res: Response) => {
     data: result.data,
   });
 });
+
+export const getConversationDetails = catchAsync(async (req: Request, res: Response) => {
+  const result = await chatService.getConversationDetails(
+    req.params.conversationId,
+    (req as any).user?.userId,
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Conversation details fetched successfully',
+    data: result,
+  });
+});
+
+/** PATCH (multipart): name, image file field `avatar`, or removeAvatar=true */
+export const updateGroupConversation = catchAsync(async (req: Request, res: Response) => {
+  const files = Array.isArray(req.files) ? (req.files as Express.Multer.File[]) : [];
+  const imageFile = files.find((f) => f.fieldname === 'avatar' || f.fieldname === 'image');
+  let avatar: string | undefined;
+  if (imageFile) {
+    if (!imageFile.mimetype?.startsWith('image/')) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Group image must be an image file');
+    }
+    avatar = (await chatService.uploadAttachment(imageFile)).url;
+  }
+  const removeAvatar = req.body?.removeAvatar === true || req.body?.removeAvatar === 'true';
+  const result = await chatService.updateGroup(
+    req.params.conversationId,
+    (req as any).user?.userId,
+    {
+      name: typeof req.body?.name === 'string' ? req.body.name : undefined,
+      avatar,
+      removeAvatar,
+    },
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Group updated successfully',
+    data: result,
+  });
+});
+
+export const deleteGroupConversation = catchAsync(async (req: Request, res: Response) => {
+  const result = await chatService.deleteGroup(
+    req.params.conversationId,
+    (req as any).user?.userId,
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'Group deleted successfully',
+    data: result,
+  });
+});

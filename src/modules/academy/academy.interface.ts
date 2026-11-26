@@ -252,8 +252,8 @@ export interface IAcademyFinanceTransaction {
   paymentReference?: string;
   transferredAmount?: number;
   transferredAt?: Date;
-  payoutStatusAcademy?: 'PENDING' | 'PAID' | 'PROCESSING';
-  payoutStatusCoach?: 'PENDING' | 'PAID' | 'PROCESSING';
+  payoutStatusAcademy?: 'PENDING' | 'PAID' | 'PROCESSING' | 'ON_HOLD' | 'LOCKED_NO_SUBSCRIPTION';
+  payoutStatusCoach?: 'PENDING' | 'PAID' | 'PROCESSING' | 'ON_HOLD';
   payoutReferenceAcademy?: string;
   payoutReferenceCoach?: string;
   paidAtAcademy?: Date;

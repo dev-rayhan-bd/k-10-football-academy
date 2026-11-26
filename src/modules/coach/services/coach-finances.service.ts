@@ -46,13 +46,9 @@ export class CoachFinancesService {
       )
       .lean();
 
-    // 2. Fetch all finance transactions for this coach
-    const verifiedPlayerIds = verifiedPlayers.map((p) => p._id);
+    // 2. Fetch this coach's own commission lines
     const transactions = await AcademyFinanceTransaction.find({
-      $or: [
-        { coachId: { $in: coachIdentifiers } },
-        { playerId: { $in: verifiedPlayerIds }, transactionType: 'CV Validation' },
-      ],
+      coachId: { $in: coachIdentifiers },
     })
       .populate('playerId', 'fullName position profileImage currentClub')
       .populate('academyId', 'name logo')
@@ -64,7 +60,9 @@ export class CoachFinancesService {
 
     let totalEarnings = 0;
     let pendingPayouts = 0;
+    let onHoldPayouts = 0;
     let completedPayouts = 0;
+    const coveredPlayerIds = new Set<string>();
     let thisMonthEarnings = 0;
 
     const transactionMap = new Map<string, any>();
@@ -81,20 +79,24 @@ export class CoachFinancesService {
             : 0;
 
       const tDate = new Date(tx.transactionDate || (tx as any).createdAt || now);
-      totalEarnings += earned;
+      if (tx.playerId) coveredPlayerIds.add((tx.playerId._id || tx.playerId).toString());
 
-      if (tx.payoutStatusCoach === 'PAID') {
-        completedPayouts += earned;
+      // ON_HOLD = player paid but the CV is not validated yet → not earned / not payable yet
+      if (tx.payoutStatusCoach === 'ON_HOLD') {
+        onHoldPayouts += earned;
       } else {
-        pendingPayouts += earned;
+        totalEarnings += earned;
+        if (tx.payoutStatusCoach === 'PAID') {
+          completedPayouts += earned;
+        } else {
+          pendingPayouts += earned;
+        }
+        if (tDate >= startOfMonth) {
+          thisMonthEarnings += earned;
+        }
       }
 
-      if (tDate >= startOfMonth) {
-        thisMonthEarnings += earned;
-      }
-
-      const key = tx.playerId ? (tx.playerId._id || tx.playerId).toString() : tx._id.toString();
-      transactionMap.set(key, {
+      transactionMap.set(tx._id.toString(), {
         id: tx._id.toString(),
         transactionType: tx.transactionType,
         grossFee: tx.cost || 24.0,
@@ -121,20 +123,22 @@ export class CoachFinancesService {
     // 4. Auto-reconcile any verified players who might not yet have an AcademyFinanceTransaction
     for (const pl of verifiedPlayers) {
       const key = pl._id.toString();
-      if (!transactionMap.has(key)) {
+      if (!coveredPlayerIds.has(key)) {
         const earned = 12.0;
         const vDate = new Date(pl.coachVerification?.verifiedAt || (pl as any).updatedAt || now);
-        totalEarnings += earned;
-        pendingPayouts += earned;
-        if (vDate >= startOfMonth) {
-          thisMonthEarnings += earned;
-        }
 
         // Persist a canonical AcademyFinanceTransaction in MongoDB if one doesn't exist yet
         let persistedTx = await AcademyFinanceTransaction.findOne({
           playerId: pl._id,
           transactionType: 'CV Validation',
         });
+        // the player's line belongs to another coach → not this coach's earning
+        if (
+          persistedTx?.coachId &&
+          !coachIdentifiers.some((id) => id.toString() === persistedTx!.coachId!.toString())
+        ) {
+          continue;
+        }
 
         if (!persistedTx) {
           persistedTx = await AcademyFinanceTransaction.create({
@@ -155,7 +159,14 @@ export class CoachFinancesService {
           });
         }
 
-        transactionMap.set(key, {
+        totalEarnings += earned;
+        if (persistedTx.payoutStatusCoach === 'PAID') completedPayouts += earned;
+        else pendingPayouts += earned;
+        if (vDate >= startOfMonth) {
+          thisMonthEarnings += earned;
+        }
+
+        transactionMap.set(persistedTx._id.toString(), {
           id: persistedTx._id.toString(),
           transactionType: 'CV Validation',
           grossFee: 24.0,
@@ -221,6 +232,9 @@ export class CoachFinancesService {
         pendingPayoutsFormatted: `$ ${pendingPayouts.toFixed(2)}`,
         completedPayouts: parseFloat(completedPayouts.toFixed(2)),
         completedPayoutsFormatted: `$ ${completedPayouts.toFixed(2)}`,
+        // paid by the player, released once you validate the CV
+        onHoldPayouts: parseFloat(onHoldPayouts.toFixed(2)),
+        onHoldPayoutsFormatted: `$ ${onHoldPayouts.toFixed(2)}`,
         totalValidationsCount: verifiedPlayers.length,
         commissionRatePerValidation: '$12.00 (50%)',
         currency: '$',

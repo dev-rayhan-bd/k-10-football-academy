@@ -1,6 +1,10 @@
 import { Types } from 'mongoose';
 import { AppError } from '@/utils/AppError';
-import { AcademyProfile, AcademyCoach, Team } from '../academy.model';
+import { StatusCodes } from 'http-status-codes';
+import { AcademyProfile, AcademyCoach, Team, PlayerEvaluation } from '../academy.model';
+import { PlayerProfile } from '@/modules/player/player.model';
+import { coachCacheService } from '@/modules/coach/services/coach-cache.service';
+import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { User } from '@/modules/user/user.model';
@@ -601,68 +605,197 @@ export class AcademyCoachesService {
     return affiliation;
   }
 
-  async removeCoachAffiliation(academyIdentifier: string, identifier: string) {
-    let academy = null;
-    if (Types.ObjectId.isValid(academyIdentifier)) {
-      academy = await AcademyProfile.findOne({
-        $or: [{ _id: academyIdentifier }, { userId: academyIdentifier }],
-      });
+  /**
+   * Remove (release) a coach from an academy.
+   * `identifier` = AcademyCoach affiliation _id OR CoachProfile _id.
+   * History (submitted evaluations, validated CVs, commissions) is kept; open work is handed back.
+   */
+  async removeCoachAffiliation(user: any, identifier: string, academyIdParam?: string) {
+    if (!identifier || !Types.ObjectId.isValid(identifier)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid affiliation or coach ID');
+    }
+
+    // ACADEMY → own academy; SUPER_ADMIN/ADMIN → must name the academy (?academyId=)
+    let academy: any = null;
+    if (user?.role === 'ACADEMY') {
+      academy = await AcademyProfile.findOne({ userId: user.userId });
+    } else {
+      if (!academyIdParam || !Types.ObjectId.isValid(academyIdParam)) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          'A valid academyId query parameter is required',
+        );
+      }
+      academy = await AcademyProfile.findById(academyIdParam);
     }
     if (!academy) {
-      throw new AppError(404, 'Academy profile not found');
+      throw new AppError(StatusCodes.NOT_FOUND, 'Academy profile not found');
     }
 
     const affiliation = await AcademyCoach.findOne({
-      $or: [{ _id: identifier }, { coachId: identifier }],
       academyId: academy._id,
+      $or: [{ _id: identifier }, { coachId: identifier }],
     });
+    const coachId = affiliation?.coachId || new Types.ObjectId(identifier);
+    const coach = await CoachProfile.findById(coachId);
 
+    const linkedByProfile = !!coach && coach.academyId?.toString() === academy._id.toString();
+    const activeAffiliation =
+      !!affiliation && ['APPROVED', 'PENDING'].includes(String(affiliation.status));
+    if (!activeAffiliation && !linkedByProfile) {
+      throw new AppError(
+        affiliation ? StatusCodes.CONFLICT : StatusCodes.NOT_FOUND,
+        affiliation
+          ? `This coach is already ${String(affiliation.status).toLowerCase()} for this academy`
+          : 'This coach is not part of this academy',
+      );
+    }
+
+    // 1. Affiliation → REMOVED (kept for history; coach can request to join again later)
     if (affiliation) {
       affiliation.status = 'REMOVED';
       await affiliation.save();
     }
 
-    let coachId = affiliation?.coachId;
-    if (!coachId && Types.ObjectId.isValid(identifier)) {
-      coachId = new Types.ObjectId(identifier);
+    // 2. Teams: pull the coach and recompute counts (Total Roster / Coaching Staff)
+    const teams = await Team.find({ academyId: academy._id, coachIds: coachId });
+    for (const team of teams) {
+      team.coachIds = (team.coachIds || []).filter(
+        (id: any) => id.toString() !== coachId.toString(),
+      );
+      team.coachesCount = team.coachIds.length;
+      team.totalMembers = (team.coachesCount || 0) + (team.playersCount || 0);
+      await team.save();
+    }
+    const academyTeamIds = (await Team.find({ academyId: academy._id }).select('_id').lean()).map(
+      (t: any) => t._id,
+    );
+
+    // 3. Open evaluation requests for this coach (never submitted) → cancelled, academy re-assigns
+    const openEvaluations = await PlayerEvaluation.find({
+      academyId: academy._id,
+      coachId,
+      status: 'NEED_EVALUATION',
+    })
+      .populate('playerId', 'fullName')
+      .lean();
+    if (openEvaluations.length) {
+      await PlayerEvaluation.deleteMany({ _id: { $in: openEvaluations.map((e: any) => e._id) } });
     }
 
-    if (coachId) {
-      // Remove coach from all teams in this academy
-      await Team.updateMany(
-        { academyId: academy._id, coachIds: coachId },
-        { $pull: { coachIds: coachId } },
-      );
-
-      const coach = await CoachProfile.findById(coachId);
-      if (coach && coach.academyId?.toString() === academy._id.toString()) {
-        coach.isVerifiedByAcademy = false;
-        coach.academyId = undefined;
-        coach.coachType = 'INDIVIDUAL_COACH';
-
-        if (Array.isArray(coach.clubHistory)) {
-          coach.clubHistory.forEach((c: any) => {
-            if (c.clubName.toLowerCase() === academy.name.toLowerCase() && c.isCurrent) {
-              c.isCurrent = false;
-              c.endYear = new Date().getFullYear();
-              c.period = `${c.startYear || new Date().getFullYear()} - ${new Date().getFullYear()}`;
-            }
-          });
-        }
-        await coach.save();
-
-        await notificationService.createNotification({
-          recipientId: coach.userId,
-          recipientRole: 'COACH',
-          title: 'Academy Affiliation Revoked',
-          message: `Your affiliation with ${academy.name} has been revoked. Profile reverted to Individual Coach.`,
-          type: 'ACADEMY_AFFILIATION_REMOVED',
-          data: { academyId: academy._id },
-        });
+    // 4. CV validation requests addressed to this coach and not yet validated → coach cleared.
+    //    PAID requests keep their payment: the player picks another coach without paying again.
+    let releasedCvRequests: any[] = [];
+    if (coach?.userId) {
+      releasedCvRequests = await PlayerProfile.find({
+        'coachVerification.coachId': coach.userId,
+        'coachVerification.validationPaymentStatus': { $in: ['UNPAID', 'PAID'] },
+      })
+        .select('_id userId fullName coachVerification.validationPaymentStatus')
+        .lean();
+      if (releasedCvRequests.length) {
+        await PlayerProfile.updateMany(
+          { _id: { $in: releasedCvRequests.map((p: any) => p._id) } },
+          { $unset: { 'coachVerification.coachId': '' } },
+        );
       }
     }
 
-    return { message: 'Coach removed from academy successfully', affiliation: affiliation || null };
+    // 5. Coach profile → independent
+    if (coach && linkedByProfile) {
+      coach.isVerifiedByAcademy = false;
+      coach.academyId = undefined;
+      coach.coachType = 'INDIVIDUAL_COACH';
+      coach.teamIds = (coach.teamIds || []).filter(
+        (id: any) => !academyTeamIds.some((t: any) => t.toString() === id.toString()),
+      ) as any;
+      if (Array.isArray(coach.clubHistory)) {
+        const year = new Date().getFullYear();
+        coach.clubHistory.forEach((c: any) => {
+          if (c.clubName?.toLowerCase() === academy.name?.toLowerCase() && c.isCurrent) {
+            c.isCurrent = false;
+            c.endYear = year;
+            c.period = `${c.startYear || year} - ${year}`;
+          }
+        });
+      }
+      await coach.save();
+    } else if (coach) {
+      // not linked by profile (e.g. pending request) – still drop this academy's teams
+      await CoachProfile.updateOne(
+        { _id: coach._id },
+        { $pull: { teamIds: { $in: academyTeamIds } } },
+      );
+    }
+
+    // 6. Caches
+    await coachCacheService.invalidateCoachCache(coachId, coach?.userId);
+    for (const p of releasedCvRequests) {
+      await playerCacheService.invalidatePlayerCache(p._id, p.userId);
+    }
+
+    // 7. Notifications
+    if (coach?.userId) {
+      await notificationService.createNotification({
+        recipientId: coach.userId,
+        recipientRole: 'COACH',
+        title: 'Academy Affiliation Revoked',
+        message: `Your affiliation with ${academy.name} has been revoked. Profile reverted to Individual Coach.`,
+        type: 'ACADEMY_AFFILIATION_REMOVED',
+        data: { academyId: academy._id },
+      });
+    }
+    for (const p of releasedCvRequests) {
+      if (!p.userId || p.coachVerification?.validationPaymentStatus !== 'PAID') continue;
+      await notificationService.createNotification({
+        recipientId: p.userId,
+        recipientRole: 'PLAYER',
+        title: 'Choose a new coach for your CV validation',
+        message: `${coach?.fullName || 'Your selected coach'} is no longer with ${academy.name}. Your payment is kept — please choose another academy coach to validate your CV (no extra charge).`,
+        type: 'CV_VALIDATION_REQUEST',
+        data: { playerId: p._id, needsCoachReassignment: true },
+      });
+    }
+    if (openEvaluations.length && academy.userId) {
+      const names = openEvaluations
+        .map((e: any) => e.playerId?.fullName)
+        .filter(Boolean)
+        .join(', ');
+      await notificationService.createNotification({
+        recipientId: academy.userId,
+        recipientRole: 'ACADEMY',
+        title: 'Evaluation requests need a new coach',
+        message: `${openEvaluations.length} open evaluation request(s)${names ? ` (${names})` : ''} assigned to ${coach?.fullName || 'the removed coach'} were cancelled. Please request them again with another coach.`,
+        type: 'EVALUATION_REQUEST',
+        data: { academyId: academy._id },
+      });
+    }
+
+    return {
+      message: 'Coach removed from academy successfully',
+      data: {
+        affiliationId: affiliation?._id || null,
+        coachId,
+        coachName: coach?.fullName || '',
+        academyId: academy._id,
+        status: 'REMOVED',
+        removedFromTeams: teams.map((t: any) => ({
+          _id: t._id,
+          teamName: t.teamName,
+          coachesCount: t.coachesCount,
+          totalMembers: t.totalMembers,
+        })),
+        cancelledEvaluationRequests: openEvaluations.length,
+        cvValidationRequestsReleased: {
+          paid: releasedCvRequests.filter(
+            (p: any) => p.coachVerification?.validationPaymentStatus === 'PAID',
+          ).length,
+          unpaid: releasedCvRequests.filter(
+            (p: any) => p.coachVerification?.validationPaymentStatus === 'UNPAID',
+          ).length,
+        },
+      },
+    };
   }
 }
 

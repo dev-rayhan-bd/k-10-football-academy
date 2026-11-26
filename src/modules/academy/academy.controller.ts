@@ -599,16 +599,16 @@ export const respondToCoachAffiliation = catchAsync(async (req: Request, res: Re
 });
 
 export const removeCoachAffiliation = catchAsync(async (req: Request, res: Response) => {
-  const paramId = req.params.academyId;
-  const academyId =
-    paramId && Types.ObjectId.isValid(paramId) ? paramId : (req as any).user?.userId;
-  const identifier = req.params.coachId || req.params.affiliationId;
-  const result = await academyService.removeCoachAffiliation(academyId, identifier);
+  const result = await academyService.removeCoachAffiliation(
+    (req as any).user,
+    req.params.affiliationId,
+    typeof req.query.academyId === 'string' ? req.query.academyId : undefined,
+  );
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: result.message,
-    data: result.affiliation,
+    data: result.data,
   });
 });
 

@@ -346,8 +346,8 @@ export class AcademyService {
     );
   }
 
-  async removeCoachAffiliation(academyIdentifier: string, affiliationId: string) {
-    return await academyCoachesService.removeCoachAffiliation(academyIdentifier, affiliationId);
+  async removeCoachAffiliation(user: any, identifier: string, academyIdParam?: string) {
+    return await academyCoachesService.removeCoachAffiliation(user, identifier, academyIdParam);
   }
 
   // --- AcademyParentsService Delegates ---

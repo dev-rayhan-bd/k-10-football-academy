@@ -7,7 +7,6 @@ import { logger } from '@/utils/logger';
 import { User } from '@/modules/user/user.model';
 import { CoachProfile } from '../coach.model';
 import { AcademyFinanceTransaction } from '@/modules/academy/academy.model';
-import { PlayerProfile } from '@/modules/player/player.model';
 
 export class CoachStripeConnectService {
   private resolveCountryCode(rawCountry?: string, fallbackCountry = 'US'): string {
@@ -77,24 +76,9 @@ export class CoachStripeConnectService {
   private async getCoachPayoutSummary(coach: any) {
     const coachIdentifiers = [coach._id, coach.userId].filter(Boolean);
 
-    const verifiedPlayers = await PlayerProfile.find({
-      $or: [
-        { verifyingCoachId: { $in: coachIdentifiers } },
-        { 'coachVerification.verifiedByCoachId': { $in: coachIdentifiers } },
-        { 'coachVerification.coachName': coach.fullName },
-      ],
-      $and: [{ $or: [{ isVerifiedByCoach: true }, { 'coachVerification.isVerified': true }] }],
-    })
-      .select('_id')
-      .lean();
-
-    const verifiedPlayerIds = verifiedPlayers.map((p) => p._id);
-
+    // Only this coach's own commission lines
     const transactions = await AcademyFinanceTransaction.find({
-      $or: [
-        { coachId: { $in: coachIdentifiers } },
-        { playerId: { $in: verifiedPlayerIds }, transactionType: 'CV Validation' },
-      ],
+      coachId: { $in: coachIdentifiers },
     }).lean();
 
     let totalEarnedCommission = 0;
@@ -102,6 +86,8 @@ export class CoachStripeConnectService {
     let pendingTransferAmount = 0;
     let pendingTransferCount = 0;
     let transferredCount = 0;
+    let onHoldAmount = 0;
+    let onHoldCount = 0;
 
     for (const tx of transactions) {
       const share =
@@ -110,6 +96,12 @@ export class CoachStripeConnectService {
           : tx.transactionType === 'CV Validation'
             ? 12.0
             : 0;
+      // ON_HOLD = CV not validated yet → not earned / not transferable yet
+      if (tx.payoutStatusCoach === 'ON_HOLD') {
+        onHoldAmount += share;
+        onHoldCount++;
+        continue;
+      }
       totalEarnedCommission += share;
       if (tx.payoutStatusCoach === 'PAID') {
         totalTransferredAmount += share;
@@ -126,6 +118,8 @@ export class CoachStripeConnectService {
       pendingTransferAmount: parseFloat(pendingTransferAmount.toFixed(2)),
       pendingTransferCount,
       transferredCount,
+      onHoldAmount: parseFloat(onHoldAmount.toFixed(2)),
+      onHoldCount,
     };
   }
 

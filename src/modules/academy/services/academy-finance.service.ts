@@ -417,7 +417,9 @@ export class AcademyFinanceService {
 
     if (
       query.payoutStatus &&
-      ['PENDING', 'PAID', 'PROCESSING'].includes(String(query.payoutStatus).toUpperCase())
+      ['PENDING', 'PAID', 'PROCESSING', 'ON_HOLD', 'LOCKED_NO_SUBSCRIPTION'].includes(
+        String(query.payoutStatus).toUpperCase(),
+      )
     ) {
       filter.payoutStatusAcademy = String(query.payoutStatus).toUpperCase().trim();
     }
@@ -467,6 +469,8 @@ export class AcademyFinanceService {
       thisMonthAgg,
       paidAgg,
       pendingPayoutAgg,
+      onHoldAgg,
+      lockedAgg,
     ] = await Promise.all([
       academyPlayerIds.length > 0
         ? MatchRecord.countDocuments({ playerId: { $in: academyPlayerIds } })
@@ -483,7 +487,13 @@ export class AcademyFinanceService {
         status: 'REJECTED',
       }),
       AcademyFinanceTransaction.aggregate([
-        { $match: { academyId: academy._id, status: 'COMPLETED' } },
+        {
+          $match: {
+            academyId: academy._id,
+            status: 'COMPLETED',
+            payoutStatusAcademy: { $ne: 'ON_HOLD' },
+          },
+        },
         { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
       ]),
       AcademyFinanceTransaction.aggregate([
@@ -491,6 +501,7 @@ export class AcademyFinanceService {
           $match: {
             academyId: academy._id,
             status: 'COMPLETED',
+            payoutStatusAcademy: { $ne: 'ON_HOLD' },
             transactionDate: { $gte: startOfMonth },
           },
         },
@@ -501,7 +512,20 @@ export class AcademyFinanceService {
         { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
       ]),
       AcademyFinanceTransaction.aggregate([
-        { $match: { academyId: academy._id, payoutStatusAcademy: { $ne: 'PAID' } } },
+        {
+          $match: {
+            academyId: academy._id,
+            payoutStatusAcademy: { $in: ['PENDING', 'PROCESSING', null] },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
+      ]),
+      AcademyFinanceTransaction.aggregate([
+        { $match: { academyId: academy._id, payoutStatusAcademy: 'ON_HOLD' } },
+        { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
+      ]),
+      AcademyFinanceTransaction.aggregate([
+        { $match: { academyId: academy._id, payoutStatusAcademy: 'LOCKED_NO_SUBSCRIPTION' } },
         { $group: { _id: null, total: { $sum: '$commissionAcademy' } } },
       ]),
     ]);
@@ -516,6 +540,8 @@ export class AcademyFinanceService {
     const pendingPayouts = pendingPayoutAgg[0]?.total
       ? parseFloat(pendingPayoutAgg[0].total.toFixed(2))
       : 0;
+    const onHoldPayouts = onHoldAgg[0]?.total ? parseFloat(onHoldAgg[0].total.toFixed(2)) : 0;
+    const lockedPayouts = lockedAgg[0]?.total ? parseFloat(lockedAgg[0].total.toFixed(2)) : 0;
 
     const formattedTransactions = transactionDocs.map((doc: any) => {
       const player = doc.playerId || {};
@@ -569,6 +595,12 @@ export class AcademyFinanceService {
         pendingPayoutsFormatted: `$ ${pendingPayouts.toFixed(2)}`,
         completedPayouts,
         completedPayoutsFormatted: `$ ${completedPayouts.toFixed(2)}`,
+        // CV validation paid, coach has not validated yet → not payable yet
+        onHoldPayouts,
+        onHoldPayoutsFormatted: `$ ${onHoldPayouts.toFixed(2)}`,
+        // withheld until the academy has an active subscription
+        lockedPayouts,
+        lockedPayoutsFormatted: `$ ${lockedPayouts.toFixed(2)}`,
         commissionRate: '40% - 50%',
         currency: '$',
       },

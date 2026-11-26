@@ -95,6 +95,13 @@ const normalizePaymentCategory = (
   return 'OTHER';
 };
 
+/** Payout bucket of a commission line: PAID, PENDING (payable now) or ON_HOLD (not payable yet). */
+const payoutBucket = (status?: string | null): 'PAID' | 'PENDING' | 'ON_HOLD' => {
+  if (status === 'PAID') return 'PAID';
+  if (!status || status === 'PENDING' || status === 'PROCESSING') return 'PENDING';
+  return 'ON_HOLD';
+};
+
 export class AdminPaymentsService {
   /**
    * Collects and unifies all real platform payment streams strictly from DB values (zero fallback inflation, zero duplicate counting).
@@ -1348,6 +1355,7 @@ export class AdminPaymentsService {
     const coachesAggMap = new Map<string, any>();
     let totalCoachPending = 0;
     let totalCoachPaid = 0;
+    let totalCoachOnHold = 0;
 
     for (const tx of allFinanceTxns) {
       if (tx.commissionCoach && tx.commissionCoach > 0) {
@@ -1375,6 +1383,7 @@ export class AdminPaymentsService {
             stripePayoutsEnabled: Boolean(coachProfile?.stripeConnect?.payoutsEnabled),
             totalEarned: 0,
             pendingAmount: 0,
+            onHoldAmount: 0,
             completedPayoutAmount: 0,
             transactionsCount: 0,
             transactions: [],
@@ -1386,13 +1395,19 @@ export class AdminPaymentsService {
         agg.totalEarned = parseFloat((agg.totalEarned + earned).toFixed(2));
         agg.transactionsCount += 1;
 
-        const isPaid = tx.payoutStatusCoach === 'PAID';
+        // PAID → paid out; PENDING/PROCESSING → payable now; anything else (ON_HOLD = CV not
+        // validated yet) → not payable
+        const coachPayout = payoutBucket(tx.payoutStatusCoach);
+        const isPaid = coachPayout === 'PAID';
         if (isPaid) {
           agg.completedPayoutAmount = parseFloat((agg.completedPayoutAmount + earned).toFixed(2));
           totalCoachPaid = parseFloat((totalCoachPaid + earned).toFixed(2));
-        } else {
+        } else if (coachPayout === 'PENDING') {
           agg.pendingAmount = parseFloat((agg.pendingAmount + earned).toFixed(2));
           totalCoachPending = parseFloat((totalCoachPending + earned).toFixed(2));
+        } else {
+          agg.onHoldAmount = parseFloat((agg.onHoldAmount + earned).toFixed(2));
+          totalCoachOnHold = parseFloat((totalCoachOnHold + earned).toFixed(2));
         }
 
         agg.transactions.push({
@@ -1401,7 +1416,7 @@ export class AdminPaymentsService {
           grossCost: tx.cost,
           commission: earned,
           commissionRate: '50%',
-          payoutStatus: isPaid ? 'PAID' : 'PENDING',
+          payoutStatus: tx.payoutStatusCoach || 'PENDING',
           payoutReference: tx.payoutReferenceCoach || null,
           paidAt: tx.paidAtCoach || null,
           player: (tx.playerId as any)?.fullName || 'Player',
@@ -1415,6 +1430,7 @@ export class AdminPaymentsService {
     const academiesAggMap = new Map<string, any>();
     let totalAcademyPending = 0;
     let totalAcademyPaid = 0;
+    let totalAcademyOnHold = 0;
 
     for (const tx of allFinanceTxns) {
       if (tx.commissionAcademy && tx.commissionAcademy > 0) {
@@ -1435,6 +1451,7 @@ export class AdminPaymentsService {
             stripePayoutsEnabled: Boolean(acadProfile?.stripeConnect?.payoutsEnabled),
             totalEarned: 0,
             pendingAmount: 0,
+            onHoldAmount: 0,
             completedPayoutAmount: 0,
             transactionsCount: 0,
             transactions: [],
@@ -1446,13 +1463,17 @@ export class AdminPaymentsService {
         agg.totalEarned = parseFloat((agg.totalEarned + earned).toFixed(2));
         agg.transactionsCount += 1;
 
-        const isPaid = tx.payoutStatusAcademy === 'PAID';
+        const academyPayout = payoutBucket(tx.payoutStatusAcademy);
+        const isPaid = academyPayout === 'PAID';
         if (isPaid) {
           agg.completedPayoutAmount = parseFloat((agg.completedPayoutAmount + earned).toFixed(2));
           totalAcademyPaid = parseFloat((totalAcademyPaid + earned).toFixed(2));
-        } else {
+        } else if (academyPayout === 'PENDING') {
           agg.pendingAmount = parseFloat((agg.pendingAmount + earned).toFixed(2));
           totalAcademyPending = parseFloat((totalAcademyPending + earned).toFixed(2));
+        } else {
+          agg.onHoldAmount = parseFloat((agg.onHoldAmount + earned).toFixed(2));
+          totalAcademyOnHold = parseFloat((totalAcademyOnHold + earned).toFixed(2));
         }
 
         agg.transactions.push({
@@ -1460,7 +1481,7 @@ export class AdminPaymentsService {
           transactionType: tx.transactionType,
           grossCost: tx.cost,
           commission: earned,
-          payoutStatus: isPaid ? 'PAID' : 'PENDING',
+          payoutStatus: tx.payoutStatusAcademy || 'PENDING',
           payoutReference: tx.payoutReferenceAcademy || null,
           paidAt: tx.paidAtAcademy || null,
           player: (tx.playerId as any)?.fullName || 'Player',
@@ -1488,6 +1509,9 @@ export class AdminPaymentsService {
     } else if (statusFilter === 'PAID' || statusFilter === 'COMPLETED') {
       coachesList = coachesList.filter((c) => c.completedPayoutAmount > 0);
       academiesList = academiesList.filter((a) => a.completedPayoutAmount > 0);
+    } else if (statusFilter === 'ON_HOLD') {
+      coachesList = coachesList.filter((c) => c.onHoldAmount > 0);
+      academiesList = academiesList.filter((a) => a.onHoldAmount > 0);
     }
 
     const recipients = [];
@@ -1506,6 +1530,10 @@ export class AdminPaymentsService {
         totalCoachPaid,
         totalAcademyPending,
         totalAcademyPaid,
+        // earned but not payable yet (e.g. CV validation paid, coach has not validated)
+        totalOnHoldOverall: parseFloat((totalCoachOnHold + totalAcademyOnHold).toFixed(2)),
+        totalCoachOnHold,
+        totalAcademyOnHold,
         currency: '$',
       },
       recipients,
@@ -1558,7 +1586,7 @@ export class AdminPaymentsService {
 
       const queryFilter: any = {
         $or: [{ coachId: { $in: coachIdentifiers } }],
-        payoutStatusCoach: { $ne: 'PAID' },
+        payoutStatusCoach: 'PENDING',
       };
 
       if (validTxObjectIds.length > 0) {
@@ -1700,7 +1728,7 @@ export class AdminPaymentsService {
 
       const queryFilter: any = {
         academyId: academy._id,
-        payoutStatusAcademy: { $ne: 'PAID' },
+        payoutStatusAcademy: 'PENDING',
       };
 
       if (validTxObjectIds.length > 0) {

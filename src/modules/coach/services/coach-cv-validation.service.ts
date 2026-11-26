@@ -250,14 +250,29 @@ export class CoachCvValidationService {
     // Keyed by the Stripe session id so each paid validation is its own transaction.
     const targetAcademyId = coach.academyId || player.academyId;
     if (targetAcademyId) {
+      const txFilter = paymentRef
+        ? { paymentReference: paymentRef }
+        : { playerId: player._id, transactionType: 'CV Validation', paymentReference: null };
+      // The validation is done → the held (ON_HOLD) shares become payable (PENDING) for the coach
+      // who did the work. A share that was already paid out is never re-assigned or re-opened.
+      const existingTx = await AcademyFinanceTransaction.findOne(txFilter)
+        .select('payoutStatusCoach payoutStatusAcademy')
+        .lean();
+      const coachShareUpdate =
+        existingTx?.payoutStatusCoach === 'PAID'
+          ? {}
+          : { coachId: coach._id, payoutStatusCoach: 'PENDING' };
+      const academyShareUpdate =
+        existingTx?.payoutStatusAcademy === 'PAID'
+          ? {}
+          : { academyId: targetAcademyId, payoutStatusAcademy: 'PENDING' };
       await AcademyFinanceTransaction.findOneAndUpdate(
-        paymentRef
-          ? { paymentReference: paymentRef }
-          : { playerId: player._id, transactionType: 'CV Validation', paymentReference: null },
+        txFilter,
         {
-          academyId: targetAcademyId,
+          ...(existingTx ? {} : { academyId: targetAcademyId }),
+          ...academyShareUpdate,
+          ...coachShareUpdate,
           playerId: player._id,
-          coachId: coach._id,
           paymentReference: paymentRef,
           transactionType: 'CV Validation',
           cost: paidFee,
@@ -265,8 +280,6 @@ export class CoachCvValidationService {
           commissionCoach: paidFee * 0.5,
           commissionPlatform: paidFee * 0.25,
           payoutStatus: 'PENDING_TRANSFER',
-          payoutStatusAcademy: 'PENDING',
-          payoutStatusCoach: 'PENDING',
           transactionDate: new Date(),
           status: 'COMPLETED',
           notes: `Official CV Validation Fee ($24.00) received by K10 Platform. Authorised Coach Share (50%): $12.00, Academy Admin Share (25%): $6.00, K10 Platform (25%): $6.00 (Awaiting Admin Payout). Verified by Coach ${coach.fullName} (${coachClub}). Certificate: ${certId}`,

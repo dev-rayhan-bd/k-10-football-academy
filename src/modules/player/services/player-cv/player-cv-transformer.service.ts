@@ -956,6 +956,10 @@ export class PlayerCvTransformerService {
           '',
         clubManaged: aggregatedProfile.coachVerification?.clubManaged || '',
         verifiedAt: aggregatedProfile.coachVerification?.verifiedAt || null,
+        // paid request whose coach left their academy → player must pick a new coach (no new charge)
+        needsCoachReassignment:
+          aggregatedProfile.coachVerification?.validationPaymentStatus === 'PAID' &&
+          !aggregatedProfile.coachVerification?.coachId,
       },
       perceptionMetrics: {
         spaceAwareness: {

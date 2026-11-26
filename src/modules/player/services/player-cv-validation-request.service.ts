@@ -71,12 +71,17 @@ export class PlayerCvValidationRequestService {
       );
     }
 
-    // Do not overwrite a request that is already paid and waiting for the coach
-    if (playerProfile.coachVerification?.validationPaymentStatus === 'PAID') {
-      throw new AppError(
-        StatusCodes.CONFLICT,
-        'You already have a paid CV validation request waiting for the coach. Please wait until it is validated.',
-      );
+    const currentCv: any = playerProfile.coachVerification || {};
+    if (currentCv.validationPaymentStatus === 'PAID') {
+      // Paid and still assigned → wait for that coach
+      if (currentCv.coachId) {
+        throw new AppError(
+          StatusCodes.CONFLICT,
+          'You already have a paid CV validation request waiting for the coach. Please wait until it is validated.',
+        );
+      }
+      // Paid but the coach was released from their academy → re-assign without a new payment
+      return this.reassignPaidCvValidation(playerProfile, coachProf);
     }
 
     const price = CV_VALIDATION_FEE;
@@ -144,6 +149,64 @@ export class PlayerCvValidationRequestService {
   }
 
   /**
+   * A paid request whose coach left their academy is moved to a newly chosen coach (no new charge).
+   * The commission record follows the new coach and academy.
+   */
+  private async reassignPaidCvValidation(playerProfile: any, coachProf: any) {
+    const cv: any =
+      playerProfile.coachVerification?.toObject?.() || playerProfile.coachVerification;
+    playerProfile.coachVerification = { ...cv, coachId: coachProf.userId, requestedAt: new Date() };
+    await playerProfile.save({ validateModifiedOnly: true });
+
+    if (cv.transactionId) {
+      // Only shares that have not been paid out move to the new coach / academy.
+      const tx = await AcademyFinanceTransaction.findOne({ paymentReference: cv.transactionId });
+      if (tx) {
+        const coachShareAlreadyPaid = tx.payoutStatusCoach === 'PAID';
+        const academyShareAlreadyPaid = tx.payoutStatusAcademy === 'PAID';
+        if (!coachShareAlreadyPaid) tx.coachId = coachProf._id;
+        if (!academyShareAlreadyPaid) tx.academyId = coachProf.academyId;
+        await tx.save();
+
+        if (coachShareAlreadyPaid || academyShareAlreadyPaid) {
+          await notificationService
+            .notifyAdmins({
+              settingKey: 'paymentAlerts',
+              title: 'CV validation re-assigned after payout',
+              message: `${playerProfile.fullName || 'A player'}'s paid CV validation moved to coach ${coachProf.fullName || ''}, but the ${coachShareAlreadyPaid ? 'coach' : 'academy'} share was already paid out to the previous recipient. Please review transaction ${tx._id}.`,
+              type: 'PAYOUT_REVIEW',
+              data: { transactionId: tx._id, playerId: playerProfile._id },
+            } as any)
+            .catch(() => null);
+        }
+      }
+    }
+    await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
+
+    await notificationService.createNotification({
+      recipientId: coachProf.userId,
+      recipientRole: 'COACH',
+      title: 'New CV Validation Request (Paid)',
+      message: `${playerProfile.fullName || 'Player'} has requested official CV validation. Please review and validate their skills.`,
+      type: 'CV_VALIDATION_REQUEST',
+      data: { playerId: playerProfile._id },
+    });
+
+    return {
+      playerId: playerProfile._id,
+      coachId: coachProf._id,
+      coachName: coachProf.fullName || '',
+      amount: 0,
+      currency: 'USD',
+      status: 'PENDING',
+      checkoutUrl: null,
+      sessionId: null,
+      message:
+        'Your paid CV validation request was moved to the new coach. No extra payment needed.',
+    };
+  }
+
+  /**
    * Finalize a paid CV validation request. Idempotent: only the current request's
    * Stripe session can be finalized, and only once.
    */
@@ -182,17 +245,25 @@ export class PlayerCvValidationRequestService {
         return { success: false, message: 'Paid amount does not match the CV validation fee.' };
       }
 
-      playerProfile.coachVerification = {
+      // The requested coach may have been released from their academy before payment completed.
+      // Keep the payment and ask the player to choose another coach (no extra charge).
+      const requestedCoach = cv.coachId ? await CoachProfile.findOne({ userId: cv.coachId }) : null;
+      const coachStillValid = !!requestedCoach?.isVerifiedByAcademy && !!requestedCoach?.academyId;
+      const coach = coachStillValid ? requestedCoach : null;
+
+      const nextCv: any = {
         ...((cv as any)?.toObject?.() || cv),
         validationPaymentStatus: 'PAID',
         validationFee: CV_VALIDATION_FEE,
         transactionId: sessionId,
         paidAt: new Date(),
       };
+      if (!coachStillValid) delete nextCv.coachId;
+      playerProfile.coachVerification = nextCv;
+      if (!coachStillValid) playerProfile.markModified('coachVerification');
       await playerProfile.save({ validateModifiedOnly: true });
 
       // Commission split 50% coach / 25% academy / 25% platform, recorded per payment
-      const coach = cv.coachId ? await CoachProfile.findOne({ userId: cv.coachId }) : null;
       const academyId = coach?.academyId || playerProfile.academyId;
       if (academyId) {
         await AcademyFinanceTransaction.findOneAndUpdate(
@@ -207,7 +278,9 @@ export class PlayerCvValidationRequestService {
             commissionAcademy: CV_VALIDATION_FEE * 0.25,
             commissionCoach: CV_VALIDATION_FEE * 0.5,
             commissionPlatform: CV_VALIDATION_FEE * 0.25,
-            payoutStatusCoach: 'PENDING',
+            // not payable until the coach actually validates the CV (validatePlayerCV → PENDING)
+            payoutStatusCoach: 'ON_HOLD',
+            payoutStatusAcademy: 'ON_HOLD',
             transactionDate: new Date(),
             status: 'COMPLETED',
             notes: `Official CV Validation Fee ($${CV_VALIDATION_FEE.toFixed(2)}). Coach 50%, Academy 25%, K10 Platform 25%.`,
@@ -218,9 +291,9 @@ export class PlayerCvValidationRequestService {
 
       await playerCacheService.invalidatePlayerCache(playerProfile._id, playerProfile.userId);
 
-      if (cv.coachId) {
+      if (coach) {
         await notificationService.createNotification({
-          recipientId: cv.coachId,
+          recipientId: coach.userId,
           recipientRole: 'COACH',
           title: `New CV Validation Request Paid ($${CV_VALIDATION_FEE.toFixed(2)})`,
           message: `${playerProfile.fullName || 'Player'} has requested official CV validation. Please review and validate their skills.`,
@@ -234,14 +307,25 @@ export class PlayerCvValidationRequestService {
           recipientId: playerProfile.userId,
           recipientRole: 'PLAYER',
           title: `CV Validation Payment Successful ($${CV_VALIDATION_FEE.toFixed(2)})`,
-          message:
-            'Your CV validation fee has been received. Your selected coach will now evaluate and certify your CV.',
+          message: coach
+            ? 'Your CV validation fee has been received. Your selected coach will now evaluate and certify your CV.'
+            : 'Your CV validation fee has been received, but the selected coach is no longer with an academy. Please choose another coach (no extra charge).',
           type: 'PAYMENT_SUCCESS',
-          data: { playerId: playerProfile._id, amount: CV_VALIDATION_FEE },
+          data: {
+            playerId: playerProfile._id,
+            amount: CV_VALIDATION_FEE,
+            needsCoachReassignment: !coach,
+          },
         });
       }
 
-      return { success: true, message: 'CV validation payment verified successfully.' };
+      return {
+        success: true,
+        needsCoachReassignment: !coach,
+        message: coach
+          ? 'CV validation payment verified successfully.'
+          : 'Payment received. The selected coach is no longer available — please choose another coach.',
+      };
     } finally {
       if (lockAcquired) {
         try {

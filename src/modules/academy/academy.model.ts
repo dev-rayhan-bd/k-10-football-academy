@@ -324,9 +324,11 @@ const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDoc
     paymentReference: { type: String, trim: true, index: true },
     transferredAmount: { type: Number },
     transferredAt: { type: Date },
+    // ON_HOLD: earned but not payable yet (CV validation paid, coach has not validated)
+    // LOCKED_NO_SUBSCRIPTION: academy share withheld until the academy subscribes
     payoutStatusAcademy: {
       type: String,
-      enum: ['PENDING', 'PAID', 'PROCESSING'],
+      enum: ['PENDING', 'PAID', 'PROCESSING', 'ON_HOLD', 'LOCKED_NO_SUBSCRIPTION'],
       default: 'PENDING',
       index: true,
     },
@@ -334,7 +336,7 @@ const AcademyFinanceTransactionSchema = new Schema<IAcademyFinanceTransactionDoc
     paidAtAcademy: { type: Date },
     payoutStatusCoach: {
       type: String,
-      enum: ['PENDING', 'PAID', 'PROCESSING'],
+      enum: ['PENDING', 'PAID', 'PROCESSING', 'ON_HOLD'],
       default: 'PENDING',
       index: true,
     },

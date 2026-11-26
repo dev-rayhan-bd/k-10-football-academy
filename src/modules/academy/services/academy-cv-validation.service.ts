@@ -3,16 +3,66 @@ import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
 import { Team, AcademyCoach, AcademyProfile } from '../academy.model';
 import QueryBuilder from '@/builder/QueryBuilder';
+import { normalizePositionKey, PositionKey } from '@/utils/ratingCalculator';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { PlayerProfile, MatchRecord } from '@/modules/player/player.model';
 import { CoachProfile } from '@/modules/coach/coach.model';
 import { env } from '@/config/env';
 import { academyResolverService } from './academy-resolver.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
+import { getRevalidationStatus } from '@/modules/player/services/cv-validation-rules';
+
+/** Academy view of a player's CV validation: VERIFIED | EXPIRED | AWAITING_COACH | AWAITING_PAYMENT | NOT_REQUESTED */
+const academyValidationStatus = (p: any) => {
+  const { state } = getRevalidationStatus(p);
+  if (state === 'AWAITING_COACH' || state === 'CHOOSE_NEW_COACH') return 'AWAITING_COACH';
+  if (state === 'PAYMENT_PENDING') return 'AWAITING_PAYMENT';
+  if (state === 'VALID') return 'VERIFIED';
+  if (state === 'EXPIRED') return 'EXPIRED';
+  return 'NOT_REQUESTED';
+};
+const VALIDATION_BADGE: Record<string, string> = {
+  VERIFIED: 'green',
+  EXPIRED: 'red',
+  AWAITING_COACH: 'yellow',
+  AWAITING_PAYMENT: 'grey',
+  NOT_REQUESTED: 'grey',
+};
 
 const notificationService = new NotificationService();
 
 const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** CVs library filter enums (values are what the API accepts). */
+// The 10 canonical position keys of the rating engine (normalizePositionKey)
+export const CV_LIBRARY_POSITIONS: { value: PositionKey; label: string }[] = [
+  { value: 'GK', label: 'Goalkeeper (GK)' },
+  { value: 'CB', label: 'Centre Back (CB)' },
+  { value: 'RB-LB', label: 'Full Back (RB/LB)' },
+  { value: 'RWB-LWB', label: 'Wing Back (RWB/LWB)' },
+  { value: 'CDM', label: 'Defensive Midfielder (CDM)' },
+  { value: 'CM', label: 'Central Midfielder (CM)' },
+  { value: 'CAM', label: 'Attacking Midfielder (CAM)' },
+  { value: 'RW-LW', label: 'Winger (RW/LW)' },
+  { value: 'CF', label: 'Centre Forward (CF)' },
+  { value: 'ST', label: 'Striker (ST)' },
+];
+
+export const CV_LIBRARY_AGE_RANGES = [
+  { value: 'U10', label: 'Under 10', minAge: 0, maxAge: 9 },
+  { value: 'U12', label: '10 - 11', minAge: 10, maxAge: 11 },
+  { value: 'U14', label: '12 - 13', minAge: 12, maxAge: 13 },
+  { value: 'U16', label: '14 - 15', minAge: 14, maxAge: 15 },
+  { value: 'U18', label: '16 - 17', minAge: 16, maxAge: 17 },
+  { value: 'U21', label: '18 - 20', minAge: 18, maxAge: 20 },
+  { value: 'SENIOR', label: '21+', minAge: 21, maxAge: null as number | null },
+];
+
+export const CV_LIBRARY_STATUSES = [
+  { value: 'GOLD', label: 'Gold' },
+  { value: 'SILVER', label: 'Silver' },
+  { value: 'BRONZE', label: 'Bronze' },
+];
 
 export class AcademyCvValidationService {
   async getAcademyValidateCvDashboard(user: any, query: any = {}, academyIdentifier?: string) {
@@ -28,15 +78,14 @@ export class AcademyCvValidationService {
       .populate('userId', 'email name avatar')
       .lean();
 
-    // 2. Resolve Academy Coaches & Verifying Coaches
-    const academyCoaches = await AcademyCoach.find({
-      academyId: academy._id,
-      status: 'APPROVED',
-    })
-      .populate('coachId', 'fullName title profileImage')
-      .lean();
-
-    const verifyingCoachIds = allPlayers.map((p) => p.verifyingCoachId).filter(Boolean);
+    // 2. Resolve the verifying / requested coaches
+    const verifyingCoachIds = allPlayers
+      .flatMap((p: any) => [
+        p.coachVerification?.verifiedByCoachId,
+        p.verifyingCoachId,
+        p.coachVerification?.coachId,
+      ])
+      .filter(Boolean);
 
     const coachProfiles = await CoachProfile.find({
       $or: [{ _id: { $in: verifyingCoachIds } }, { userId: { $in: verifyingCoachIds } }],
@@ -48,24 +97,24 @@ export class AcademyCvValidationService {
       if (c.userId) coachMap.set(c.userId.toString(), c);
     });
 
-    const defaultAcademyCoach = academyCoaches[0];
-    const defaultCoachName = (defaultAcademyCoach?.coachId as any)?.fullName || '';
-    const defaultCoachId = (defaultAcademyCoach?.coachId as any)?._id || null;
+    const coachFor = (p: any) => {
+      const id =
+        p.coachVerification?.verifiedByCoachId ||
+        p.verifyingCoachId ||
+        p.coachVerification?.coachId;
+      return id ? coachMap.get(String(id)) || null : null;
+    };
 
     // 3. Metrics Cards: Total, Gold, Silver, Bronze
     let goldCount = 0;
     let silverCount = 0;
     let bronzeCount = 0;
 
-    allPlayers.forEach((p) => {
-      const rating = Number(p.overallRating) || 0;
-      if (rating >= 80) {
-        goldCount++;
-      } else if (rating >= 60) {
-        silverCount++;
-      } else {
-        bronzeCount++;
-      }
+    allPlayers.forEach((p: any) => {
+      const tier = p.cvTier || 'BRONZE';
+      if (tier === 'GOLD') goldCount++;
+      else if (tier === 'SILVER') silverCount++;
+      else bronzeCount++;
     });
 
     const metrics = {
@@ -87,14 +136,7 @@ export class AcademyCvValidationService {
         const name = (p.fullName || '').toLowerCase();
         const pos = (p.position || '').toLowerCase();
         const country = (p.country || '').toLowerCase();
-        const verifyingCoach = p.verifyingCoachId
-          ? coachMap.get(p.verifyingCoachId.toString())
-          : null;
-        const coach = (
-          verifyingCoach?.fullName ||
-          p.coachVerification?.coachName ||
-          defaultCoachName
-        ).toLowerCase();
+        const coach = (coachFor(p)?.fullName || p.coachVerification?.coachName || '').toLowerCase();
         return (
           name.includes(term) ||
           pos.includes(term) ||
@@ -107,14 +149,7 @@ export class AcademyCvValidationService {
     // Tier filter (GOLD, SILVER, BRONZE)
     if (query.tier && String(query.tier).toUpperCase() !== 'ALL') {
       const targetTier = String(query.tier).toUpperCase();
-      filtered = filtered.filter((p) => {
-        const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
-        const rating = Number(p.overallRating) || 0;
-        const tier = isVerified
-          ? (p.cvTier as any) || (rating >= 81 ? 'GOLD' : rating >= 71 ? 'SILVER' : 'BRONZE')
-          : 'BRONZE';
-        return tier === targetTier;
-      });
+      filtered = filtered.filter((p: any) => (p.cvTier || 'BRONZE') === targetTier);
     }
 
     // Position filter
@@ -123,14 +158,16 @@ export class AcademyCvValidationService {
       filtered = filtered.filter((p) => (p.position || '').toLowerCase().includes(posFilter));
     }
 
-    // Validation filter (VERIFIED, PENDING)
+    // Validation filter (VERIFIED, EXPIRED, AWAITING_COACH, AWAITING_PAYMENT, NOT_REQUESTED)
     if (query.validation && String(query.validation).toUpperCase() !== 'ALL') {
       const valFilter = String(query.validation).toUpperCase();
-      filtered = filtered.filter((p) => {
-        const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
-        const status = isVerified ? 'VERIFIED' : 'PENDING';
-        return status === valFilter;
-      });
+      if (!VALIDATION_BADGE[valFilter]) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Invalid validation filter. Use ALL, ${Object.keys(VALIDATION_BADGE).join(', ')}`,
+        );
+      }
+      filtered = filtered.filter((p) => academyValidationStatus(p) === valFilter);
     }
 
     // 5. Pagination
@@ -165,22 +202,16 @@ export class AcademyCvValidationService {
     };
 
     const playersList = paginated.map((p) => {
-      const isVerified = Boolean(p.isVerifiedByCoach || p.coachVerification?.isVerified);
-      const validationStatus = isVerified ? 'VERIFIED' : 'PENDING';
-      const rating = Number(p.overallRating) || 0;
+      const validationStatus = academyValidationStatus(p);
+      const rating = typeof p.overallRating === 'number' ? p.overallRating : null;
       const cvTier: 'GOLD' | 'SILVER' | 'BRONZE' = (p.cvTier as any) || 'BRONZE';
 
-      const verifyingCoach = p.verifyingCoachId
-        ? coachMap.get(p.verifyingCoachId.toString())
-        : null;
-
+      const coach = coachFor(p);
+      // stored coachName is only meaningful once a coach actually validated the CV
+      const wasValidated = validationStatus === 'VERIFIED' || validationStatus === 'EXPIRED';
       const coachName =
-        verifyingCoach?.fullName ||
-        p.coachVerification?.coachName ||
-        defaultCoachName ||
-        'Unassigned';
-
-      const coachId = verifyingCoach?._id || defaultCoachId || null;
+        coach?.fullName || (wasValidated ? p.coachVerification?.coachName || '' : '');
+      const coachId = coach?._id || null;
 
       return {
         _id: p._id,
@@ -201,8 +232,10 @@ export class AcademyCvValidationService {
         validation: validationStatus,
         validationBadge: {
           label: validationStatus,
-          variant: isVerified ? 'green' : 'yellow',
+          variant: VALIDATION_BADGE[validationStatus],
         },
+        verifiedAt: p.coachVerification?.verifiedAt || null,
+        validUntil: getRevalidationStatus(p).validUntil,
         coach: coachName,
         assignedCoachId: coachId,
         cvUrl: `/players/${p._id}/cv`,
@@ -379,17 +412,31 @@ export class AcademyCvValidationService {
       and.push({ _id: { $in: [...sharedMap.keys()].map((id) => new Types.ObjectId(id)) } });
     }
 
-    const position = String(q.position || '').trim();
-    if (position && !['ALL', 'ALL POSITIONS'].includes(position.toUpperCase())) {
-      and.push({ position: { $regex: `^${escapeRegex(position)}$`, $options: 'i' } });
+    // Position: one of the 10 canonical keys. Stored positions are free text ("Goalkeeper (GK)",
+    // "ST", ...), so match every stored value that normalizes to the requested key.
+    const position = String(q.position || '')
+      .trim()
+      .toUpperCase();
+    if (position && position !== 'ALL') {
+      if (!CV_LIBRARY_POSITIONS.some((p) => p.value === position)) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Invalid position. Use ALL or one of: ${CV_LIBRARY_POSITIONS.map((p) => p.value).join(', ')}`,
+        );
+      }
+      const storedPositions = (await PlayerProfile.distinct('position', {
+        position: { $nin: [null, ''] },
+      })) as string[];
+      const matching = storedPositions.filter((p) => normalizePositionKey(p) === position);
+      and.push({ position: { $in: matching } });
     }
     const country = String(q.country || '').trim();
-    if (country && !['ALL', 'ALL COUNTRIES'].includes(country.toUpperCase())) {
-      and.push({ country: { $regex: `^${escapeRegex(country)}$`, $options: 'i' } });
+    if (country && country.toUpperCase() !== 'ALL') {
+      and.push({ country: { $regex: `^\\s*${escapeRegex(country)}\\s*$`, $options: 'i' } });
     }
 
     const status = String(q.status || '').toUpperCase();
-    if (status && !['ALL', 'ALL STATUS'].includes(status)) {
+    if (status && status !== 'ALL') {
       if (!['GOLD', 'SILVER', 'BRONZE'].includes(status)) {
         throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid status. Use GOLD, SILVER or BRONZE');
       }
@@ -401,8 +448,23 @@ export class AcademyCvValidationService {
       );
     }
 
-    const minAge = q.minAge !== undefined && q.minAge !== '' ? Number(q.minAge) : null;
-    const maxAge = q.maxAge !== undefined && q.maxAge !== '' ? Number(q.maxAge) : null;
+    // Age: a preset bucket (ageRange=U14 …) or a custom minAge/maxAge
+    let minAge = q.minAge !== undefined && q.minAge !== '' ? Number(q.minAge) : null;
+    let maxAge = q.maxAge !== undefined && q.maxAge !== '' ? Number(q.maxAge) : null;
+    const ageRange = String(q.ageRange || '')
+      .trim()
+      .toUpperCase();
+    if (ageRange && ageRange !== 'ALL') {
+      const bucket = CV_LIBRARY_AGE_RANGES.find((r) => r.value === ageRange);
+      if (!bucket) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Invalid ageRange. Use ALL or one of: ${CV_LIBRARY_AGE_RANGES.map((r) => r.value).join(', ')}`,
+        );
+      }
+      minAge = bucket.minAge;
+      maxAge = bucket.maxAge;
+    }
     if ((minAge !== null && Number.isNaN(minAge)) || (maxAge !== null && Number.isNaN(maxAge))) {
       throw new AppError(StatusCodes.BAD_REQUEST, 'minAge and maxAge must be numbers');
     }
@@ -443,12 +505,11 @@ export class AcademyCvValidationService {
       .paginate()
       .fields();
 
-    const [players, pageMeta, allCvsCount, countries, positions] = await Promise.all([
+    const [players, pageMeta, allCvsCount, countries] = await Promise.all([
       builder.modelQuery.lean(),
       builder.countTotal(),
       PlayerProfile.countDocuments({}),
       PlayerProfile.distinct('country', { country: { $nin: [null, ''] } }),
-      PlayerProfile.distinct('position', { position: { $nin: [null, ''] } }),
     ]);
 
     const rows = players.map((p: any) => {
@@ -479,9 +540,20 @@ export class AcademyCvValidationService {
         profilesShared: { label: 'PROFILES SHARED', count: sharedMap.size },
       },
       filterOptions: {
-        positions: (positions as string[]).sort(),
-        countries: (countries as string[]).sort(),
-        statuses: ['GOLD', 'SILVER', 'BRONZE'],
+        positions: [{ value: 'ALL', label: 'All Positions' }, ...CV_LIBRARY_POSITIONS],
+        countries: [
+          { value: 'ALL', label: 'All Countries' },
+          ...(countries as string[])
+            .map((c) => c.trim())
+            .filter((c, i, arr) => c && arr.indexOf(c) === i)
+            .sort()
+            .map((c) => ({ value: c, label: c })),
+        ],
+        ageRanges: [
+          { value: 'ALL', label: 'All Ages', minAge: null, maxAge: null },
+          ...CV_LIBRARY_AGE_RANGES,
+        ],
+        statuses: [{ value: 'ALL', label: 'All Status' }, ...CV_LIBRARY_STATUSES],
       },
       currentTab: tab,
       meta: {

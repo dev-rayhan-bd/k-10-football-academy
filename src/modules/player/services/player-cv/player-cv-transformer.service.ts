@@ -12,6 +12,7 @@ import {
 import { playerAttributeService } from './../player-attribute.service';
 import { computeProfileCompletion, computePlayerCardTier } from '../player-stats.service';
 import { PlayerProfile } from '../../player.model';
+import { getRevalidationStatus, isCoachValidationActive } from '../cv-validation-rules';
 
 export class PlayerCvTransformerService {
   /**
@@ -774,9 +775,9 @@ export class PlayerCvTransformerService {
     const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const isUpdatedRecently =
       !aggregatedProfile.updatedAt || new Date(aggregatedProfile.updatedAt) >= threeMonthsAgo;
-    const isCoachValidated = Boolean(
-      aggregatedProfile.isVerifiedByCoach || aggregatedProfile.coachVerification?.isVerified,
-    );
+    // A coach validation counts for the tier only while it is active (1 year from verifiedAt)
+    const isCoachValidated = isCoachValidationActive(aggregatedProfile);
+    const revalidation = getRevalidationStatus(aggregatedProfile);
 
     const { cvTier: autoTier, tierChecklist } = computePlayerCardTier({
       completion: completionPercentage,
@@ -867,8 +868,14 @@ export class PlayerCvTransformerService {
           autoTier === 'GOLD'
             ? 'GOLD TIER UNLOCKED — ALL SECTIONS VERIFIED'
             : 'COMPLETE ALL SECTIONS TO UNLOCK GOLD TIER STATUS',
-        canRequestRevalidation: autoTier !== 'GOLD',
+        // Re-validation button: driven by payment + validity state (see cv-validation-rules)
+        canRequestRevalidation: revalidation.canRequestRevalidation,
+        revalidationState: revalidation.state,
+        revalidationAction: revalidation.action,
+        requiresPayment: revalidation.requiresPayment,
+        validationValidUntil: revalidation.validUntil,
       },
+      revalidation,
       agentStatus: playerEvaluation.agentStatus,
       clubStatus: playerEvaluation.clubStatus,
       playerEvaluation,
@@ -956,6 +963,9 @@ export class PlayerCvTransformerService {
           '',
         clubManaged: aggregatedProfile.coachVerification?.clubManaged || '',
         verifiedAt: aggregatedProfile.coachVerification?.verifiedAt || null,
+        validUntil: revalidation.validUntil,
+        isActive: revalidation.isValidationActive,
+        isExpired: revalidation.state === 'EXPIRED',
         // paid request whose coach left their academy → player must pick a new coach (no new charge)
         needsCoachReassignment:
           aggregatedProfile.coachVerification?.validationPaymentStatus === 'PAID' &&

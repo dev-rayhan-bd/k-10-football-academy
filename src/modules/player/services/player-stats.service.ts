@@ -17,6 +17,7 @@ import {
 import { UserModel } from '@/modules/user/user.model';
 import { Media } from '@/modules/media/media.model';
 import { playerCacheService } from './player-cache.service';
+import { isCoachValidationActive } from './cv-validation-rules';
 
 export const computeProfileCompletion = (
   profile: Partial<IPlayerProfile>,
@@ -324,9 +325,8 @@ export class PlayerStatsService {
 
     const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const isUpdatedRecently = !profile.updatedAt || new Date(profile.updatedAt) >= threeMonthsAgo;
-    const isCoachValidated = Boolean(
-      profile.isVerifiedByCoach || profile.coachVerification?.isVerified,
-    );
+    // expired (older than 1 year) coach validations no longer count for the tier
+    const isCoachValidated = isCoachValidationActive(profile as any);
 
     const { cvTier } = computePlayerCardTier({
       completion,

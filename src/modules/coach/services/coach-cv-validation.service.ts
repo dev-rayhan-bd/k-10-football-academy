@@ -13,6 +13,7 @@ import { PlayerProfile, MatchRecord, PlayerMentalAnalysis } from '@/modules/play
 import { playerStatsService } from '@/modules/player/services/player-stats.service';
 import { playerCacheService } from '@/modules/player/services/player-cache.service';
 import { NotificationService } from '@/modules/notification/notification.service';
+import { CV_VALIDATION_VALIDITY_DAYS } from '@/modules/player/services/cv-validation-rules';
 
 const notificationService = new NotificationService();
 
@@ -348,7 +349,7 @@ export class CoachCvValidationService {
       throw new AppError(404, 'Coach profile not found');
     }
 
-    const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+    const oneYearAgo = new Date(Date.now() - CV_VALIDATION_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 

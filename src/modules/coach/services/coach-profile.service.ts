@@ -143,7 +143,12 @@ export class CoachProfileService {
     }
 
     if (query.search) {
-      filter.fullName = { $regex: new RegExp(String(query.search).trim(), 'i') };
+      filter.fullName = {
+        $regex: String(query.search)
+          .trim()
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        $options: 'i',
+      };
     }
 
     const coaches = await CoachProfile.find(filter)
@@ -158,19 +163,19 @@ export class CoachProfileService {
       const license =
         typeof c.licenseStatus === 'string'
           ? c.licenseStatus
-          : c.licenseStatus?.level || c.licenseStatus?.type || 'UEFA Certified';
+          : c.licenseStatus?.level || c.licenseStatus?.type || '';
 
       return {
         _id: c._id,
         id: c._id,
         coachId: c._id,
         userId: user._id || c.userId,
-        name: c.fullName || user.name || 'Coach',
-        fullName: c.fullName || user.name || 'Coach',
-        title: c.title || 'Football Coach',
+        name: c.fullName || user.name || '',
+        fullName: c.fullName || user.name || '',
+        title: c.title || '',
         avatar: c.profileImage || user.avatar || '',
         academyId: academy._id || c.academyId || null,
-        academyName: academy.name || c.currentClub || 'Official Academy',
+        academyName: academy.name || '',
         academyLogo: academy.logo || c.clubLogo || '',
         isVerifiedByAcademy: Boolean(c.isVerifiedByAcademy),
         licenseStatus: license,

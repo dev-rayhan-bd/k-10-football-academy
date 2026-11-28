@@ -9,6 +9,7 @@ import { logger } from '@/utils/logger';
 import { AcademyProfile, AcademyFeePayment } from '@/modules/academy/academy.model';
 import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
 import { shopCartService } from './shop-cart.service';
+import { notificationService } from '@/modules/notification/notification.service';
 
 export class ShopOrderService {
   async createOrder(userId: string, payload: any) {
@@ -263,6 +264,25 @@ export class ShopOrderService {
       if (updatedOrder?.userId) {
         await shopCartService.clearCart(updatedOrder.userId.toString()).catch(() => {});
       }
+
+      // Notify buyer: order confirmed
+      if (updatedOrder?.userId) {
+        const buyerId = updatedOrder.userId.toString();
+        await notificationService
+          .createNotification({
+            recipientId: buyerId,
+            recipientRole: 'PARENT',
+            title: 'Order Confirmed ✅',
+            message: `Your order #${updatedOrder.orderNumber} has been confirmed and payment received ($${Number(updatedOrder.totalAmount).toFixed(2)}). We'll notify you when it ships.`,
+            type: 'ORDER_CONFIRMED',
+            data: {
+              orderId: updatedOrder._id,
+              orderNumber: updatedOrder.orderNumber,
+              amount: updatedOrder.totalAmount,
+            },
+          })
+          .catch(() => {});
+      }
     } catch (txnError: any) {
       if (mongoSession.inTransaction()) {
         await mongoSession.abortTransaction();
@@ -313,6 +333,25 @@ export class ShopOrderService {
           // Clear the buyer's cart after successful payment (standalone fallback)
           if (updatedOrder.userId) {
             await shopCartService.clearCart(updatedOrder.userId.toString()).catch(() => {});
+          }
+
+          // Notify buyer: order confirmed (standalone fallback)
+          if (updatedOrder.userId) {
+            const buyerId = updatedOrder.userId.toString();
+            await notificationService
+              .createNotification({
+                recipientId: buyerId,
+                recipientRole: 'PARENT',
+                title: 'Order Confirmed ✅',
+                message: `Your order #${updatedOrder.orderNumber} has been confirmed and payment received ($${Number(updatedOrder.totalAmount).toFixed(2)}). We'll notify you when it ships.`,
+                type: 'ORDER_CONFIRMED',
+                data: {
+                  orderId: updatedOrder._id,
+                  orderNumber: updatedOrder.orderNumber,
+                  amount: updatedOrder.totalAmount,
+                },
+              })
+              .catch(() => {});
           }
         }
       } else {
@@ -450,17 +489,34 @@ export class ShopOrderService {
     academyUserId: string,
     query: { status?: string; orderStatus?: string; page?: string; limit?: string } = {},
   ) {
-    // Find all products belonging to this academy
-    const academyProducts = await ShopProduct.find({
+    // Resolve academy profile to get both userId and academyId
+    const academyProfile = await AcademyProfile.findOne({
       $or: [
         ...(Types.ObjectId.isValid(academyUserId)
-          ? [{ userId: new Types.ObjectId(academyUserId) }]
+          ? [
+              { userId: new Types.ObjectId(academyUserId) },
+              { _id: new Types.ObjectId(academyUserId) },
+            ]
           : []),
         { userId: academyUserId },
       ],
     })
-      .select('_id')
+      .select('_id userId')
       .lean();
+
+    const userIdObj = Types.ObjectId.isValid(academyUserId)
+      ? new Types.ObjectId(academyUserId)
+      : null;
+    const academyIdObj = academyProfile ? (academyProfile as any)._id : null;
+
+    // Find all products by this academy via userId OR academyId
+    const productFilter: any = { $or: [] };
+    if (userIdObj) productFilter.$or.push({ userId: userIdObj });
+    if (academyIdObj) productFilter.$or.push({ academyId: academyIdObj });
+    if (!productFilter.$or.length)
+      return { orders: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } };
+
+    const academyProducts = await ShopProduct.find(productFilter).select('_id').lean();
 
     if (academyProducts.length === 0) {
       return { orders: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } };
@@ -506,16 +562,28 @@ export class ShopOrderService {
     if (!order) throw new AppError(StatusCodes.NOT_FOUND, 'Order not found');
 
     // Verify this academy owns at least one product in the order
-    const academyProducts = await ShopProduct.find({
+    const acadProfile = await AcademyProfile.findOne({
       $or: [
         ...(Types.ObjectId.isValid(academyUserId)
-          ? [{ userId: new Types.ObjectId(academyUserId) }]
+          ? [
+              { userId: new Types.ObjectId(academyUserId) },
+              { _id: new Types.ObjectId(academyUserId) },
+            ]
           : []),
         { userId: academyUserId },
       ],
     })
       .select('_id')
       .lean();
+
+    const acadProductFilter: any = { $or: [] };
+    if (Types.ObjectId.isValid(academyUserId))
+      acadProductFilter.$or.push({ userId: new Types.ObjectId(academyUserId) });
+    if (acadProfile) acadProductFilter.$or.push({ academyId: (acadProfile as any)._id });
+
+    const academyProducts = acadProductFilter.$or.length
+      ? await ShopProduct.find(acadProductFilter).select('_id').lean()
+      : [];
 
     const productIds = new Set(academyProducts.map((p) => p._id.toString()));
     const ownsProduct = order.items.some((item: any) => {
@@ -533,6 +601,29 @@ export class ShopOrderService {
 
     order.orderStatus = newStatus;
     await order.save();
+
+    // Notify buyer about status change
+    const buyerUserId = (order.userId as any)?._id?.toString() || order.userId?.toString();
+    if (buyerUserId) {
+      const statusMessages: Record<string, string> = {
+        SHIPPED: `Your order #${order.orderNumber} has been shipped and is on its way! 🚚`,
+        DELIVERED: `Your order #${order.orderNumber} has been delivered. Enjoy your purchase! 📦`,
+        PROCESSING: `Your order #${order.orderNumber} is now being processed.`,
+      };
+      await notificationService
+        .createNotification({
+          recipientId: buyerUserId,
+          recipientRole: 'PARENT',
+          title: `Order ${newStatus.charAt(0) + newStatus.slice(1).toLowerCase()}`,
+          message:
+            statusMessages[newStatus] ||
+            `Your order #${order.orderNumber} status updated to ${newStatus}.`,
+          type: 'ORDER_STATUS',
+          data: { orderId: order._id, orderNumber: order.orderNumber, orderStatus: newStatus },
+        })
+        .catch(() => {});
+    }
+
     return order;
   }
 }

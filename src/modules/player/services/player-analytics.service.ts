@@ -65,16 +65,14 @@ export class PlayerAnalyticsService {
       return '#FF2222';
     };
 
+    // Returns the first defined/non-null value. Does NOT skip 50 — 50 is a valid attribute score.
+    // Falls back through the list only when a value is undefined or null (i.e., truly absent).
     const pickVal = (primary: any, ...fallbacks: any[]): number => {
-      if (primary !== undefined && primary !== null && Number(primary) !== 50) {
-        return Number(primary);
-      }
+      if (primary !== undefined && primary !== null) return Number(primary);
       for (const fb of fallbacks) {
-        if (fb !== undefined && fb !== null && Number(fb) !== 50) {
-          return Number(fb);
-        }
+        if (fb !== undefined && fb !== null) return Number(fb);
       }
-      return primary !== undefined && primary !== null ? Number(primary) : 50;
+      return 50;
     };
 
     // 1. PERFORMANCE TREND (100% Real Monthly Aggregation from MatchRecord — Zero Fake Fallbacks)
@@ -112,6 +110,23 @@ export class PlayerAnalyticsService {
       { month: string; monthFull: string; goals: number; assists: number; ratings: number[] }
     >();
 
+    const getEvaluatedMatchRating = (m: any): number => {
+      // A review is "pending" only when a coach has actually been assigned and hasn't finished yet.
+      // Checking Boolean(m.coachReview) is wrong: the subdocument exists with status 'UNREQUESTED'
+      // on every stored document, which would cause all self-reported matches to return 0.
+      const hasCoachAssigned = Boolean(m.coachReview?.coachId);
+      const coachCompleted = m.coachReview?.status === 'COMPLETED';
+      if (hasCoachAssigned && !coachCompleted) {
+        return 0;
+      }
+      const rawR = Number(
+        coachCompleted
+          ? (m.coachReview?.coachRating ?? m.playerRating ?? 0)
+          : (m.playerRating ?? 0),
+      );
+      return rawR > 10 ? rawR / 10 : rawR;
+    };
+
     allMatches.forEach((m: any) => {
       const dateVal = m.matchDate || m.gameDate || m.createdAt;
       if (dateVal) {
@@ -122,12 +137,7 @@ export class PlayerAnalyticsService {
           const mFull = monthFullNames[d.getMonth()];
           const g = Number(m.goals ?? m.stats?.goalScored ?? 0) || 0;
           const a = Number(m.assists ?? m.stats?.assists ?? 0) || 0;
-          const rawR = Number(
-            m.coachReview?.status === 'COMPLETED'
-              ? (m.coachReview?.coachRating ?? m.playerRating ?? 0)
-              : (m.playerRating ?? 0),
-          );
-          const r = rawR > 10 ? rawR / 10 : rawR;
+          const r = getEvaluatedMatchRating(m);
 
           if (!monthlyMap.has(mKey)) {
             monthlyMap.set(mKey, {
@@ -170,10 +180,11 @@ export class PlayerAnalyticsService {
     });
 
     // 2. TOP 4 SUMMARY CARDS (100% Real Data — Zero Fake Fallbacks)
+    // profile.overallRating always exists (schema default: 50); fall back to FifaCard if 50.
     const overallRating =
-      profile.overallRating !== undefined && profile.overallRating !== null
+      profile.overallRating !== 50
         ? Number(profile.overallRating)
-        : (fifaCardDoc?.overallRating ?? 50);
+        : Number(fifaCardDoc?.overallRating ?? profile.overallRating);
 
     const totalGoals = allMatches.reduce(
       (acc: number, m: any) => acc + (Number(m.goals ?? m.stats?.goalScored ?? 0) || 0),
@@ -201,14 +212,7 @@ export class PlayerAnalyticsService {
     } else {
       const ratedMatchesAsc = [...allMatches]
         .reverse()
-        .map((m: any) => {
-          const rawR = Number(
-            m.coachReview?.status === 'COMPLETED'
-              ? (m.coachReview?.coachRating ?? m.playerRating ?? 0)
-              : (m.playerRating ?? 0),
-          );
-          return rawR > 10 ? rawR / 10 : rawR;
-        })
+        .map((m: any) => getEvaluatedMatchRating(m))
         .filter((r) => r > 0);
 
       if (ratedMatchesAsc.length >= 2) {

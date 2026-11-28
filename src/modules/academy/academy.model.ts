@@ -273,6 +273,7 @@ const AcademyFeePaymentSchema = new Schema<IAcademyFeePaymentDocument>(
     parentId: { type: Schema.Types.ObjectId, ref: 'ParentProfile' },
     eventId: { type: Schema.Types.ObjectId, ref: 'ExtraEvent' },
     clubName: { type: String },
+    clubLogoUrl: { type: String },
     feeType: { type: String, required: true, default: 'Monthly Fee' },
     amount: { type: Number, required: true },
     paymentDate: { type: Date, required: true, default: Date.now },

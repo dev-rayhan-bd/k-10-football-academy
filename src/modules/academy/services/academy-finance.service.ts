@@ -111,7 +111,7 @@ export class AcademyFinanceService {
           id: player._id || null,
           name: player.fullName || doc.clubName || 'Player',
           position: player.position || (doc.clubName ? 'Club Squad' : 'Forward'),
-          avatar: player.profileImage || '',
+          avatar: player.profileImage || doc.clubLogoUrl || '',
           currentClub: player.currentClub || doc.clubName || academy.name,
         },
         feeType: doc.feeType,

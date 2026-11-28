@@ -1,10 +1,12 @@
 import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '@/utils/AppError';
-import { Team, ExtraEvent, AcademyProfile } from '../academy.model';
+import { Team, ExtraEvent, AcademyProfile, AcademyFeePayment } from '../academy.model';
+import { PlayerProfile } from '@/modules/player/player.model';
 import QueryBuilder from '@/builder/QueryBuilder';
 import { env } from '@/config/env';
 import { NotificationService } from '@/modules/notification/notification.service';
+import { logger } from '@/utils/logger';
 import { academyResolverService } from './academy-resolver.service';
 import { TARGET_ATTENDEES_ENUM } from '../academy.interface';
 import { getStripeClient } from '@/config/stripe';
@@ -697,6 +699,38 @@ export class AcademyEventsService {
     event.currentAttendees = confirmedCount(event);
     if (event.maxCapacity && event.currentAttendees >= event.maxCapacity) event.status = 'CLOSED';
     await event.save();
+
+    // Record in AcademyFeePayment so the fees-payments dashboard shows it with avatar
+    try {
+      const txnId = session.payment_intent || session.id;
+      const alreadyRecorded = await AcademyFeePayment.findOne({
+        academyId: event.academyId,
+        transactionId: txnId,
+      }).lean();
+      if (!alreadyRecorded) {
+        let playerProfileId: Types.ObjectId | undefined;
+        if (participant.userId) {
+          const pp = await PlayerProfile.findOne({ userId: participant.userId })
+            .select('_id')
+            .lean();
+          if (pp) playerProfileId = pp._id as Types.ObjectId;
+        }
+        await AcademyFeePayment.create({
+          academyId: event.academyId,
+          playerId: playerProfileId,
+          eventId: event._id,
+          feeType: `Event Registration Fee (${event.eventName || 'Extra Event'})`,
+          amount: participant.paidAmount,
+          paymentDate: new Date(),
+          status: 'PAID',
+          paymentMethod: 'STRIPE',
+          transactionId: txnId,
+          notes: `Registration fee paid by ${participant.name}`,
+        });
+      }
+    } catch (err: any) {
+      logger.warn(`Failed to record AcademyFeePayment for event registration: ${err.message}`);
+    }
 
     await this.notifyAcademyOfRegistration(event, participant.name);
     if (participant.userId) {

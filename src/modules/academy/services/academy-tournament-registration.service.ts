@@ -68,6 +68,7 @@ export class AcademyTournamentRegistrationService {
         academyId: event.academyId,
         eventId: event._id,
         clubName: club.clubName,
+        clubLogoUrl: club.logoUrl || undefined,
         feeType: `Tournament Entry Fee (${event.eventName || 'Tournament'})`,
         amount,
         paymentDate: club.registeredAt || new Date(),

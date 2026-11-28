@@ -258,6 +258,11 @@ export class ShopOrderService {
       logger.info(
         `ACID Transaction committed: Shop Order ${updatedOrder.orderNumber} paid and inventory updated!`,
       );
+
+      // Clear the buyer's cart after successful payment
+      if (updatedOrder?.userId) {
+        await shopCartService.clearCart(updatedOrder.userId.toString()).catch(() => {});
+      }
     } catch (txnError: any) {
       if (mongoSession.inTransaction()) {
         await mongoSession.abortTransaction();
@@ -303,6 +308,11 @@ export class ShopOrderService {
                 `Stock update error on product ${item.productId}: ${err?.message || err}`,
               );
             }
+          }
+
+          // Clear the buyer's cart after successful payment (standalone fallback)
+          if (updatedOrder.userId) {
+            await shopCartService.clearCart(updatedOrder.userId.toString()).catch(() => {});
           }
         }
       } else {

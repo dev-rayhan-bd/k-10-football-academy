@@ -112,6 +112,11 @@ export class AcademyProfileService {
           p.trainingPhilosophy ||
           'Player-centered development focusing on technical skills, tactical awareness, physical conditioning, and mental resilience.',
       },
+      feeSettings: {
+        monthlyFeeEnabled: p.monthlyFeeEnabled !== false,
+        monthlyTrainingFee: p.monthlyTrainingFee ?? 45,
+        monthlyFeeTitle: p.monthlyFeeTitle || 'Monthly Training Fee',
+      },
     };
   }
 
@@ -731,6 +736,10 @@ export class AcademyProfileService {
     }
     if (payload.monthlyFeeTitle !== undefined) {
       profile.monthlyFeeTitle = String(payload.monthlyFeeTitle).trim() || 'Monthly Training Fee';
+    }
+    if (payload.monthlyFeeEnabled !== undefined) {
+      const v = payload.monthlyFeeEnabled;
+      (profile as any).monthlyFeeEnabled = v === 'false' || v === false || v === 0 ? false : true;
     }
     if (payload.registrationId) profile.registrationId = payload.registrationId;
     if (payload.estimatedAcademySize) profile.estimatedAcademySize = payload.estimatedAcademySize;

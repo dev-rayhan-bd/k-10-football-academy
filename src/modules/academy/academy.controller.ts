@@ -2092,6 +2092,19 @@ export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res:
     y += 16;
   };
 
+  // ── total row helper ───────────────────────────────────────────────────────
+  const totalRow = (
+    y: number,
+    columns: { value: string; x: number; w: number; align?: 'left' | 'center' | 'right' }[],
+  ) => {
+    const ROW_H = 24;
+    doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill(DARK);
+    columns.forEach((col) =>
+      cell(col.value, col.x, y, col.w, { bold: true, color: WHITE, align: col.align ?? 'right' }),
+    );
+    return y + ROW_H + 6;
+  };
+
   if (reportType === 'FEES_SUMMARY') {
     stat('Total Transactions:', String(data.totalTransactions ?? 0));
     stat(
@@ -2100,24 +2113,28 @@ export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res:
     );
     y += 12;
 
+    // Total column widths must equal CONTENT_W (515)
+    // 140 + 155 + 75 + 85 + 60 = 515
     const cols = [
-      { label: 'PLAYER', x: MARGIN, w: 150 },
-      { label: 'FEE TYPE', x: MARGIN + 150, w: 175 },
-      { label: 'AMOUNT', x: MARGIN + 325, w: 90, align: 'right' as const },
-      { label: 'DATE', x: MARGIN + 415, w: 85 },
-      { label: 'STATUS', x: MARGIN + 500, w: 55, align: 'center' as const },
+      { label: 'PLAYER', x: MARGIN, w: 140 },
+      { label: 'FEE TYPE', x: MARGIN + 140, w: 155 },
+      { label: 'AMOUNT', x: MARGIN + 295, w: 75, align: 'right' as const },
+      { label: 'DATE', x: MARGIN + 370, w: 85 },
+      { label: 'STATUS', x: MARGIN + 455, w: 60, align: 'center' as const },
     ];
 
     y = tableHeader(y, cols);
 
+    let grandTotal = 0;
     (data.items || []).forEach((item: any, i: number) => {
       y = checkPage(y);
+      grandTotal += Number(item.amount || 0);
       const dateStr = item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-';
       y = tableRow(y, i, [
         { value: item.playerName || '-', x: cols[0].x, w: cols[0].w },
         { value: String(item.feeType || '-'), x: cols[1].x, w: cols[1].w },
         {
-          value: `${data.currency || '$'}${(item.amount || 0).toLocaleString()}`,
+          value: `${data.currency || '$'}${Number(item.amount || 0).toLocaleString()}`,
           x: cols[2].x,
           w: cols[2].w,
           align: 'right',
@@ -2126,27 +2143,52 @@ export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res:
         { value: item.status || '-', x: cols[4].x, w: cols[4].w, align: 'center' },
       ]);
     });
+
+    if ((data.items || []).length > 0) {
+      y = checkPage(y, 30);
+      y = totalRow(y, [
+        { value: 'TOTAL', x: cols[0].x, w: cols[0].w + cols[1].w, align: 'left' },
+        {
+          value: `${data.currency || '$'}${grandTotal.toLocaleString()}`,
+          x: cols[2].x,
+          w: cols[2].w,
+          align: 'right',
+        },
+        { value: '', x: cols[3].x, w: cols[3].w + cols[4].w },
+      ]);
+    }
   } else if (reportType === 'MATCH_EXPENSES') {
     stat('Total Matches:', String(data.totalMatches ?? 0));
     stat('Total Cost:', `${data.currency || '$'}${(data.totalCost || 0).toLocaleString()}`);
     y += 12;
 
+    // 130 + 65 + 65 + 65 + 60 + 65 + 65 = 515
     const cols = [
-      { label: 'MATCH TITLE', x: MARGIN, w: 145 },
-      { label: 'DATE', x: MARGIN + 145, w: 75 },
-      { label: 'GROUND', x: MARGIN + 220, w: 75, align: 'right' as const },
-      { label: 'TRANSPORT', x: MARGIN + 295, w: 75, align: 'right' as const },
-      { label: 'MEALS', x: MARGIN + 370, w: 65, align: 'right' as const },
-      { label: 'OTHER', x: MARGIN + 435, w: 60, align: 'right' as const },
-      { label: 'TOTAL', x: MARGIN + 495, w: 60, align: 'right' as const },
+      { label: 'MATCH TITLE', x: MARGIN, w: 130 },
+      { label: 'DATE', x: MARGIN + 130, w: 65 },
+      { label: 'GROUND', x: MARGIN + 195, w: 65, align: 'right' as const },
+      { label: 'TRANSPORT', x: MARGIN + 260, w: 65, align: 'right' as const },
+      { label: 'MEALS', x: MARGIN + 325, w: 60, align: 'right' as const },
+      { label: 'OTHER', x: MARGIN + 385, w: 65, align: 'right' as const },
+      { label: 'TOTAL', x: MARGIN + 450, w: 65, align: 'right' as const },
     ];
 
     y = tableHeader(y, cols);
 
+    let sumGround = 0,
+      sumTransport = 0,
+      sumMeals = 0,
+      sumOther = 0,
+      sumTotal = 0;
     (data.items || []).forEach((item: any, i: number) => {
       y = checkPage(y);
+      sumGround += Number(item.groundCost || 0);
+      sumTransport += Number(item.transportCost || 0);
+      sumMeals += Number(item.mealsCost || 0);
+      sumOther += Number(item.otherCosts || 0);
+      sumTotal += Number(item.totalCost || 0);
       const dateStr = item.matchDate ? new Date(item.matchDate).toLocaleDateString('en-GB') : '-';
-      const title = String(item.matchTitle || item.opponentTeam || 'Match').substring(0, 24);
+      const title = String(item.matchTitle || item.opponentTeam || 'Match').substring(0, 22);
       y = tableRow(y, i, [
         { value: title, x: cols[0].x, w: cols[0].w },
         { value: dateStr, x: cols[1].x, w: cols[1].w },
@@ -2157,26 +2199,41 @@ export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res:
         { value: `$${item.totalCost || 0}`, x: cols[6].x, w: cols[6].w, align: 'right' },
       ]);
     });
+
+    if ((data.items || []).length > 0) {
+      y = checkPage(y, 30);
+      y = totalRow(y, [
+        { value: 'TOTALS', x: cols[0].x, w: cols[0].w + cols[1].w, align: 'left' },
+        { value: `$${sumGround}`, x: cols[2].x, w: cols[2].w, align: 'right' },
+        { value: `$${sumTransport}`, x: cols[3].x, w: cols[3].w, align: 'right' },
+        { value: `$${sumMeals}`, x: cols[4].x, w: cols[4].w, align: 'right' },
+        { value: `$${sumOther}`, x: cols[5].x, w: cols[5].w, align: 'right' },
+        { value: `$${sumTotal}`, x: cols[6].x, w: cols[6].w, align: 'right' },
+      ]);
+    }
   } else if (reportType === 'EVENT_COSTS') {
     stat('Total Events:', String(data.totalEvents ?? 0));
     y += 12;
 
+    // 165 + 110 + 70 + 60 + 55 + 55 = 515
     const cols = [
-      { label: 'EVENT NAME', x: MARGIN, w: 175 },
-      { label: 'TYPE', x: MARGIN + 175, w: 110 },
-      { label: 'DATE', x: MARGIN + 285, w: 80 },
-      { label: 'REG. FEE', x: MARGIN + 365, w: 75, align: 'right' as const },
-      { label: 'ATTENDEES', x: MARGIN + 440, w: 60, align: 'center' as const },
-      { label: 'REVENUE', x: MARGIN + 500, w: 55, align: 'right' as const },
+      { label: 'EVENT NAME', x: MARGIN, w: 165 },
+      { label: 'TYPE', x: MARGIN + 165, w: 110 },
+      { label: 'DATE', x: MARGIN + 275, w: 70 },
+      { label: 'REG. FEE', x: MARGIN + 345, w: 60, align: 'right' as const },
+      { label: 'ATTENDEES', x: MARGIN + 405, w: 55, align: 'center' as const },
+      { label: 'REVENUE', x: MARGIN + 460, w: 55, align: 'right' as const },
     ];
 
     y = tableHeader(y, cols);
 
+    let sumRevenue = 0;
     (data.items || []).forEach((item: any, i: number) => {
       y = checkPage(y);
+      sumRevenue += Number(item.totalRevenue || 0);
       const dateStr = item.eventDate ? new Date(item.eventDate).toLocaleDateString('en-GB') : '-';
       y = tableRow(y, i, [
-        { value: String(item.eventName || '-'), x: cols[0].x, w: cols[0].w },
+        { value: String(item.eventName || '-').substring(0, 26), x: cols[0].x, w: cols[0].w },
         { value: String(item.eventType || '-'), x: cols[1].x, w: cols[1].w },
         { value: dateStr, x: cols[2].x, w: cols[2].w },
         { value: `$${item.registrationFee || 0}`, x: cols[3].x, w: cols[3].w, align: 'right' },
@@ -2189,6 +2246,19 @@ export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res:
         },
       ]);
     });
+
+    if ((data.items || []).length > 0) {
+      y = checkPage(y, 30);
+      y = totalRow(y, [
+        {
+          value: 'TOTAL REVENUE',
+          x: cols[0].x,
+          w: cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w,
+          align: 'left',
+        },
+        { value: `$${sumRevenue.toLocaleString()}`, x: cols[5].x, w: cols[5].w, align: 'right' },
+      ]);
+    }
   } else {
     const cards = data.summary || {};
     stat('Total Revenue:', cards.totalRevenue?.formatted || '$0');

@@ -145,8 +145,11 @@ export class InvoiceService {
       for (const player of players) {
         if (!player.academyId) continue;
         const academy = academyMap.get(player.academyId.toString());
+        // Skip if academy has disabled monthly fee billing
+        if (academy?.monthlyFeeEnabled === false) continue;
+
         const monthlyFeeAmount =
-          typeof academy?.monthlyTrainingFee === 'number' ? academy.monthlyTrainingFee : 45; // Default $45.00 if unset
+          typeof academy?.monthlyTrainingFee === 'number' ? academy.monthlyTrainingFee : 45;
 
         if (monthlyFeeAmount > 0) {
           const expectedTitle = `${currentMonthName} Training Fee`;
@@ -243,26 +246,39 @@ export class InvoiceService {
       }
     }
 
-    // 4. Query all active fee invoices (Monthly Training Fees, Event Entry Fees, Uniform Fees) for these children
-    const invoiceFilter: any = {
-      childPlayerId: { $in: childPlayerIds },
-    };
+    // 4. Query all active fee invoices (Monthly Training Fees, Event Entry Fees, custom fees) for these children
+    const baseFilter: any = { childPlayerId: { $in: childPlayerIds } };
 
     const statusParam = (query.status || 'ALL').toUpperCase().trim();
     if (statusParam === 'PAID') {
-      invoiceFilter.status = 'PAID';
+      baseFilter.status = 'PAID';
     } else if (statusParam === 'UNPAID') {
-      invoiceFilter.status = { $in: ['UNPAID', 'OVERDUE'] };
+      baseFilter.status = { $in: ['UNPAID', 'OVERDUE'] };
     }
 
+    // feeType filter — exact case-insensitive match
     if (query.feeType) {
-      const feeTypeRegex = new RegExp(String(query.feeType).trim(), 'i');
-      invoiceFilter.$or = [{ feeType: feeTypeRegex }, { title: feeTypeRegex }];
+      const ft = String(query.feeType).trim().toUpperCase();
+      baseFilter.feeType = ft;
     }
 
+    // search — separate $or so it never conflicts with feeType
+    const invoiceFilter: any = { ...baseFilter };
     if (query.search) {
       const searchRegex = new RegExp(String(query.search).trim(), 'i');
       invoiceFilter.$or = [{ title: searchRegex }, { invoiceNumber: searchRegex }];
+    }
+
+    // feeType summary counts (always over the full childPlayerIds scope, unaffected by filters)
+    const feeTypeSummaryCursor = await AcademyInvoice.aggregate([
+      { $match: { childPlayerId: { $in: childPlayerIds } } },
+      { $group: { _id: '$feeType', count: { $sum: 1 } } },
+    ]);
+    const feeTypeSummary: Record<string, number> = { ALL: 0 };
+    for (const row of feeTypeSummaryCursor) {
+      const key = (row._id || 'EVENT_ENTRY_FEE').toUpperCase();
+      feeTypeSummary[key] = row.count;
+      feeTypeSummary['ALL'] = (feeTypeSummary['ALL'] || 0) + row.count;
     }
 
     const page = Math.max(1, parseInt(query.page as string, 10) || 1);
@@ -336,6 +352,7 @@ export class InvoiceService {
         limit,
         total: totalRecords,
         totalPages: Math.ceil(totalRecords / limit) || 1,
+        feeTypeSummary,
       },
     };
   }

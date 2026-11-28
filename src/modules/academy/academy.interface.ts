@@ -21,6 +21,7 @@ export interface IAcademyProfile {
   trainingPhilosophy?: string;
   monthlyTrainingFee?: number;
   monthlyFeeTitle?: string;
+  monthlyFeeEnabled?: boolean;
   currentPlan?: 'FREE' | 'BASIC' | 'PRO' | 'PREMIUM' | 'ELITE';
   maxTeams?: number;
   contactPhone?: string;

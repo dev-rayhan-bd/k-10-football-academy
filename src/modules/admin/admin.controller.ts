@@ -372,7 +372,7 @@ export class AdminController {
   // MAINTENANCE UTILITIES
   // ==========================================
 
-  syncAvatars = catchAsync(async (req: Request, res: Response): Promise<void> => {
+  syncAvatars = catchAsync(async (_req: Request, res: Response): Promise<void> => {
     const result = await adminService.syncAvatars();
     sendResponse(res, {
       statusCode: StatusCodes.OK,

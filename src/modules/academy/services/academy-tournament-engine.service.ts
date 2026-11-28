@@ -1207,6 +1207,13 @@ export class AcademyTournamentEngineService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Tournament event not found');
     }
 
+    if (event.tournamentStatus === 'COMPLETED') {
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        'Tournament is already completed and cannot be reset. All match results, standings and the bracket are final.',
+      );
+    }
+
     event.tournamentStatus = 'REGISTRATION';
     event.isLiveMode = false;
     event.simulationStep = 'NOT_STARTED';

@@ -109,6 +109,31 @@ export const getUserOrders = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+export const getAcademyOrders = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.userId || (req as any).user?._id || (req as any).user?.id;
+  const result = await shopService.getAcademyOrders(userId, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Academy orders fetched successfully',
+    meta: result.meta as any,
+    data: result.orders,
+  });
+});
+
+export const updateOrderStatus = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.userId || (req as any).user?._id || (req as any).user?.id;
+  const orderId = req.params.orderId;
+  const { orderStatus } = req.body;
+  const result = await shopService.updateOrderStatus(orderId, orderStatus, userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: `Order status updated to ${orderStatus}`,
+    data: result,
+  });
+});
+
 // ==========================================
 // SHOPPING CART CONTROLLERS
 // ==========================================

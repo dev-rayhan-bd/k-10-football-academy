@@ -17,6 +17,8 @@ import {
   deleteProduct,
   createOrder,
   getUserOrders,
+  getAcademyOrders,
+  updateOrderStatus,
   verifyOrderPayment,
   getCart,
   addToCart,
@@ -49,6 +51,8 @@ router.delete('/cart', auth(), clearCart);
 router.post('/orders', auth(), validateRequest(createOrderZodSchema), createOrder);
 router.post('/orders/checkout', auth(), validateRequest(createOrderZodSchema), createOrder);
 router.get('/orders', auth(), getUserOrders);
+router.get('/orders/academy', auth('ACADEMY', 'SUPER_ADMIN'), getAcademyOrders);
+router.patch('/orders/:orderId/status', auth('ACADEMY', 'SUPER_ADMIN'), updateOrderStatus);
 router.get('/orders/:orderId/verify', auth(), verifyOrderPayment);
 router.get('/orders/verify', auth(), verifyOrderPayment);
 

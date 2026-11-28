@@ -51,6 +51,18 @@ export class ShopService {
     return await shopOrderService.getUserOrders(userId);
   }
 
+  async getAcademyOrders(academyUserId: string, query: any = {}) {
+    return await shopOrderService.getAcademyOrders(academyUserId, query);
+  }
+
+  async updateOrderStatus(
+    orderId: string,
+    newStatus: 'PROCESSING' | 'SHIPPED' | 'DELIVERED',
+    academyUserId: string,
+  ) {
+    return await shopOrderService.updateOrderStatus(orderId, newStatus, academyUserId);
+  }
+
   // --- ShopCartService Delegates ---
 
   async getCart(userId: string) {

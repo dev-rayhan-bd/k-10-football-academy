@@ -6,7 +6,7 @@ import { User } from '@/modules/user/user.model';
 import { getStripeClient } from '@/config/stripe';
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
-import { AcademyProfile } from '@/modules/academy/academy.model';
+import { AcademyProfile, AcademyFeePayment } from '@/modules/academy/academy.model';
 import { academyStripeConnectService } from '@/modules/academy/services/academy-stripe-connect.service';
 import { shopCartService } from './shop-cart.service';
 
@@ -325,8 +325,8 @@ export class ShopOrderService {
       await mongoSession.endSession();
     }
 
-    // If payment was not already routed via directDestinationCharge (e.g., multi-academy order), transfer each Academy's product share directly
-    if (updatedOrder && sessionObject?.metadata?.directDestinationCharge !== 'true') {
+    // Build academy → revenue map (used for both Stripe transfer and AcademyFeePayment record)
+    if (updatedOrder) {
       try {
         const academyShareMap = new Map<string, number>();
         for (const item of updatedOrder.items) {
@@ -345,17 +345,33 @@ export class ShopOrderService {
             }
           }
         }
+
         for (const [acadId, amount] of academyShareMap.entries()) {
-          if (amount > 0) {
+          if (amount <= 0) continue;
+
+          // 1. Stripe transfer (only when not already done via directDestinationCharge)
+          if (sessionObject?.metadata?.directDestinationCharge !== 'true') {
             void academyStripeConnectService.transferCommissionToAcademy(
               acadId,
               parseFloat(amount.toFixed(2)),
               `Direct Academy Shop Order Revenue (${updatedOrder.orderNumber})`,
             );
           }
+
+          // 2. Record shop sale in AcademyFeePayment so it shows in Academy Fees & Payments
+          await AcademyFeePayment.create({
+            academyId: acadId,
+            feeType: 'Shop Sale',
+            amount: parseFloat(amount.toFixed(2)),
+            paymentDate: updatedOrder.paidAt || new Date(),
+            status: 'PAID',
+            paymentMethod: 'STRIPE',
+            transactionId: updatedOrder.stripePaymentIntentId || updatedOrder.stripeSessionId || '',
+            notes: `Shop Order #${updatedOrder.orderNumber}`,
+          });
         }
       } catch (err: any) {
-        logger.error({ err }, 'Error routing ShopOrder share to Academy Stripe account');
+        logger.error({ err }, 'Error recording ShopOrder revenue for Academy');
       }
     }
 
@@ -428,6 +444,96 @@ export class ShopOrderService {
     return ShopOrder.find({ $or: userConditions })
       .populate('items.productId')
       .sort({ createdAt: -1 });
+  }
+
+  async getAcademyOrders(
+    academyUserId: string,
+    query: { status?: string; orderStatus?: string; page?: string; limit?: string } = {},
+  ) {
+    // Find all products belonging to this academy
+    const academyProducts = await ShopProduct.find({
+      $or: [
+        ...(Types.ObjectId.isValid(academyUserId)
+          ? [{ userId: new Types.ObjectId(academyUserId) }]
+          : []),
+        { userId: academyUserId },
+      ],
+    })
+      .select('_id')
+      .lean();
+
+    if (academyProducts.length === 0) {
+      return { orders: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } };
+    }
+
+    const productIds = academyProducts.map((p) => p._id);
+    const filter: any = { 'items.productId': { $in: productIds } };
+
+    if (query.status) filter.paymentStatus = query.status.toUpperCase();
+    if (query.orderStatus) filter.orderStatus = query.orderStatus.toUpperCase();
+
+    const page = Math.max(1, parseInt(query.page || '1', 10));
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit || '20', 10)));
+    const skip = (page - 1) * limit;
+
+    const [total, orders] = await Promise.all([
+      ShopOrder.countDocuments(filter),
+      ShopOrder.find(filter)
+        .populate('items.productId', 'productName images price slug')
+        .populate('userId', 'name email avatar phone')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
+
+    return {
+      orders,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+    };
+  }
+
+  async updateOrderStatus(
+    orderId: string,
+    newStatus: 'PROCESSING' | 'SHIPPED' | 'DELIVERED',
+    academyUserId: string,
+  ) {
+    if (!Types.ObjectId.isValid(orderId)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid order ID');
+    }
+
+    const order = await ShopOrder.findById(orderId).populate('items.productId');
+    if (!order) throw new AppError(StatusCodes.NOT_FOUND, 'Order not found');
+
+    // Verify this academy owns at least one product in the order
+    const academyProducts = await ShopProduct.find({
+      $or: [
+        ...(Types.ObjectId.isValid(academyUserId)
+          ? [{ userId: new Types.ObjectId(academyUserId) }]
+          : []),
+        { userId: academyUserId },
+      ],
+    })
+      .select('_id')
+      .lean();
+
+    const productIds = new Set(academyProducts.map((p) => p._id.toString()));
+    const ownsProduct = order.items.some((item: any) => {
+      const pid = item.productId?._id?.toString() || item.productId?.toString();
+      return pid && productIds.has(pid);
+    });
+
+    if (!ownsProduct) {
+      throw new AppError(StatusCodes.FORBIDDEN, 'You can only update orders for your own products');
+    }
+
+    if (order.paymentStatus !== 'PAID') {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Cannot update status of an unpaid order');
+    }
+
+    order.orderStatus = newStatus;
+    await order.save();
+    return order;
   }
 }
 

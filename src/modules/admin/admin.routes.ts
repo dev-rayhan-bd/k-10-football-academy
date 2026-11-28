@@ -90,8 +90,12 @@ router.post(
   validateRequest(AdminValidation.recordPayoutZodSchema),
   adminController.recordPayout,
 );
+router.post('/payouts/record-all', adminController.recordAllPayouts);
 
 // 8. Platform Analytics (Top Cards, User Growth by Role, Role Distribution, Revenue Breakdown)
 router.get('/analytics', adminController.getAnalytics);
+
+// 9. Maintenance Utilities (one-off data fixes, run once from admin panel)
+router.post('/maintenance/sync-avatars', adminController.syncAvatars);
 
 export const AdminRoutes = router;

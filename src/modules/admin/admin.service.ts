@@ -13,6 +13,7 @@ import { adminApprovalsService } from './services/admin-approvals.service';
 import { adminPaymentsService } from './services/admin-payments.service';
 import { adminAnalyticsService } from './services/admin-analytics.service';
 import { adminDashboardService } from './services/admin-dashboard.service';
+import { adminMaintenanceService } from './services/admin-maintenance.service';
 
 export { IAdminListQuery, IAdminPaymentQuery, IAdminAnalyticsQuery, IAdminDashboardQuery };
 
@@ -187,9 +188,18 @@ export class AdminService {
     return adminPaymentsService.recordPayout(payload, adminUserId);
   }
 
+  async recordAllPayouts(payload: Record<string, any>, adminUserId?: string) {
+    return adminPaymentsService.recordAllPayouts(payload, adminUserId);
+  }
+
   // --- 6. Platform Analytics (MongoDB $lookup & $facet Aggregation) ---
   async getAnalytics(query: IAdminAnalyticsQuery) {
     return adminAnalyticsService.getAnalytics(query);
+  }
+
+  // --- 7. Maintenance Utilities ---
+  async syncAvatars() {
+    return adminMaintenanceService.syncProfileAvatars();
   }
 }
 

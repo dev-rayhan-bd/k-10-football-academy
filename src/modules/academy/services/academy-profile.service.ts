@@ -745,6 +745,9 @@ export class AcademyProfileService {
       if (payload.name || payload.academyName) {
         userUpdate.name = payload.name || payload.academyName;
       }
+      if (payload.logo || payload.avatar) {
+        userUpdate.avatar = payload.logo || payload.avatar;
+      }
       if (Object.keys(userUpdate).length > 0) {
         await User.findByIdAndUpdate(profile.userId, userUpdate);
       }

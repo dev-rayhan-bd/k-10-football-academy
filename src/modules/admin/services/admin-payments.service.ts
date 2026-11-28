@@ -19,6 +19,7 @@ import { ParentMatchReport } from '@/modules/parent/parent.model';
 import { UserSubscription } from '@/modules/subscription/subscription.model';
 import { ShopOrder } from '@/modules/shop/shop.model';
 import { PlatformPayment, AdminPaymentStatus } from '../admin.model';
+import { notificationService } from '@/modules/notification/notification.service';
 import {
   IAdminPaymentQuery,
   isIgnoredFilter,
@@ -466,9 +467,7 @@ export class AdminPaymentsService {
       const coachSpend = Number(ft.commissionCoach) || 0;
       const academySpend = Number(ft.commissionAcademy) || 0;
       const spend =
-        ft.transactionType === 'CV Validation'
-          ? coachSpend + academySpend || (gross === 24 ? 18.0 : gross * 0.75)
-          : academySpend;
+        ft.transactionType === 'CV Validation' ? coachSpend + academySpend : academySpend;
       const net = parseFloat((gross - spend).toFixed(2));
       const dt = new Date(ft.transactionDate || ft.createdAt || Date.now());
 
@@ -1391,7 +1390,8 @@ export class AdminPaymentsService {
         }
 
         const agg = coachesAggMap.get(recId);
-        const earned = Number(tx.commissionCoach) || 12.0;
+        const earned = Number(tx.commissionCoach) || 0;
+        if (earned <= 0) continue;
         agg.totalEarned = parseFloat((agg.totalEarned + earned).toFixed(2));
         agg.transactionsCount += 1;
 
@@ -1507,8 +1507,11 @@ export class AdminPaymentsService {
       coachesList = coachesList.filter((c) => c.pendingAmount > 0);
       academiesList = academiesList.filter((a) => a.pendingAmount > 0);
     } else if (statusFilter === 'PAID' || statusFilter === 'COMPLETED') {
-      coachesList = coachesList.filter((c) => c.completedPayoutAmount > 0);
-      academiesList = academiesList.filter((a) => a.completedPayoutAmount > 0);
+      // PAID = fully settled: has received payout AND has no remaining pending balance
+      coachesList = coachesList.filter((c) => c.completedPayoutAmount > 0 && c.pendingAmount === 0);
+      academiesList = academiesList.filter(
+        (a) => a.completedPayoutAmount > 0 && a.pendingAmount === 0,
+      );
     } else if (statusFilter === 'ON_HOLD') {
       coachesList = coachesList.filter((c) => c.onHoldAmount > 0);
       academiesList = academiesList.filter((a) => a.onHoldAmount > 0);
@@ -1636,7 +1639,7 @@ export class AdminPaymentsService {
       }
 
       const totalPaidAmount = pendingTxns.reduce(
-        (sum, tx) => sum + (Number(tx.commissionCoach) || 12.0),
+        (sum, tx) => sum + (Number(tx.commissionCoach) || 0),
         0,
       );
 
@@ -1698,6 +1701,24 @@ export class AdminPaymentsService {
             ? new Types.ObjectId(adminUserId)
             : undefined,
       });
+
+      // Notify the coach
+      if (coach.userId) {
+        await notificationService.createNotification({
+          recipientId: coach.userId,
+          recipientRole: 'COACH',
+          title: 'Commission Payout Received 💰',
+          message: `Your commission of $${totalPaidAmount.toFixed(2)} has been disbursed to your Stripe account (${pendingTxns.length} transaction${pendingTxns.length > 1 ? 's' : ''}). Reference: ${finalReference}`,
+          type: 'PAYOUT',
+          data: {
+            amount: totalPaidAmount,
+            currency: '$',
+            payoutReference: finalReference,
+            transactionsCount: pendingTxns.length,
+            paymentMethod: finalPaymentMethod,
+          },
+        });
+      }
 
       return {
         success: true,
@@ -1807,6 +1828,24 @@ export class AdminPaymentsService {
             : undefined,
       });
 
+      // Notify the academy
+      if (academy.userId) {
+        await notificationService.createNotification({
+          recipientId: academy.userId,
+          recipientRole: 'ACADEMY',
+          title: 'Commission Payout Received 💰',
+          message: `Your commission of $${totalPaidAmount.toFixed(2)} has been disbursed to your Stripe account (${pendingTxns.length} transaction${pendingTxns.length > 1 ? 's' : ''}). Reference: ${finalReference}`,
+          type: 'PAYOUT',
+          data: {
+            amount: totalPaidAmount,
+            currency: '$',
+            payoutReference: finalReference,
+            transactionsCount: pendingTxns.length,
+            paymentMethod: finalPaymentMethod,
+          },
+        });
+      }
+
       return {
         success: true,
         recipientType: 'ACADEMY',
@@ -1822,6 +1861,282 @@ export class AdminPaymentsService {
         notes: notes || 'Payout completed successfully',
       };
     }
+  }
+
+  /**
+   * POST /api/v1/admin/payouts/record-all
+   * Disburse all pending commissions to ALL eligible coaches and academies in one call.
+   * Skips any recipient whose Stripe Connect payouts are not enabled.
+   */
+  async recordAllPayouts(payload: Record<string, any> = {}, adminUserId?: string) {
+    const recipientType = String(payload.recipientType || 'ALL')
+      .toUpperCase()
+      .trim();
+    const notes = payload.notes || '';
+
+    // Fetch all pending AcademyFinanceTransaction records grouped by coachId / academyId
+    const allPendingTxns = await AcademyFinanceTransaction.find({
+      $or: [
+        { payoutStatusCoach: 'PENDING', commissionCoach: { $gt: 0 } },
+        { payoutStatusAcademy: 'PENDING', commissionAcademy: { $gt: 0 } },
+      ],
+    }).lean();
+
+    const results: { success: any[]; skipped: any[]; failed: any[] } = {
+      success: [],
+      skipped: [],
+      failed: [],
+    };
+
+    // --- Coaches ---
+    if (recipientType === 'ALL' || recipientType === 'COACH') {
+      const coachTxnMap = new Map<string, any[]>();
+      for (const tx of allPendingTxns) {
+        if (!tx.commissionCoach || tx.commissionCoach <= 0) continue;
+        if (tx.payoutStatusCoach !== 'PENDING') continue;
+        const cId = tx.coachId ? tx.coachId.toString() : null;
+        if (!cId) continue;
+        if (!coachTxnMap.has(cId)) coachTxnMap.set(cId, []);
+        coachTxnMap.get(cId)!.push(tx);
+      }
+
+      for (const [coachId, txns] of coachTxnMap) {
+        const coach = await CoachProfile.findOne({
+          $or: [
+            { _id: Types.ObjectId.isValid(coachId) ? new Types.ObjectId(coachId) : null },
+            { userId: Types.ObjectId.isValid(coachId) ? new Types.ObjectId(coachId) : null },
+          ].filter(Boolean) as any[],
+        });
+
+        if (!coach) {
+          results.skipped.push({
+            recipientType: 'COACH',
+            recipientId: coachId,
+            reason: 'Profile not found',
+          });
+          continue;
+        }
+
+        const totalAmount = txns.reduce((s, tx) => s + (Number(tx.commissionCoach) || 0), 0);
+        if (totalAmount <= 0) continue;
+
+        const transferResult = await coachStripeConnectService.transferCommissionToCoach(
+          coach._id,
+          totalAmount,
+          notes || `K10 Bulk Payout to ${coach.fullName} (${txns.length} items)`,
+        );
+
+        if (!transferResult.success) {
+          results.skipped.push({
+            recipientType: 'COACH',
+            recipientId: coach._id,
+            recipientName: coach.fullName,
+            reason: 'Stripe Connect not ready (payoutsEnabled: false)',
+          });
+          continue;
+        }
+
+        try {
+          const now = new Date();
+          const ref = transferResult.transferId || `BULK-COACH-${Date.now()}`;
+          await AcademyFinanceTransaction.updateMany(
+            { _id: { $in: txns.map((t) => t._id) } },
+            { $set: { payoutStatusCoach: 'PAID', payoutReferenceCoach: ref, paidAtCoach: now } },
+          );
+          await PlatformPayment.create({
+            paymentCode: ref,
+            type: 'Coach Payout',
+            category: 'OTHER',
+            userId: coach.userId,
+            entityId: coach._id,
+            userOrEntityName: coach.fullName || 'Coach',
+            entityRole: 'COACH',
+            amount: totalAmount,
+            spend: totalAmount,
+            commissionPaid: totalAmount,
+            commissionRate: '100%',
+            commissionRecipient: coach.fullName || 'Coach',
+            adminEarnings: 0,
+            currency: '$',
+            paymentDate: now,
+            status: 'COMPLETED',
+            paymentMethod: 'STRIPE',
+            notes: notes || `Bulk payout $${totalAmount} to Coach ${coach.fullName}`,
+            ...(adminUserId && Types.ObjectId.isValid(adminUserId)
+              ? { createdByAdminId: new Types.ObjectId(adminUserId) }
+              : {}),
+          });
+          if (coach.userId) {
+            await notificationService.createNotification({
+              recipientId: coach.userId,
+              recipientRole: 'COACH',
+              title: 'Commission Payout Received 💰',
+              message: `Your commission of $${totalAmount.toFixed(2)} has been disbursed to your Stripe account (${txns.length} transaction${txns.length > 1 ? 's' : ''}). Reference: ${ref}`,
+              type: 'PAYOUT',
+              data: {
+                amount: totalAmount,
+                currency: '$',
+                payoutReference: ref,
+                transactionsCount: txns.length,
+              },
+            });
+          }
+          results.success.push({
+            recipientType: 'COACH',
+            recipientId: coach._id,
+            recipientName: coach.fullName,
+            amountPaid: parseFloat(totalAmount.toFixed(2)),
+            transactionsCount: txns.length,
+            payoutReference: ref,
+          });
+        } catch (err: any) {
+          results.failed.push({
+            recipientType: 'COACH',
+            recipientId: coach._id,
+            recipientName: coach.fullName,
+            reason: err?.message || 'Unknown error',
+          });
+        }
+      }
+    }
+
+    // --- Academies ---
+    if (recipientType === 'ALL' || recipientType === 'ACADEMY') {
+      const academyTxnMap = new Map<string, any[]>();
+      for (const tx of allPendingTxns) {
+        if (!tx.commissionAcademy || tx.commissionAcademy <= 0) continue;
+        if (tx.payoutStatusAcademy !== 'PENDING') continue;
+        const aId = tx.academyId ? tx.academyId.toString() : null;
+        if (!aId) continue;
+        if (!academyTxnMap.has(aId)) academyTxnMap.set(aId, []);
+        academyTxnMap.get(aId)!.push(tx);
+      }
+
+      for (const [academyId, txns] of academyTxnMap) {
+        const academy = await AcademyProfile.findOne({
+          $or: [
+            { _id: Types.ObjectId.isValid(academyId) ? new Types.ObjectId(academyId) : null },
+            { userId: Types.ObjectId.isValid(academyId) ? new Types.ObjectId(academyId) : null },
+          ].filter(Boolean) as any[],
+        });
+
+        if (!academy) {
+          results.skipped.push({
+            recipientType: 'ACADEMY',
+            recipientId: academyId,
+            reason: 'Profile not found',
+          });
+          continue;
+        }
+
+        const totalAmount = txns.reduce((s, tx) => s + (Number(tx.commissionAcademy) || 0), 0);
+        if (totalAmount <= 0) continue;
+
+        const transferResult = await academyStripeConnectService.transferCommissionToAcademy(
+          academy._id,
+          totalAmount,
+          notes || `K10 Bulk Payout to ${academy.name} (${txns.length} items)`,
+        );
+
+        if (!transferResult.success) {
+          results.skipped.push({
+            recipientType: 'ACADEMY',
+            recipientId: academy._id,
+            recipientName: academy.name,
+            reason: 'Stripe Connect not ready (payoutsEnabled: false)',
+          });
+          continue;
+        }
+
+        try {
+          const now = new Date();
+          const ref = transferResult.transferId || `BULK-ACADEMY-${Date.now()}`;
+          await AcademyFinanceTransaction.updateMany(
+            { _id: { $in: txns.map((t) => t._id) } },
+            {
+              $set: {
+                payoutStatusAcademy: 'PAID',
+                payoutReferenceAcademy: ref,
+                paidAtAcademy: now,
+                payoutStatus: 'TRANSFERRED',
+                transferredAt: now,
+                ...(transferResult.transferId
+                  ? { stripeTransferId: transferResult.transferId }
+                  : {}),
+              },
+            },
+          );
+          await PlatformPayment.create({
+            paymentCode: ref,
+            type: 'Academy Payout',
+            category: 'OTHER',
+            userId: academy.userId,
+            entityId: academy._id,
+            userOrEntityName: academy.name,
+            entityRole: 'ACADEMY',
+            amount: totalAmount,
+            spend: totalAmount,
+            commissionPaid: totalAmount,
+            commissionRate: '100%',
+            commissionRecipient: academy.name,
+            adminEarnings: 0,
+            currency: '$',
+            paymentDate: now,
+            status: 'COMPLETED',
+            paymentMethod: 'STRIPE',
+            notes: notes || `Bulk payout $${totalAmount} to Academy ${academy.name}`,
+            ...(adminUserId && Types.ObjectId.isValid(adminUserId)
+              ? { createdByAdminId: new Types.ObjectId(adminUserId) }
+              : {}),
+          });
+          if (academy.userId) {
+            await notificationService.createNotification({
+              recipientId: academy.userId,
+              recipientRole: 'ACADEMY',
+              title: 'Commission Payout Received 💰',
+              message: `Your commission of $${totalAmount.toFixed(2)} has been disbursed to your Stripe account (${txns.length} transaction${txns.length > 1 ? 's' : ''}). Reference: ${ref}`,
+              type: 'PAYOUT',
+              data: {
+                amount: totalAmount,
+                currency: '$',
+                payoutReference: ref,
+                transactionsCount: txns.length,
+              },
+            });
+          }
+          results.success.push({
+            recipientType: 'ACADEMY',
+            recipientId: academy._id,
+            recipientName: academy.name,
+            amountPaid: parseFloat(totalAmount.toFixed(2)),
+            transactionsCount: txns.length,
+            payoutReference: ref,
+          });
+        } catch (err: any) {
+          results.failed.push({
+            recipientType: 'ACADEMY',
+            recipientId: academy._id,
+            recipientName: academy.name,
+            reason: err?.message || 'Unknown error',
+          });
+        }
+      }
+    }
+
+    const totalDisbursed = results.success.reduce((s, r) => s + (r.amountPaid || 0), 0);
+
+    return {
+      summary: {
+        totalDisbursed: parseFloat(totalDisbursed.toFixed(2)),
+        successCount: results.success.length,
+        skippedCount: results.skipped.length,
+        failedCount: results.failed.length,
+        currency: '$',
+      },
+      success: results.success,
+      skipped: results.skipped,
+      failed: results.failed,
+    };
   }
 }
 

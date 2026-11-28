@@ -122,6 +122,7 @@ export class ClubProfileService {
     if (payload.clubRegistrationDocument)
       userUpdates.clubRegistrationDocument = payload.clubRegistrationDocument;
     if (payload.officialWebsite) userUpdates.officialWebsite = payload.officialWebsite;
+    if (payload.logo || payload.avatar) userUpdates.avatar = payload.logo || payload.avatar;
     if (Object.keys(userUpdates).length > 0) {
       await User.findByIdAndUpdate(userId, { $set: userUpdates });
     }

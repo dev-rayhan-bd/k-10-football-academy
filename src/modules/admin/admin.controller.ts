@@ -344,6 +344,16 @@ export class AdminController {
     });
   });
 
+  recordAllPayouts = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.recordAllPayouts(req.body, req.user?.userId);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Bulk payout completed',
+      data: result,
+    });
+  });
+
   // ==========================================
   // ANALYTICS (User Growth, Role Distribution & Revenue Breakdown)
   // ==========================================
@@ -354,6 +364,20 @@ export class AdminController {
       statusCode: StatusCodes.OK,
       success: true,
       message: 'Admin platform analytics fetched successfully',
+      data: result,
+    });
+  });
+
+  // ==========================================
+  // MAINTENANCE UTILITIES
+  // ==========================================
+
+  syncAvatars = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const result = await adminService.syncAvatars();
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Avatar sync completed',
       data: result,
     });
   });

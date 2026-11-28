@@ -1974,193 +1974,246 @@ export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res:
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const PDFDocument = require('pdfkit');
-  const doc = new PDFDocument({ margin: 50, size: 'A4' });
+  const doc = new PDFDocument({ margin: 0, size: 'A4', bufferPages: true });
 
   const reportType = String(query.reportType || 'FULL_ANALYTICS').toUpperCase();
-  const fileName = `${reportType.toLowerCase().replace(/_/g, '_')}_${query.year || new Date().getFullYear()}.pdf`;
+  const fileName = `${reportType.toLowerCase()}_${query.year || new Date().getFullYear()}.pdf`;
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   doc.pipe(res);
 
   const data = result.data;
-  const cyan = '#00BCD4';
-  const white = '#FFFFFF';
-  const grey = '#AAAAAA';
-  const dark = '#1A1A2E';
+  const PAGE_W = doc.page.width; // 595
+  const MARGIN = 40;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+  const CYAN = '#00BCD4';
+  const DARK = '#0D1B2A';
+  const WHITE = '#FFFFFF';
+  const LIGHT_GREY = '#F4F6F8';
+  const TEXT_DARK = '#1A1A2A';
+  const TEXT_MID = '#555555';
 
-  // Header bar
-  doc.rect(0, 0, doc.page.width, 80).fill(dark);
+  // ── helpers ────────────────────────────────────────────────────────────────
+  const cell = (
+    text: string,
+    x: number,
+    y: number,
+    w: number,
+    opts: {
+      align?: 'left' | 'center' | 'right';
+      color?: string;
+      bold?: boolean;
+      size?: number;
+    } = {},
+  ) => {
+    doc
+      .font(opts.bold ? 'Helvetica-Bold' : 'Helvetica')
+      .fontSize(opts.size ?? 8.5)
+      .fillColor(opts.color ?? TEXT_DARK)
+      .text(text, x + 4, y + 4, { width: w - 8, lineBreak: false, align: opts.align ?? 'left' });
+  };
+
+  const tableHeader = (
+    y: number,
+    columns: { label: string; x: number; w: number; align?: 'left' | 'center' | 'right' }[],
+  ) => {
+    const ROW_H = 24;
+    doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill(CYAN);
+    columns.forEach((col) =>
+      cell(col.label, col.x, y, col.w, { bold: true, color: WHITE, align: col.align }),
+    );
+    return y + ROW_H;
+  };
+
+  const tableRow = (
+    y: number,
+    rowIndex: number,
+    columns: { value: string; x: number; w: number; align?: 'left' | 'center' | 'right' }[],
+  ) => {
+    const ROW_H = 22;
+    doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill(rowIndex % 2 === 0 ? LIGHT_GREY : WHITE);
+    // border bottom
+    doc.rect(MARGIN, y + ROW_H - 0.5, CONTENT_W, 0.5).fill('#E0E0E0');
+    columns.forEach((col) =>
+      cell(col.value, col.x, y, col.w, { color: TEXT_MID, align: col.align }),
+    );
+    return y + ROW_H;
+  };
+
+  const checkPage = (y: number, needed = 30) => {
+    if (y + needed > doc.page.height - 60) {
+      doc.addPage({ margin: 0, size: 'A4' });
+      return 40;
+    }
+    return y;
+  };
+
+  // ── HEADER ─────────────────────────────────────────────────────────────────
+  doc.rect(0, 0, PAGE_W, 70).fill(DARK);
   doc
-    .fillColor(white)
-    .fontSize(20)
     .font('Helvetica-Bold')
-    .text(data.title || result.reportType, 50, 25);
+    .fontSize(18)
+    .fillColor(WHITE)
+    .text(data.title || reportType, MARGIN, 18, { lineBreak: false });
   doc
-    .fontSize(10)
     .font('Helvetica')
-    .fillColor(grey)
+    .fontSize(9)
+    .fillColor('#90CAF9')
     .text(
-      `Period: ${data.period || result.period}  |  Generated: ${new Date().toLocaleDateString('en-GB')}`,
-      50,
-      52,
+      `Period: ${data.period || result.period}   |   Generated: ${new Date().toLocaleDateString('en-GB')}`,
+      MARGIN,
+      44,
+      { lineBreak: false },
     );
 
-  doc.moveDown(3);
+  let y = 86;
 
-  // Academy name
+  // ── Academy name ───────────────────────────────────────────────────────────
   if (data.academy?.name) {
     doc
-      .fillColor(cyan)
-      .fontSize(13)
       .font('Helvetica-Bold')
-      .text(`Academy: ${data.academy.name}`, { align: 'left' });
-    doc.moveDown(0.5);
+      .fontSize(11)
+      .fillColor(CYAN)
+      .text(`Academy: ${data.academy.name}`, MARGIN, y);
+    y += 18;
+    doc.rect(MARGIN, y, CONTENT_W, 1).fill(CYAN);
+    y += 10;
   }
 
-  doc
-    .moveTo(50, doc.y)
-    .lineTo(doc.page.width - 50, doc.y)
-    .strokeColor(cyan)
-    .lineWidth(1)
-    .stroke();
-  doc.moveDown(1);
-
-  const addRow = (label: string, value: string | number) => {
+  // ── Summary stats ──────────────────────────────────────────────────────────
+  const stat = (label: string, value: string) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(TEXT_DARK).text(label, MARGIN, y);
     doc
-      .fillColor('#333333')
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text(`${label}:`, 50, doc.y, { continued: true, width: 220 });
-    doc.font('Helvetica').fillColor('#111111').text(` ${value}`);
-    doc.moveDown(0.3);
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(TEXT_MID)
+      .text(value, MARGIN + 160, y, { lineBreak: false });
+    y += 16;
   };
 
   if (reportType === 'FEES_SUMMARY') {
-    addRow('Total Transactions', data.totalTransactions ?? 0);
-    addRow(
-      'Total Collected',
+    stat('Total Transactions:', String(data.totalTransactions ?? 0));
+    stat(
+      'Total Collected:',
       `${data.currency || '$'}${(data.totalAmountCollected || 0).toLocaleString()}`,
     );
-    doc.moveDown(1);
+    y += 12;
 
-    // Table header
-    const cols = [50, 180, 320, 420, 490];
-    doc.rect(50, doc.y, doc.page.width - 100, 20).fill(cyan);
-    doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
-    doc.text('PLAYER', cols[0], doc.y - 15, { width: 120 });
-    doc.text('FEE TYPE', cols[1], doc.y - 15 + 0, { width: 130 });
-    doc.text('AMOUNT', cols[2], doc.y - 15, { width: 90 });
-    doc.text('STATUS', cols[3], doc.y - 15, { width: 70 });
-    doc.moveDown(0.3);
+    const cols = [
+      { label: 'PLAYER', x: MARGIN, w: 150 },
+      { label: 'FEE TYPE', x: MARGIN + 150, w: 175 },
+      { label: 'AMOUNT', x: MARGIN + 325, w: 90, align: 'right' as const },
+      { label: 'DATE', x: MARGIN + 415, w: 85 },
+      { label: 'STATUS', x: MARGIN + 500, w: 55, align: 'center' as const },
+    ];
+
+    y = tableHeader(y, cols);
 
     (data.items || []).forEach((item: any, i: number) => {
-      if (doc.y > 750) {
-        doc.addPage();
-      }
-      const bg = i % 2 === 0 ? '#F5F5F5' : white;
-      doc.rect(50, doc.y, doc.page.width - 100, 18).fill(bg);
-      doc.fillColor('#111111').fontSize(8).font('Helvetica');
-      const rowY = doc.y - 13;
-      doc.text(item.playerName || '-', cols[0], rowY, { width: 120 });
-      doc.text(String(item.feeType || '-').substring(0, 22), cols[1], rowY, { width: 130 });
-      doc.text(`${data.currency || '$'}${(item.amount || 0).toLocaleString()}`, cols[2], rowY, {
-        width: 90,
-      });
-      doc.text(item.status || '-', cols[3], rowY, { width: 70 });
-      doc.moveDown(0.15);
+      y = checkPage(y);
+      const dateStr = item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-';
+      y = tableRow(y, i, [
+        { value: item.playerName || '-', x: cols[0].x, w: cols[0].w },
+        { value: String(item.feeType || '-'), x: cols[1].x, w: cols[1].w },
+        {
+          value: `${data.currency || '$'}${(item.amount || 0).toLocaleString()}`,
+          x: cols[2].x,
+          w: cols[2].w,
+          align: 'right',
+        },
+        { value: dateStr, x: cols[3].x, w: cols[3].w },
+        { value: item.status || '-', x: cols[4].x, w: cols[4].w, align: 'center' },
+      ]);
     });
   } else if (reportType === 'MATCH_EXPENSES') {
-    addRow('Total Matches', data.totalMatches ?? 0);
-    addRow('Total Cost', `${data.currency || '$'}${(data.totalCost || 0).toLocaleString()}`);
-    doc.moveDown(1);
+    stat('Total Matches:', String(data.totalMatches ?? 0));
+    stat('Total Cost:', `${data.currency || '$'}${(data.totalCost || 0).toLocaleString()}`);
+    y += 12;
 
-    const cols = [50, 170, 265, 335, 405, 470];
-    doc.rect(50, doc.y, doc.page.width - 100, 20).fill(cyan);
-    doc.fillColor(white).fontSize(8).font('Helvetica-Bold');
-    const hY = doc.y - 15;
-    doc.text('MATCH', cols[0], hY, { width: 110 });
-    doc.text('DATE', cols[1], hY, { width: 85 });
-    doc.text('GROUND', cols[2], hY, { width: 65 });
-    doc.text('TRANSPORT', cols[3], hY, { width: 65 });
-    doc.text('MEALS', cols[4], hY, { width: 60 });
-    doc.text('TOTAL', cols[5], hY, { width: 60 });
-    doc.moveDown(0.3);
+    const cols = [
+      { label: 'MATCH TITLE', x: MARGIN, w: 145 },
+      { label: 'DATE', x: MARGIN + 145, w: 75 },
+      { label: 'GROUND', x: MARGIN + 220, w: 75, align: 'right' as const },
+      { label: 'TRANSPORT', x: MARGIN + 295, w: 75, align: 'right' as const },
+      { label: 'MEALS', x: MARGIN + 370, w: 65, align: 'right' as const },
+      { label: 'OTHER', x: MARGIN + 435, w: 60, align: 'right' as const },
+      { label: 'TOTAL', x: MARGIN + 495, w: 60, align: 'right' as const },
+    ];
+
+    y = tableHeader(y, cols);
 
     (data.items || []).forEach((item: any, i: number) => {
-      if (doc.y > 750) {
-        doc.addPage();
-      }
-      const bg = i % 2 === 0 ? '#F5F5F5' : white;
-      doc.rect(50, doc.page.width - 100, doc.page.width - 100, 18).fill(bg);
-      doc.fillColor('#111111').fontSize(7.5).font('Helvetica');
-      const rowY = doc.y - 13;
-      const title = `${item.matchTitle || item.opponentTeam || 'Match'}`.substring(0, 20);
+      y = checkPage(y);
       const dateStr = item.matchDate ? new Date(item.matchDate).toLocaleDateString('en-GB') : '-';
-      doc.text(title, cols[0], rowY, { width: 110 });
-      doc.text(dateStr, cols[1], rowY, { width: 85 });
-      doc.text(`$${item.groundCost || 0}`, cols[2], rowY, { width: 65 });
-      doc.text(`$${item.transportCost || 0}`, cols[3], rowY, { width: 65 });
-      doc.text(`$${item.mealsCost || 0}`, cols[4], rowY, { width: 60 });
-      doc.text(`$${item.totalCost || 0}`, cols[5], rowY, { width: 60 });
-      doc.moveDown(0.15);
+      const title = String(item.matchTitle || item.opponentTeam || 'Match').substring(0, 24);
+      y = tableRow(y, i, [
+        { value: title, x: cols[0].x, w: cols[0].w },
+        { value: dateStr, x: cols[1].x, w: cols[1].w },
+        { value: `$${item.groundCost || 0}`, x: cols[2].x, w: cols[2].w, align: 'right' },
+        { value: `$${item.transportCost || 0}`, x: cols[3].x, w: cols[3].w, align: 'right' },
+        { value: `$${item.mealsCost || 0}`, x: cols[4].x, w: cols[4].w, align: 'right' },
+        { value: `$${item.otherCosts || 0}`, x: cols[5].x, w: cols[5].w, align: 'right' },
+        { value: `$${item.totalCost || 0}`, x: cols[6].x, w: cols[6].w, align: 'right' },
+      ]);
     });
   } else if (reportType === 'EVENT_COSTS') {
-    addRow('Total Events', data.totalEvents ?? 0);
-    doc.moveDown(1);
+    stat('Total Events:', String(data.totalEvents ?? 0));
+    y += 12;
 
-    const cols = [50, 220, 320, 390, 465];
-    doc.rect(50, doc.y, doc.page.width - 100, 20).fill(cyan);
-    doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
-    const hY = doc.y - 15;
-    doc.text('EVENT NAME', cols[0], hY, { width: 160 });
-    doc.text('TYPE', cols[1], hY, { width: 90 });
-    doc.text('DATE', cols[2], hY, { width: 65 });
-    doc.text('FEE', cols[3], hY, { width: 65 });
-    doc.text('REVENUE', cols[4], hY, { width: 75 });
-    doc.moveDown(0.3);
+    const cols = [
+      { label: 'EVENT NAME', x: MARGIN, w: 175 },
+      { label: 'TYPE', x: MARGIN + 175, w: 110 },
+      { label: 'DATE', x: MARGIN + 285, w: 80 },
+      { label: 'REG. FEE', x: MARGIN + 365, w: 75, align: 'right' as const },
+      { label: 'ATTENDEES', x: MARGIN + 440, w: 60, align: 'center' as const },
+      { label: 'REVENUE', x: MARGIN + 500, w: 55, align: 'right' as const },
+    ];
+
+    y = tableHeader(y, cols);
 
     (data.items || []).forEach((item: any, i: number) => {
-      if (doc.y > 750) {
-        doc.addPage();
-      }
-      const bg = i % 2 === 0 ? '#F5F5F5' : white;
-      doc.rect(50, doc.y, doc.page.width - 100, 18).fill(bg);
-      doc.fillColor('#111111').fontSize(8).font('Helvetica');
-      const rowY = doc.y - 13;
+      y = checkPage(y);
       const dateStr = item.eventDate ? new Date(item.eventDate).toLocaleDateString('en-GB') : '-';
-      doc.text(String(item.eventName || '-').substring(0, 24), cols[0], rowY, { width: 160 });
-      doc.text(String(item.eventType || '-').substring(0, 14), cols[1], rowY, { width: 90 });
-      doc.text(dateStr, cols[2], rowY, { width: 65 });
-      doc.text(`$${item.registrationFee || 0}`, cols[3], rowY, { width: 65 });
-      doc.text(`$${(item.totalRevenue || 0).toLocaleString()}`, cols[4], rowY, { width: 75 });
-      doc.moveDown(0.15);
+      y = tableRow(y, i, [
+        { value: String(item.eventName || '-'), x: cols[0].x, w: cols[0].w },
+        { value: String(item.eventType || '-'), x: cols[1].x, w: cols[1].w },
+        { value: dateStr, x: cols[2].x, w: cols[2].w },
+        { value: `$${item.registrationFee || 0}`, x: cols[3].x, w: cols[3].w, align: 'right' },
+        { value: String(item.currentAttendees ?? 0), x: cols[4].x, w: cols[4].w, align: 'center' },
+        {
+          value: `$${(item.totalRevenue || 0).toLocaleString()}`,
+          x: cols[5].x,
+          w: cols[5].w,
+          align: 'right',
+        },
+      ]);
     });
   } else {
-    // FULL_ANALYTICS summary
     const cards = data.summary || {};
-    addRow('Total Revenue', cards.totalRevenue?.formatted || '$0');
-    addRow('Total Expenses', cards.totalExpenses?.formatted || '$0');
-    addRow('Active Players', cards.activePlayers?.formatted || '0');
-    addRow('Matches Won', cards.matchesWon?.formatted || '0');
+    stat('Total Revenue:', cards.totalRevenue?.formatted || '$0');
+    stat('Total Expenses:', cards.totalExpenses?.formatted || '$0');
+    stat('Active Players:', cards.activePlayers?.formatted || '0');
+    stat('Matches Won:', cards.matchesWon?.formatted || '0');
   }
 
-  // Footer
-  doc.moveDown(2);
-  doc
-    .moveTo(50, doc.y)
-    .lineTo(doc.page.width - 50, doc.y)
-    .strokeColor(cyan)
-    .lineWidth(0.5)
-    .stroke();
-  doc.moveDown(0.5);
-  doc
-    .fillColor(grey)
-    .fontSize(8)
-    .font('Helvetica')
-    .text(`K10 Football Platform  ·  Confidential  ·  ${new Date().toISOString().split('T')[0]}`, {
-      align: 'center',
-    });
+  // ── FOOTER ─────────────────────────────────────────────────────────────────
+  const totalPages = (doc as any).bufferedPageRange().count;
+  for (let i = 0; i < totalPages; i++) {
+    doc.switchToPage(i);
+    const footerY = doc.page.height - 30;
+    doc.rect(0, footerY - 6, PAGE_W, 36).fill(DARK);
+    doc
+      .font('Helvetica')
+      .fontSize(7.5)
+      .fillColor('#90CAF9')
+      .text(
+        `K10 Football Platform  ·  Confidential  ·  ${new Date().toISOString().split('T')[0]}   |   Page ${i + 1} of ${totalPages}`,
+        MARGIN,
+        footerY,
+        { align: 'center', width: CONTENT_W, lineBreak: false },
+      );
+  }
 
   doc.end();
 });

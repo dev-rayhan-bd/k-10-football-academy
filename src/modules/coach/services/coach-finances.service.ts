@@ -205,6 +205,14 @@ export class CoachFinancesService {
         )
       : allTransactions;
 
+    // Pagination (?page=1&limit=10)
+    const page = Math.max(1, parseInt(query.page as string, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit as string, 10) || 10));
+    const total = filteredTransactions.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const skip = (page - 1) * limit;
+    const paginatedTransactions = filteredTransactions.slice(skip, skip + limit);
+
     return {
       coach: {
         id: coach._id.toString(),
@@ -245,7 +253,13 @@ export class CoachFinancesService {
         academyShare: '$6.00 (25%)',
         k10PlatformShare: '$6.00 (25%)',
       },
-      transactions: filteredTransactions,
+      transactions: paginatedTransactions,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
     };
   }
 }

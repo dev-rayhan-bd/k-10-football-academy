@@ -1971,12 +1971,198 @@ export const exportAcademyAnalyticsReport = catchAsync(async (req: Request, res:
     query.year = req.params.year;
   }
   const result = await academyService.exportAcademyAnalyticsReport(user, query, academyIdentifier);
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Analytics report exported successfully',
-    data: result,
-  });
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const PDFDocument = require('pdfkit');
+  const doc = new PDFDocument({ margin: 50, size: 'A4' });
+
+  const reportType = String(query.reportType || 'FULL_ANALYTICS').toUpperCase();
+  const fileName = `${reportType.toLowerCase().replace(/_/g, '_')}_${query.year || new Date().getFullYear()}.pdf`;
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  doc.pipe(res);
+
+  const data = result.data;
+  const cyan = '#00BCD4';
+  const white = '#FFFFFF';
+  const grey = '#AAAAAA';
+  const dark = '#1A1A2E';
+
+  // Header bar
+  doc.rect(0, 0, doc.page.width, 80).fill(dark);
+  doc
+    .fillColor(white)
+    .fontSize(20)
+    .font('Helvetica-Bold')
+    .text(data.title || result.reportType, 50, 25);
+  doc
+    .fontSize(10)
+    .font('Helvetica')
+    .fillColor(grey)
+    .text(
+      `Period: ${data.period || result.period}  |  Generated: ${new Date().toLocaleDateString('en-GB')}`,
+      50,
+      52,
+    );
+
+  doc.moveDown(3);
+
+  // Academy name
+  if (data.academy?.name) {
+    doc
+      .fillColor(cyan)
+      .fontSize(13)
+      .font('Helvetica-Bold')
+      .text(`Academy: ${data.academy.name}`, { align: 'left' });
+    doc.moveDown(0.5);
+  }
+
+  doc
+    .moveTo(50, doc.y)
+    .lineTo(doc.page.width - 50, doc.y)
+    .strokeColor(cyan)
+    .lineWidth(1)
+    .stroke();
+  doc.moveDown(1);
+
+  const addRow = (label: string, value: string | number) => {
+    doc
+      .fillColor('#333333')
+      .fontSize(10)
+      .font('Helvetica-Bold')
+      .text(`${label}:`, 50, doc.y, { continued: true, width: 220 });
+    doc.font('Helvetica').fillColor('#111111').text(` ${value}`);
+    doc.moveDown(0.3);
+  };
+
+  if (reportType === 'FEES_SUMMARY') {
+    addRow('Total Transactions', data.totalTransactions ?? 0);
+    addRow(
+      'Total Collected',
+      `${data.currency || '$'}${(data.totalAmountCollected || 0).toLocaleString()}`,
+    );
+    doc.moveDown(1);
+
+    // Table header
+    const cols = [50, 180, 320, 420, 490];
+    doc.rect(50, doc.y, doc.page.width - 100, 20).fill(cyan);
+    doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
+    doc.text('PLAYER', cols[0], doc.y - 15, { width: 120 });
+    doc.text('FEE TYPE', cols[1], doc.y - 15 + 0, { width: 130 });
+    doc.text('AMOUNT', cols[2], doc.y - 15, { width: 90 });
+    doc.text('STATUS', cols[3], doc.y - 15, { width: 70 });
+    doc.moveDown(0.3);
+
+    (data.items || []).forEach((item: any, i: number) => {
+      if (doc.y > 750) {
+        doc.addPage();
+      }
+      const bg = i % 2 === 0 ? '#F5F5F5' : white;
+      doc.rect(50, doc.y, doc.page.width - 100, 18).fill(bg);
+      doc.fillColor('#111111').fontSize(8).font('Helvetica');
+      const rowY = doc.y - 13;
+      doc.text(item.playerName || '-', cols[0], rowY, { width: 120 });
+      doc.text(String(item.feeType || '-').substring(0, 22), cols[1], rowY, { width: 130 });
+      doc.text(`${data.currency || '$'}${(item.amount || 0).toLocaleString()}`, cols[2], rowY, {
+        width: 90,
+      });
+      doc.text(item.status || '-', cols[3], rowY, { width: 70 });
+      doc.moveDown(0.15);
+    });
+  } else if (reportType === 'MATCH_EXPENSES') {
+    addRow('Total Matches', data.totalMatches ?? 0);
+    addRow('Total Cost', `${data.currency || '$'}${(data.totalCost || 0).toLocaleString()}`);
+    doc.moveDown(1);
+
+    const cols = [50, 170, 265, 335, 405, 470];
+    doc.rect(50, doc.y, doc.page.width - 100, 20).fill(cyan);
+    doc.fillColor(white).fontSize(8).font('Helvetica-Bold');
+    const hY = doc.y - 15;
+    doc.text('MATCH', cols[0], hY, { width: 110 });
+    doc.text('DATE', cols[1], hY, { width: 85 });
+    doc.text('GROUND', cols[2], hY, { width: 65 });
+    doc.text('TRANSPORT', cols[3], hY, { width: 65 });
+    doc.text('MEALS', cols[4], hY, { width: 60 });
+    doc.text('TOTAL', cols[5], hY, { width: 60 });
+    doc.moveDown(0.3);
+
+    (data.items || []).forEach((item: any, i: number) => {
+      if (doc.y > 750) {
+        doc.addPage();
+      }
+      const bg = i % 2 === 0 ? '#F5F5F5' : white;
+      doc.rect(50, doc.page.width - 100, doc.page.width - 100, 18).fill(bg);
+      doc.fillColor('#111111').fontSize(7.5).font('Helvetica');
+      const rowY = doc.y - 13;
+      const title = `${item.matchTitle || item.opponentTeam || 'Match'}`.substring(0, 20);
+      const dateStr = item.matchDate ? new Date(item.matchDate).toLocaleDateString('en-GB') : '-';
+      doc.text(title, cols[0], rowY, { width: 110 });
+      doc.text(dateStr, cols[1], rowY, { width: 85 });
+      doc.text(`$${item.groundCost || 0}`, cols[2], rowY, { width: 65 });
+      doc.text(`$${item.transportCost || 0}`, cols[3], rowY, { width: 65 });
+      doc.text(`$${item.mealsCost || 0}`, cols[4], rowY, { width: 60 });
+      doc.text(`$${item.totalCost || 0}`, cols[5], rowY, { width: 60 });
+      doc.moveDown(0.15);
+    });
+  } else if (reportType === 'EVENT_COSTS') {
+    addRow('Total Events', data.totalEvents ?? 0);
+    doc.moveDown(1);
+
+    const cols = [50, 220, 320, 390, 465];
+    doc.rect(50, doc.y, doc.page.width - 100, 20).fill(cyan);
+    doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
+    const hY = doc.y - 15;
+    doc.text('EVENT NAME', cols[0], hY, { width: 160 });
+    doc.text('TYPE', cols[1], hY, { width: 90 });
+    doc.text('DATE', cols[2], hY, { width: 65 });
+    doc.text('FEE', cols[3], hY, { width: 65 });
+    doc.text('REVENUE', cols[4], hY, { width: 75 });
+    doc.moveDown(0.3);
+
+    (data.items || []).forEach((item: any, i: number) => {
+      if (doc.y > 750) {
+        doc.addPage();
+      }
+      const bg = i % 2 === 0 ? '#F5F5F5' : white;
+      doc.rect(50, doc.y, doc.page.width - 100, 18).fill(bg);
+      doc.fillColor('#111111').fontSize(8).font('Helvetica');
+      const rowY = doc.y - 13;
+      const dateStr = item.eventDate ? new Date(item.eventDate).toLocaleDateString('en-GB') : '-';
+      doc.text(String(item.eventName || '-').substring(0, 24), cols[0], rowY, { width: 160 });
+      doc.text(String(item.eventType || '-').substring(0, 14), cols[1], rowY, { width: 90 });
+      doc.text(dateStr, cols[2], rowY, { width: 65 });
+      doc.text(`$${item.registrationFee || 0}`, cols[3], rowY, { width: 65 });
+      doc.text(`$${(item.totalRevenue || 0).toLocaleString()}`, cols[4], rowY, { width: 75 });
+      doc.moveDown(0.15);
+    });
+  } else {
+    // FULL_ANALYTICS summary
+    const cards = data.summary || {};
+    addRow('Total Revenue', cards.totalRevenue?.formatted || '$0');
+    addRow('Total Expenses', cards.totalExpenses?.formatted || '$0');
+    addRow('Active Players', cards.activePlayers?.formatted || '0');
+    addRow('Matches Won', cards.matchesWon?.formatted || '0');
+  }
+
+  // Footer
+  doc.moveDown(2);
+  doc
+    .moveTo(50, doc.y)
+    .lineTo(doc.page.width - 50, doc.y)
+    .strokeColor(cyan)
+    .lineWidth(0.5)
+    .stroke();
+  doc.moveDown(0.5);
+  doc
+    .fillColor(grey)
+    .fontSize(8)
+    .font('Helvetica')
+    .text(`K10 Football Platform  ·  Confidential  ·  ${new Date().toISOString().split('T')[0]}`, {
+      align: 'center',
+    });
+
+  doc.end();
 });
 
 export const getAcademyManagementDashboard = catchAsync(async (req: Request, res: Response) => {

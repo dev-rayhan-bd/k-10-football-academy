@@ -128,6 +128,7 @@ import {
   getTournamentClubRoster,
   allocateTournamentGroups,
   getAllocatedGroups,
+  toggleEventRegistrationStatus,
   startTournamentAndGenerateFixtures,
   updateTournamentFixture,
   recordMatchResult,
@@ -1027,6 +1028,17 @@ router.patch(
   auth('ACADEMY', 'SUPER_ADMIN'),
   validateRequest(allocateTournamentGroupsZodSchema),
   allocateTournamentGroups,
+);
+
+router.patch(
+  '/extra-events/:id/registration-status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  toggleEventRegistrationStatus,
+);
+router.patch(
+  '/:academyId/extra-events/:id/registration-status',
+  auth('ACADEMY', 'SUPER_ADMIN'),
+  toggleEventRegistrationStatus,
 );
 
 router.post(

@@ -1355,6 +1355,28 @@ export const getAllocatedGroups = catchAsync(async (req: Request, res: Response)
   });
 });
 
+export const toggleEventRegistrationStatus = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const academyIdentifier = req.params.academyId;
+  const { status } = req.body as { status: 'OPEN' | 'CLOSED' };
+  if (status !== 'OPEN' && status !== 'CLOSED') {
+    throw new AppError(400, 'status must be OPEN or CLOSED');
+  }
+  const result = await academyService.toggleEventRegistrationStatus(
+    id,
+    status,
+    user,
+    academyIdentifier,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
 export const startTournamentAndGenerateFixtures = catchAsync(
   async (req: Request, res: Response) => {
     const { id } = req.params;

@@ -45,6 +45,13 @@ const heldCount = (ev: any, now = new Date()) =>
 
 /** Status computed at read time: the stored status, closed by deadline or capacity. */
 export const effectiveEventStatus = (ev: any, now = new Date()) => {
+  // Tournament lifecycle overrides registration status
+  if (ev.tournamentStatus === 'COMPLETED') {
+    return { status: 'COMPLETED', closedReason: 'Tournament has ended' };
+  }
+  if (ev.tournamentStatus === 'LIVE GAME') {
+    return { status: 'CLOSED', closedReason: 'Tournament is in progress — registration is closed' };
+  }
   if (ev.status === 'CLOSED') {
     return { status: 'CLOSED', closedReason: 'Registration is closed for this event' };
   }
@@ -521,6 +528,39 @@ export class AcademyEventsService {
     return {
       message: 'Extra event updated successfully',
       event,
+    };
+  }
+
+  async toggleRegistrationStatus(
+    id: string,
+    newStatus: 'OPEN' | 'CLOSED',
+    user: any,
+    academyIdentifier?: string,
+  ) {
+    const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
+
+    if (!Types.ObjectId.isValid(id)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid event ID');
+    }
+
+    const event = await ExtraEvent.findOne({ _id: id, academyId: academy._id });
+    if (!event) {
+      throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
+    }
+
+    if ((event as any).tournamentStatus === 'COMPLETED') {
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        'Tournament is completed — registration status cannot be changed',
+      );
+    }
+
+    (event as any).status = newStatus;
+    await event.save();
+
+    return {
+      message: `Registration is now ${newStatus === 'OPEN' ? 'open' : 'closed'} for this event`,
+      status: newStatus,
     };
   }
 

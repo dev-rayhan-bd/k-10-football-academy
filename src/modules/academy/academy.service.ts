@@ -552,6 +552,20 @@ export class AcademyService {
     );
   }
 
+  async toggleEventRegistrationStatus(
+    eventId: string,
+    newStatus: 'OPEN' | 'CLOSED',
+    user: any,
+    academyIdentifier?: string,
+  ) {
+    return await academyEventsService.toggleRegistrationStatus(
+      eventId,
+      newStatus,
+      user,
+      academyIdentifier,
+    );
+  }
+
   async startTournamentAndGenerateFixtures(eventId: string, user: any, academyIdentifier?: string) {
     return await academyTournamentEngineService.startTournamentAndGenerateFixtures(
       eventId,

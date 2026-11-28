@@ -169,6 +169,17 @@ export class AcademyTournamentEngineService {
       throw new AppError(StatusCodes.NOT_FOUND, 'Tournament event not found');
     }
 
+    // Block starting before the event date — edit eventDate first if you want to start early
+    if (event.eventDate) {
+      const toDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      if (toDay(new Date()) < toDay(new Date(event.eventDate))) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Tournament cannot be started before the event date (${new Date(event.eventDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}). Update the event date first if you need to start earlier.`,
+        );
+      }
+    }
+
     const allClubs = event.registeredClubs || [];
     const fee = event.registrationFee || 0;
     const paidClubs = allClubs.filter((c) => fee === 0 || c.paymentStatus === 'PAID');

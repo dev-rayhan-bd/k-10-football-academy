@@ -218,6 +218,7 @@ export interface IAcademyFeePayment {
   parentId?: Types.ObjectId;
   eventId?: Types.ObjectId;
   clubName?: string;
+  clubLogoUrl?: string;
   feeType: FeePaymentType;
   amount: number;
   paymentDate: Date;

@@ -65,6 +65,8 @@ export class AcademyDashboardService {
         $match: {
           academyId: academy._id,
           status: 'PAID',
+          // Exclude event registration fees — those are captured by eventsAggregation to avoid double-counting
+          feeType: { $not: /Event Registration Fee/i },
           $or: [
             { paymentDate: { $gte: startDate, $lte: endDate } },
             {
@@ -263,6 +265,55 @@ export class AcademyDashboardService {
             },
           },
           totalMatches: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Monthly W/D/L from real MatchRecord data
+    const matchOutcomesMonthlyAgg = await MatchRecord.aggregate([
+      {
+        $match: {
+          playerId: { $in: academyPlayerIds },
+          $or: [
+            { matchDate: { $gte: startDate, $lte: endDate } },
+            { createdAt: { $gte: startDate, $lte: endDate } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: {
+            month: { $month: { $ifNull: ['$matchDate', '$createdAt'] } },
+            outcome: {
+              $switch: {
+                branches: [
+                  {
+                    case: {
+                      $regexMatch: { input: { $ifNull: ['$matchResult', ''] }, regex: /win|^w$/i },
+                    },
+                    then: 'WIN',
+                  },
+                  {
+                    case: {
+                      $regexMatch: { input: { $ifNull: ['$matchResult', ''] }, regex: /draw|^d$/i },
+                    },
+                    then: 'DRAW',
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: { $ifNull: ['$matchResult', ''] },
+                        regex: /loss|lose|^l$/i,
+                      },
+                    },
+                    then: 'LOSS',
+                  },
+                ],
+                default: 'UNKNOWN',
+              },
+            },
+          },
+          count: { $sum: 1 },
         },
       },
     ]);
@@ -492,6 +543,13 @@ export class AcademyDashboardService {
       if (g._id?.month) gameReportsByMonth.set(g._id.month, g);
     });
 
+    // Build monthly W/D/L map from real MatchRecord outcomes
+    const matchOutcomesByMonth = new Map<string, number>();
+    matchOutcomesMonthlyAgg.forEach((r) => {
+      const key = `${r._id?.month}_${r._id?.outcome}`;
+      matchOutcomesByMonth.set(key, (matchOutcomesByMonth.get(key) || 0) + r.count);
+    });
+
     // 1. Top Metric Cards
     const cards = {
       totalRevenue: {
@@ -588,18 +646,16 @@ export class AcademyDashboardService {
     // 4. Game Reports Analytics
     const monthlyReportVolume = activeMonths.map((mName, idx) => {
       const mNum = idx + 1;
-      const rep = gameReportsByMonth.get(mNum);
-      const totalRep = rep?.totalReports || 0;
-      // Derive outcome distribution from performance score
-      const wins = Math.round(totalRep * 0.6);
-      const draws = Math.round(totalRep * 0.25);
-      const losses = Math.max(0, totalRep - wins - draws);
+      const wins = matchOutcomesByMonth.get(`${mNum}_WIN`) || 0;
+      const draws = matchOutcomesByMonth.get(`${mNum}_DRAW`) || 0;
+      const losses = matchOutcomesByMonth.get(`${mNum}_LOSS`) || 0;
+      const total = gameReportsByMonth.get(mNum)?.totalReports || 0 || wins + draws + losses;
       return {
         month: mName,
         wins,
         draws,
         losses,
-        total: totalRep,
+        total,
       };
     });
 
@@ -638,12 +694,12 @@ export class AcademyDashboardService {
     });
 
     const radarData = evaluationsRadarAgg[0] || {};
-    const avgTech = Math.round(radarData.avgTechnical || 78);
-    const avgPhys = Math.round(radarData.avgPhysical || 75);
-    const avgMent = Math.round(radarData.avgMental || 82);
-    const avgTact = Math.round((avgTech + avgMent) / 2 || 74);
-    const avgLead = Math.round(avgMent * 0.85 || 70);
-    const avgTeam = Math.round((avgPhys + avgTech) / 2 || 80);
+    const avgTech = Math.round(radarData.avgTechnical || 0);
+    const avgPhys = Math.round(radarData.avgPhysical || 0);
+    const avgMent = Math.round(radarData.avgMental || 0);
+    const avgTact = avgTech > 0 || avgMent > 0 ? Math.round((avgTech + avgMent) / 2) : 0;
+    const avgLead = avgMent > 0 ? Math.round(avgMent * 0.85) : 0;
+    const avgTeam = avgPhys > 0 || avgTech > 0 ? Math.round((avgPhys + avgTech) / 2) : 0;
 
     const averageSkillScores = [
       { axis: 'Technical', value: avgTech, fullMark: 100 },

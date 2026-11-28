@@ -565,14 +565,33 @@ export class AcademyEventsService {
   }
 
   async deleteExtraEvent(id: string, user: any, academyIdentifier?: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new AppError(StatusCodes.BAD_REQUEST, 'Invalid event ID');
+    }
+
     const academy = await academyResolverService.resolveUserAcademy(user, academyIdentifier);
 
     const existing = await ExtraEvent.findOne({ _id: id, academyId: academy._id })
-      .select('participants.paymentStatus registeredClubs.paymentStatus')
+      .select('participants.paymentStatus registeredClubs.paymentStatus tournamentStatus')
       .lean();
     if (!existing) {
       throw new AppError(StatusCodes.NOT_FOUND, 'Extra event not found');
     }
+
+    const ts = (existing as any).tournamentStatus;
+    if (ts === 'LIVE GAME') {
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        'Tournament is currently in progress (LIVE GAME). Reset or complete the tournament before deleting.',
+      );
+    }
+    if (ts === 'COMPLETED') {
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        'Tournament is completed and its records cannot be deleted.',
+      );
+    }
+
     const paidCount =
       ((existing as any).participants || []).filter((p: any) => p.paymentStatus === 'PAID').length +
       ((existing as any).registeredClubs || []).filter((c: any) => c.paymentStatus === 'PAID')
@@ -583,6 +602,7 @@ export class AcademyEventsService {
         `This event has ${paidCount} paid registration(s). Close the event (status CLOSED) instead of deleting it, or refund the registrations first.`,
       );
     }
+
     await ExtraEvent.deleteOne({ _id: id, academyId: academy._id });
 
     return {

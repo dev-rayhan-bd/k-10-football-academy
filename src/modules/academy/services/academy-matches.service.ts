@@ -498,25 +498,43 @@ export class AcademyMatchesService {
         };
       });
 
-    // 5. Compute Top Performers Widget
-    const topPerformers = allMatches
-      .filter((m: any) => {
-        const r = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
-        return r > 0;
-      })
-      .map((m: any) => {
-        let r = Number(m.coachReview?.coachRating ?? m.playerRating ?? 0);
-        if (r <= 10) r = Math.round(r * 10);
-        const player = playerMap.get(m.playerId?.toString()) || {};
-        const pos = (player.position || '').toUpperCase();
-        const age = m.ageGroup || (player as any).ageGroup || (player.age ? `U-${player.age}` : '');
+    // 5. Compute Top Performers Widget — grouped by player, average of evaluated ratings
+    const performerMap = new Map<string, { player: any; totalRating: number; count: number }>();
+    allMatches.forEach((m: any) => {
+      const pId = m.playerId?.toString();
+      const player = playerMap.get(pId);
+      if (!player) return;
+
+      // Use coachRating only when the review is fully COMPLETED
+      const coachCompleted = m.coachReview?.status === 'COMPLETED';
+      let r = Number(
+        coachCompleted
+          ? (m.coachReview?.coachRating ?? m.playerRating ?? 0)
+          : (m.playerRating ?? 0),
+      );
+      if (r <= 0) return;
+      if (r <= 10) r = Math.round(r * 10);
+
+      if (!performerMap.has(pId)) {
+        performerMap.set(pId, { player, totalRating: 0, count: 0 });
+      }
+      const entry = performerMap.get(pId)!;
+      entry.totalRating += r;
+      entry.count += 1;
+    });
+
+    const topPerformers = Array.from(performerMap.values())
+      .map((entry) => {
+        const p = entry.player;
+        const avgRating = Math.round(entry.totalRating / entry.count);
+        const pos = (p.position || '').toUpperCase();
+        const age = (p as any).ageGroup || (p.age ? `U-${p.age}` : '');
         return {
-          _id: m._id,
-          playerId: player._id,
-          name: player.fullName || '',
+          name: p.fullName || '',
           position: age && pos ? `${age} · ${pos}` : pos || age || '',
-          rating: `${r}%`,
-          ratingNum: r,
+          rating: `${avgRating}%`,
+          ratingNum: avgRating,
+          avatar: p.profileImage || '',
         };
       })
       .sort((a, b) => b.ratingNum - a.ratingNum)
@@ -526,6 +544,7 @@ export class AcademyMatchesService {
         name: item.name,
         position: item.position,
         rating: item.rating,
+        avatar: item.avatar,
       }));
 
     // 6. Search and Paginate Scouting Reports Cards
